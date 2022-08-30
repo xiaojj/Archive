@@ -1,0 +1,56 @@
+[package]
+name = "clash-verge"
+version = "0.1.0"
+description = "clash verge"
+authors = ["zzzgydi"]
+license = "GPL-3.0"
+repository = "https://github.com/zzzgydi/clash-verge.git"
+default-run = "clash-verge"
+edition = "2021"
+build = "build.rs"
+
+[build-dependencies]
+tauri-build = { version = "1.0.0", features = [] }
+
+[dependencies]
+warp = "0.3"
+which = "4.2.2"
+anyhow = "1.0"
+dirs = "4.0.0"
+open = "2.1.1"
+log = "0.4.14"
+dunce = "1.0.2"
+log4rs = "1.0.0"
+nanoid = "0.4.0"
+chrono = "0.4.19"
+serde_json = "1.0"
+serde_yaml = "0.8"
+auto-launch = "0.3"
+port_scanner = "0.1.5"
+delay_timer = "0.11.1"
+parking_lot = "0.12.0"
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1.0", features = ["derive"] }
+reqwest = { version = "0.11", features = ["json"] }
+tauri = { version = "1.0.0", features = ["process-all", "shell-all", "system-tray", "updater", "window-all"] }
+rquickjs = { version = "0.1.6" }
+window-shadows = { version = "0.1" }
+window-vibrancy = { version = "0.1" }
+
+[target.'cfg(windows)'.dependencies]
+runas = "0.2.1"
+deelevate = "0.2.0"
+winreg = { version = "0.10", features = ["transactions"] }
+windows-sys = { version = "0.36", features = ["Win32_System_LibraryLoader", "Win32_System_SystemInformation"] }
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
+verge-dev = []
+debug-yml = []
+
+[profile.release]
+panic = "abort"
+codegen-units = 1
+lto = true
+opt-level = "s"

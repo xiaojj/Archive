@@ -1,0 +1,53 @@
+// 通过重复增加优先级
+.full-win-gift-btn-wrapper.full-win-gift-btn-wrapper {
+  position: relative;
+
+  // 弹出窗口部分
+  .wrap {
+    right: -28px;
+    bottom: calc(100% + 3px);
+    color: #666;
+    font-size: 12px;
+    line-height: 1.4;
+
+    .text {
+      margin: auto;
+      padding: auto;
+      color: inherit;
+      cursor: inherit;
+      line-height: inherit;
+    }
+
+    .popup::before, .popup::after {
+      left: auto;
+      right: calc(1em + 33px);
+      transform: translateX(50%);
+    }
+  }
+
+  // 按钮部分
+  .gift-package {
+    margin: auto;
+    width: auto;
+    height: auto;
+    color: inherit;
+    fill: inherit;
+    background: inherit !important;
+
+    .bag-icon {
+      display: none;
+    }
+
+    span {
+      font-size: inherit;
+      line-height: 36px;
+      padding: 0 6px;
+      color: rgba(255, 255, 255, 0.9);
+      cursor: pointer;
+
+      &:hover {
+        color: #fff;
+      }
+    }
+  }
+}
