@@ -8,6 +8,7 @@
 #include <sys/types.h>
 
 #include <algorithm>
+#include <cstdint>
 #include <iterator>
 #include <limits>
 #include <memory>
@@ -562,21 +563,23 @@ void QuicConnection::SetFromConfig(const QuicConfig& config) {
     if (config.HasClientSentConnectionOption(kNBHD, perspective_)) {
       blackhole_detection_disabled_ = true;
     }
-    if (config.HasClientSentConnectionOption(k2RTO, perspective_)) {
-      QUIC_CODE_COUNT(quic_2rto_blackhole_detection);
-      num_rtos_for_blackhole_detection_ = 2;
-    }
-    if (config.HasClientSentConnectionOption(k3RTO, perspective_)) {
-      QUIC_CODE_COUNT(quic_3rto_blackhole_detection);
-      num_rtos_for_blackhole_detection_ = 3;
-    }
-    if (config.HasClientSentConnectionOption(k4RTO, perspective_)) {
-      QUIC_CODE_COUNT(quic_4rto_blackhole_detection);
-      num_rtos_for_blackhole_detection_ = 4;
-    }
-    if (config.HasClientSentConnectionOption(k6RTO, perspective_)) {
-      QUIC_CODE_COUNT(quic_6rto_blackhole_detection);
-      num_rtos_for_blackhole_detection_ = 6;
+    if (!sent_packet_manager_.remove_blackhole_detection_experiments()) {
+      if (config.HasClientSentConnectionOption(k2RTO, perspective_)) {
+        QUIC_CODE_COUNT(quic_2rto_blackhole_detection);
+        num_rtos_for_blackhole_detection_ = 2;
+      }
+      if (config.HasClientSentConnectionOption(k3RTO, perspective_)) {
+        QUIC_CODE_COUNT(quic_3rto_blackhole_detection);
+        num_rtos_for_blackhole_detection_ = 3;
+      }
+      if (config.HasClientSentConnectionOption(k4RTO, perspective_)) {
+        QUIC_CODE_COUNT(quic_4rto_blackhole_detection);
+        num_rtos_for_blackhole_detection_ = 4;
+      }
+      if (config.HasClientSentConnectionOption(k6RTO, perspective_)) {
+        QUIC_CODE_COUNT(quic_6rto_blackhole_detection);
+        num_rtos_for_blackhole_detection_ = 6;
+      }
     }
   }
 
@@ -3235,7 +3238,7 @@ bool QuicConnection::CanWrite(HasRetransmittableData retransmittable) {
     return true;
   }
 
-  if (LimitedByAmplificationFactor()) {
+  if (LimitedByAmplificationFactor(packet_creator_.max_packet_length())) {
     // Server is constrained by the amplification restriction.
     QUIC_CODE_COUNT(quic_throttled_by_amplification_limit);
     QUIC_DVLOG(1) << ENDPOINT
@@ -3655,10 +3658,24 @@ bool QuicConnection::WritePacket(SerializedPacket* packet) {
       sent_packet_manager_.GetLeastPacketAwaitedByPeer(encryption_level_),
       sent_packet_manager_.EstimateMaxPacketsInFlight(max_packet_length()));
 
-  stats_.bytes_sent += result.bytes_written;
+  stats_.bytes_sent += encrypted_length;
   ++stats_.packets_sent;
+
+  QuicByteCount bytes_not_retransmitted =
+      packet->bytes_not_retransmitted.value_or(0);
   if (packet->transmission_type != NOT_RETRANSMISSION) {
-    stats_.bytes_retransmitted += result.bytes_written;
+    if (static_cast<uint64_t>(encrypted_length) < bytes_not_retransmitted) {
+      QUIC_BUG(quic_packet_bytes_written_lt_bytes_not_retransmitted)
+          << "Total bytes written to the packet should be larger than the "
+             "bytes in not-retransmitted frames. Bytes written: "
+          << encrypted_length
+          << ", bytes not retransmitted: " << bytes_not_retransmitted;
+    } else {
+      // bytes_retransmitted includes packet's headers and encryption
+      // overhead.
+      stats_.bytes_retransmitted +=
+          (encrypted_length - bytes_not_retransmitted);
+    }
     ++stats_.packets_retransmitted;
   }
 
@@ -4722,7 +4739,7 @@ void QuicConnection::SetRetransmissionAlarm() {
     pending_retransmission_alarm_ = true;
     return;
   }
-  if (LimitedByAmplificationFactor()) {
+  if (LimitedByAmplificationFactor(packet_creator_.max_packet_length())) {
     // Do not set retransmission timer if connection is anti-amplification limit
     // throttled. Otherwise, nothing can be sent when timer fires.
     retransmission_alarm_->Cancel();
@@ -4827,6 +4844,14 @@ QuicConnection::ScopedPacketFlusher::~ScopedPacketFlusher() {
       connection_->FlushCoalescedPacket();
     }
     connection_->FlushPackets();
+    if (GetQuicReloadableFlag(
+            quic_packet_flusher_check_connected_after_flush_packets)) {
+      QUIC_RELOADABLE_FLAG_COUNT(
+          quic_packet_flusher_check_connected_after_flush_packets);
+      if (!connection_->connected()) {
+        return;
+      }
+    }
     if (!handshake_packet_sent_ && connection_->handshake_packet_sent_) {
       // This would cause INITIAL key to be dropped. Drop keys here to avoid
       // missing the write keys in the middle of writing.
@@ -5829,7 +5854,9 @@ void QuicConnection::SendAllPendingAcks() {
     if (!flushed) {
       // Connection is write blocked.
       QUIC_BUG_IF(quic_bug_12714_33,
-                  !writer_->IsWriteBlocked() && !LimitedByAmplificationFactor())
+                  !writer_->IsWriteBlocked() &&
+                      !LimitedByAmplificationFactor(
+                          packet_creator_.max_packet_length()))
           << "Writer not blocked and not throttled by amplification factor, "
              "but ACK not flushed for packet space:"
           << i;
@@ -5946,36 +5973,48 @@ bool QuicConnection::FlushCoalescedPacket() {
   }
   QUIC_DVLOG(1) << ENDPOINT << "Sending coalesced packet "
                 << coalesced_packet_.ToString(length);
-
-  if (!buffered_packets_.empty() || HandleWriteBlocked()) {
+  if (GetQuicReloadableFlag(
+          quic_fix_bytes_accounting_for_buffered_coalesced_packets)) {
+    QUIC_RELOADABLE_FLAG_COUNT(
+        quic_fix_bytes_accounting_for_buffered_coalesced_packets);
+  }
+  const size_t padding_size =
+      length - std::min<size_t>(length, coalesced_packet_.length());
+  // Buffer coalesced packet if padding + bytes_sent exceeds amplifcation limit.
+  if (!buffered_packets_.empty() || HandleWriteBlocked() ||
+      (enforce_strict_amplification_factor_ &&
+       LimitedByAmplificationFactor(padding_size))) {
     QUIC_DVLOG(1) << ENDPOINT
                   << "Buffering coalesced packet of len: " << length;
     buffered_packets_.emplace_back(
         buffer, static_cast<QuicPacketLength>(length),
         coalesced_packet_.self_address(), coalesced_packet_.peer_address());
-    return true;
-  }
-
-  WriteResult result = writer_->WritePacket(
-      buffer, length, coalesced_packet_.self_address().host(),
-      coalesced_packet_.peer_address(), per_packet_options_);
-  if (IsWriteError(result.status)) {
-    OnWriteError(result.error_code);
-    return false;
-  }
-  if (IsWriteBlockedStatus(result.status)) {
-    visitor_->OnWriteBlocked();
-    if (result.status != WRITE_STATUS_BLOCKED_DATA_BUFFERED) {
-      QUIC_DVLOG(1) << ENDPOINT
-                    << "Buffering coalesced packet of len: " << length;
-      buffered_packets_.emplace_back(
-          buffer, static_cast<QuicPacketLength>(length),
-          coalesced_packet_.self_address(), coalesced_packet_.peer_address());
+    if (!GetQuicReloadableFlag(
+            quic_fix_bytes_accounting_for_buffered_coalesced_packets) &&
+        !enforce_strict_amplification_factor_) {
+      return true;
+    }
+  } else {
+    WriteResult result = writer_->WritePacket(
+        buffer, length, coalesced_packet_.self_address().host(),
+        coalesced_packet_.peer_address(), per_packet_options_);
+    if (IsWriteError(result.status)) {
+      OnWriteError(result.error_code);
+      return false;
+    }
+    if (IsWriteBlockedStatus(result.status)) {
+      visitor_->OnWriteBlocked();
+      if (result.status != WRITE_STATUS_BLOCKED_DATA_BUFFERED) {
+        QUIC_DVLOG(1) << ENDPOINT
+                      << "Buffering coalesced packet of len: " << length;
+        buffered_packets_.emplace_back(
+            buffer, static_cast<QuicPacketLength>(length),
+            coalesced_packet_.self_address(), coalesced_packet_.peer_address());
+      }
     }
   }
   // Account for added padding.
   if (length > coalesced_packet_.length()) {
-    size_t padding_size = length - coalesced_packet_.length();
     if (IsDefaultPath(coalesced_packet_.self_address(),
                       coalesced_packet_.peer_address())) {
       if (EnforceAntiAmplificationLimit()) {
@@ -6076,9 +6115,10 @@ bool QuicConnection::EnforceAntiAmplificationLimit() const {
 
 // TODO(danzh) Pass in path object or its reference of some sort to use this
 // method to check anti-amplification limit on non-default path.
-bool QuicConnection::LimitedByAmplificationFactor() const {
+bool QuicConnection::LimitedByAmplificationFactor(QuicByteCount bytes) const {
   return EnforceAntiAmplificationLimit() &&
-         default_path_.bytes_sent_before_address_validation >=
+         (default_path_.bytes_sent_before_address_validation +
+          (enforce_strict_amplification_factor_ ? bytes : 0)) >=
              anti_amplification_factor_ *
                  default_path_.bytes_received_before_address_validation;
 }
@@ -6373,11 +6413,12 @@ bool QuicConnection::SendNewConnectionId(
   return connected_;
 }
 
-void QuicConnection::OnNewConnectionIdIssued(
+bool QuicConnection::MaybeReserveConnectionId(
     const QuicConnectionId& connection_id) {
   if (perspective_ == Perspective::IS_SERVER) {
-    visitor_->OnServerConnectionIdIssued(connection_id);
+    return visitor_->MaybeReserveConnectionId(connection_id);
   }
+  return true;
 }
 
 void QuicConnection::OnSelfIssuedConnectionIdRetired(
@@ -6424,9 +6465,33 @@ QuicTime QuicConnection::GetNetworkBlackholeDeadline() const {
     return QuicTime::Zero();
   }
   QUICHE_DCHECK_LT(0u, num_rtos_for_blackhole_detection_);
+  if (sent_packet_manager_.remove_blackhole_detection_experiments()) {
+    QUIC_RELOADABLE_FLAG_COUNT(quic_remove_blackhole_detection_experiments);
+    const QuicTime::Delta blackhole_delay =
+        sent_packet_manager_.GetNetworkBlackholeDelay(
+            num_rtos_for_blackhole_detection_);
+    if (!ShouldDetectPathDegrading()) {
+      return clock_->ApproximateNow() + blackhole_delay;
+    }
+    return clock_->ApproximateNow() +
+           CalculateNetworkBlackholeDelay(
+               blackhole_delay, sent_packet_manager_.GetPathDegradingDelay(),
+               sent_packet_manager_.GetPtoDelay());
+  }
   return clock_->ApproximateNow() +
          sent_packet_manager_.GetNetworkBlackholeDelay(
              num_rtos_for_blackhole_detection_);
+}
+
+// static
+QuicTime::Delta QuicConnection::CalculateNetworkBlackholeDelay(
+    QuicTime::Delta blackhole_delay, QuicTime::Delta path_degrading_delay,
+    QuicTime::Delta pto_delay) {
+  const QuicTime::Delta min_delay = path_degrading_delay + pto_delay * 2;
+  if (blackhole_delay < min_delay) {
+    QUIC_CODE_COUNT(quic_extending_short_blackhole_delay);
+  }
+  return std::max(min_delay, blackhole_delay);
 }
 
 bool QuicConnection::ShouldDetectBlackhole() const {

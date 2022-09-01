@@ -646,6 +646,7 @@ component("quiche") {
     "src/quiche/quic/platform/api/quic_hostname_utils.h",
     "src/quiche/quic/platform/api/quic_ip_address.cc",
     "src/quiche/quic/platform/api/quic_ip_address.h",
+    "src/quiche/quic/platform/api/quic_ip_address_family.cc",
     "src/quiche/quic/platform/api/quic_ip_address_family.h",
     "src/quiche/quic/platform/api/quic_logging.h",
     "src/quiche/quic/platform/api/quic_mutex.h",

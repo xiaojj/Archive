@@ -48,12 +48,14 @@
 ^third_party/googletest/BUILD.gn
 ^third_party/googletest/src/googletest/include/gtest/gtest_prod.h
 ^third_party/icu/config.gni
+^third_party/libevent
 ^third_party/lss/linux_syscall_support.h
 ^third_party/modp_b64
 ^third_party/nasm
 ^third_party/perfetto/include/perfetto/tracing/traced_value_forward.h
 ^third_party/protobuf/BUILD.gn
 ^third_party/protobuf/proto_library.gni
+^third_party/protobuf/proto_sources.gni
 ^third_party/protobuf/src
 ^third_party/zlib
 ^tools/cfi

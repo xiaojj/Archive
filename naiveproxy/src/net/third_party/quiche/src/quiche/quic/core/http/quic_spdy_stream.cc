@@ -185,8 +185,6 @@ QuicSpdyStream::QuicSpdyStream(QuicStreamId id, QuicSpdySession* spdy_session,
       headers_payload_length_(0),
       trailers_decompressed_(false),
       trailers_consumed_(false),
-      qpack_decoded_headers_accumulator_reset_reason_(
-          QpackDecodedHeadersAccumulatorResetReason::kUnSet),
       http_decoder_visitor_(std::make_unique<HttpDecoderVisitor>(this)),
       decoder_(http_decoder_visitor_.get(),
                HttpDecoderOptionsForBidiStream(spdy_session)),
@@ -223,8 +221,6 @@ QuicSpdyStream::QuicSpdyStream(PendingStream* pending,
       headers_payload_length_(0),
       trailers_decompressed_(false),
       trailers_consumed_(false),
-      qpack_decoded_headers_accumulator_reset_reason_(
-          QpackDecodedHeadersAccumulatorResetReason::kUnSet),
       http_decoder_visitor_(std::make_unique<HttpDecoderVisitor>(this)),
       decoder_(http_decoder_visitor_.get()),
       sequencer_offset_(sequencer()->NumBytesConsumed()),
@@ -561,8 +557,6 @@ void QuicSpdyStream::OnHeadersDecoded(QuicHeaderList headers,
                                       bool header_list_size_limit_exceeded) {
   header_list_size_limit_exceeded_ = header_list_size_limit_exceeded;
   qpack_decoded_headers_accumulator_.reset();
-  qpack_decoded_headers_accumulator_reset_reason_ =
-      QpackDecodedHeadersAccumulatorResetReason::kResetInOnHeadersDecoded;
 
   QuicSpdySession::LogHeaderCompressionRatioHistogram(
       /* using_qpack = */ true,
@@ -592,8 +586,6 @@ void QuicSpdyStream::OnHeadersDecoded(QuicHeaderList headers,
 void QuicSpdyStream::OnHeaderDecodingError(QuicErrorCode error_code,
                                            absl::string_view error_message) {
   qpack_decoded_headers_accumulator_.reset();
-  qpack_decoded_headers_accumulator_reset_reason_ =
-      QpackDecodedHeadersAccumulatorResetReason::kResetInOnHeaderDecodingError;
 
   std::string connection_close_error_message = absl::StrCat(
       "Error decoding ", headers_decompressed_ ? "trailers" : "headers",
@@ -734,20 +726,13 @@ void QuicSpdyStream::OnStreamReset(const QuicRstStreamFrame& frame) {
     return;
   }
 
-  // TODO(bnc): Merge the two blocks below when both
-  // quic_abort_qpack_on_stream_reset and quic_fix_on_stream_reset are
-  // deprecated.
+  // TODO(bnc): Merge the two blocks below when deprecating
+  // quic_fix_on_stream_reset.
   if (frame.error_code != QUIC_STREAM_NO_ERROR) {
     if (VersionUsesHttp3(transport_version()) && !fin_received() &&
         spdy_session_->qpack_decoder()) {
-      QUIC_CODE_COUNT_N(quic_abort_qpack_on_stream_reset, 1, 2);
       spdy_session_->qpack_decoder()->OnStreamReset(id());
-      if (GetQuicReloadableFlag(quic_abort_qpack_on_stream_reset)) {
-        QUIC_RELOADABLE_FLAG_COUNT_N(quic_abort_qpack_on_stream_reset, 1, 2);
-        qpack_decoded_headers_accumulator_.reset();
-        qpack_decoded_headers_accumulator_reset_reason_ =
-            QpackDecodedHeadersAccumulatorResetReason::kResetInOnStreamReset1;
-      }
+      qpack_decoded_headers_accumulator_.reset();
     }
 
     QuicStream::OnStreamReset(frame);
@@ -761,8 +746,6 @@ void QuicSpdyStream::OnStreamReset(const QuicRstStreamFrame& frame) {
       if (!fin_received() && spdy_session_->qpack_decoder()) {
         spdy_session_->qpack_decoder()->OnStreamReset(id());
         qpack_decoded_headers_accumulator_.reset();
-        qpack_decoded_headers_accumulator_reset_reason_ =
-            QpackDecodedHeadersAccumulatorResetReason::kResetInOnStreamReset2;
       }
 
       QuicStream::OnStreamReset(frame);
@@ -781,14 +764,8 @@ void QuicSpdyStream::OnStreamReset(const QuicRstStreamFrame& frame) {
 void QuicSpdyStream::ResetWithError(QuicResetStreamError error) {
   if (VersionUsesHttp3(transport_version()) && !fin_received() &&
       spdy_session_->qpack_decoder() && web_transport_data_ == nullptr) {
-    QUIC_CODE_COUNT_N(quic_abort_qpack_on_stream_reset, 2, 2);
     spdy_session_->qpack_decoder()->OnStreamReset(id());
-    if (GetQuicReloadableFlag(quic_abort_qpack_on_stream_reset)) {
-      QUIC_RELOADABLE_FLAG_COUNT_N(quic_abort_qpack_on_stream_reset, 2, 2);
-      qpack_decoded_headers_accumulator_.reset();
-      qpack_decoded_headers_accumulator_reset_reason_ =
-          QpackDecodedHeadersAccumulatorResetReason::kResetInResetWithError;
-    }
+    qpack_decoded_headers_accumulator_.reset();
   }
 
   QuicStream::ResetWithError(error);
@@ -890,8 +867,6 @@ void QuicSpdyStream::OnClose() {
   QuicStream::OnClose();
 
   qpack_decoded_headers_accumulator_.reset();
-  qpack_decoded_headers_accumulator_reset_reason_ =
-      QpackDecodedHeadersAccumulatorResetReason::kResetInOnClose;
 
   if (visitor_) {
     Visitor* visitor = visitor_;
@@ -1085,8 +1060,7 @@ bool QuicSpdyStream::OnHeadersFramePayload(absl::string_view payload) {
   QUICHE_DCHECK(VersionUsesHttp3(transport_version()));
 
   if (!qpack_decoded_headers_accumulator_) {
-    QUIC_BUG(b215142466_OnHeadersFramePayload)
-        << static_cast<int>(qpack_decoded_headers_accumulator_reset_reason_);
+    QUIC_BUG(b215142466_OnHeadersFramePayload);
     OnHeaderDecodingError(QUIC_INTERNAL_ERROR,
                           "qpack_decoded_headers_accumulator_ is nullptr");
     return false;
@@ -1107,8 +1081,7 @@ bool QuicSpdyStream::OnHeadersFrameEnd() {
   QUICHE_DCHECK(VersionUsesHttp3(transport_version()));
 
   if (!qpack_decoded_headers_accumulator_) {
-    QUIC_BUG(b215142466_OnHeadersFrameEnd)
-        << static_cast<int>(qpack_decoded_headers_accumulator_reset_reason_);
+    QUIC_BUG(b215142466_OnHeadersFrameEnd);
     OnHeaderDecodingError(QUIC_INTERNAL_ERROR,
                           "qpack_decoded_headers_accumulator_ is nullptr");
     return false;

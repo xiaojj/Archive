@@ -269,6 +269,12 @@ struct kernel_timeval {
   long               tv_usec;
 };
 
+/* include/linux/time.h                                                      */
+struct kernel_itimerval {
+  struct kernel_timeval it_interval;
+  struct kernel_timeval it_value;
+};
+
 /* include/linux/resource.h                                                  */
 struct kernel_rusage {
   struct kernel_timeval ru_utime;
@@ -1938,7 +1944,7 @@ struct kernel_statfs {
   #define LSS_RETURN(type, res)                                               \
     do {                                                                      \
       if ((unsigned long)(res) >= (unsigned long)(-4095)) {                   \
-        LSS_ERRNO = -(res);                                                   \
+        LSS_ERRNO = (int)(-(res));                                            \
         res = -1;                                                             \
       }                                                                       \
       return (type) (res);                                                    \
@@ -2292,7 +2298,7 @@ struct kernel_statfs {
     #define _LSS_RETURN(type, res, cast)                                      \
       do {                                                                    \
         if ((uint64_t)(res) >= (uint64_t)(-4095)) {                           \
-          LSS_ERRNO = -(res);                                                 \
+          LSS_ERRNO = (int)(-(res));                                          \
           res = -1;                                                           \
         }                                                                     \
         return (type)(cast)(res);                                             \
@@ -2841,7 +2847,7 @@ struct kernel_statfs {
                                    void *newtls, int *child_tidptr) {
       int64_t __res;
       {
-        register uint64_t __flags __asm__("x0") = flags;
+        register uint64_t __flags __asm__("x0") = (uint64_t)flags;
         register void *__stack __asm__("x1") = child_stack;
         register void *__ptid  __asm__("x2") = parent_tidptr;
         register void *__tls   __asm__("x3") = newtls;
@@ -3846,6 +3852,8 @@ struct kernel_statfs {
                       struct kernel_dirent64*, d, int,    c)
   LSS_INLINE _syscall0(gid_t,   getegid)
   LSS_INLINE _syscall0(uid_t,   geteuid)
+  LSS_INLINE _syscall2(int,     getitimer,       int,        w,
+                       struct kernel_itimerval*, c)
   #if defined(__NR_getpgrp)
     LSS_INLINE _syscall0(pid_t,   getpgrp)
   #endif
@@ -3967,6 +3975,9 @@ struct kernel_statfs {
   LSS_INLINE _syscall1(int,     setfsuid,        uid_t,       u)
   LSS_INLINE _syscall1(int,     setuid,          uid_t,       u)
   LSS_INLINE _syscall1(int,     setgid,          gid_t,       g)
+  LSS_INLINE _syscall3(int,     setitimer,       int,         w,
+                       const struct kernel_itimerval*,        n,
+                       struct kernel_itimerval*, o)
   LSS_INLINE _syscall2(int,     setpgid,         pid_t,       p,
                        pid_t,          g)
   LSS_INLINE _syscall3(int,     setpriority,     int,         a,
@@ -4315,36 +4326,36 @@ struct kernel_statfs {
 
   LSS_INLINE int LSS_NAME(sigaddset)(struct kernel_sigset_t *set,
                                      int signum) {
-    if (signum < 1 || signum > (int)(8*sizeof(set->sig))) {
+    if (signum < 1 || (size_t)signum > (8*sizeof(set->sig))) {
       LSS_ERRNO = EINVAL;
       return -1;
     } else {
-      set->sig[(signum - 1)/(8*sizeof(set->sig[0]))]
-          |= 1UL << ((signum - 1) % (8*sizeof(set->sig[0])));
+      set->sig[(size_t)(signum - 1)/(8*sizeof(set->sig[0]))]
+          |= 1UL << ((size_t)(signum - 1) % (8*sizeof(set->sig[0])));
       return 0;
     }
   }
 
   LSS_INLINE int LSS_NAME(sigdelset)(struct kernel_sigset_t *set,
                                         int signum) {
-    if (signum < 1 || signum > (int)(8*sizeof(set->sig))) {
+    if (signum < 1 || (size_t)signum > (8*sizeof(set->sig))) {
       LSS_ERRNO = EINVAL;
       return -1;
     } else {
-      set->sig[(signum - 1)/(8*sizeof(set->sig[0]))]
-          &= ~(1UL << ((signum - 1) % (8*sizeof(set->sig[0]))));
+      set->sig[(size_t)(signum - 1)/(8*sizeof(set->sig[0]))]
+          &= ~(1UL << ((size_t)(signum - 1) % (8*sizeof(set->sig[0]))));
       return 0;
     }
   }
 
   LSS_INLINE int LSS_NAME(sigismember)(struct kernel_sigset_t *set,
                                           int signum) {
-    if (signum < 1 || signum > (int)(8*sizeof(set->sig))) {
+    if (signum < 1 || (size_t)signum > (8*sizeof(set->sig))) {
       LSS_ERRNO = EINVAL;
       return -1;
     } else {
-      return !!(set->sig[(signum - 1)/(8*sizeof(set->sig[0]))] &
-                (1UL << ((signum - 1) % (8*sizeof(set->sig[0])))));
+      return !!(set->sig[(size_t)(signum - 1)/(8*sizeof(set->sig[0]))] &
+                (1UL << ((size_t)(signum - 1) % (8*sizeof(set->sig[0])))));
     }
   }
   #if defined(__i386__) ||                                                    \
@@ -4744,12 +4755,12 @@ struct kernel_statfs {
     va_start(ap, flags);
     new_address = va_arg(ap, void *);
     rc = LSS_NAME(_mremap)(old_address, old_size, new_size,
-                           flags, new_address);
+                           (unsigned long)flags, new_address);
     va_end(ap);
     return rc;
   }
 
-  LSS_INLINE int LSS_NAME(ptrace_detach)(pid_t pid) {
+  LSS_INLINE long LSS_NAME(ptrace_detach)(pid_t pid) {
     /* PTRACE_DETACH can sometimes forget to wake up the tracee and it
      * then sends job control signals to the real parent, rather than to
      * the tracer. We reduce the risk of this happening by starting a
@@ -4760,7 +4771,8 @@ struct kernel_statfs {
      * detached.  Large multi threaded apps can take a long time in the kernel
      * processing SIGCONT.
      */
-    int rc, err;
+    long rc;
+    int err;
     LSS_NAME(sched_yield)();
     rc = LSS_NAME(ptrace)(PTRACE_DETACH, pid, (void *)0, (void *)0);
     err = LSS_ERRNO;
@@ -4793,7 +4805,7 @@ struct kernel_statfs {
                                      LSS_SYSCALL_ARG(c), (uint64_t)(o));
     }
 
-    LSS_INLINE int LSS_NAME(readahead)(int f, loff_t o, unsigned c) {
+    LSS_INLINE int LSS_NAME(readahead)(int f, loff_t o, size_t c) {
       LSS_BODY(3, int, readahead, LSS_SYSCALL_ARG(f), (uint64_t)(o),
                                   LSS_SYSCALL_ARG(c));
     }
@@ -4853,9 +4865,9 @@ struct kernel_statfs {
       return LSS_NAME(_pwrite64)(fd, buf, count,
                                  LSS_LLARG_PAD o.arg[0], o.arg[1]);
     }
-    LSS_INLINE int LSS_NAME(readahead)(int fd, loff_t off, int len) {
+    LSS_INLINE int LSS_NAME(readahead)(int fd, loff_t off, size_t count) {
       union { loff_t off; unsigned arg[2]; } o = { off };
-      return LSS_NAME(_readahead)(fd, LSS_LLARG_PAD o.arg[0], o.arg[1], len);
+      return LSS_NAME(_readahead)(fd, LSS_LLARG_PAD o.arg[0], o.arg[1], count);
     }
   #endif
 #endif

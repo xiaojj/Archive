@@ -159,6 +159,13 @@ buildflag_header("ios_cronet_buildflags") {
   flags = [ "CRONET_BUILD=$is_cronet_build" ]
 }
 
+enable_message_pump_epoll = is_linux || is_chromeos || is_android
+buildflag_header("message_pump_buildflags") {
+  header = "message_pump_buildflags.h"
+  header_dir = "base/message_loop"
+  flags = [ "ENABLE_MESSAGE_PUMP_EPOLL=$enable_message_pump_epoll" ]
+}
+
 # Base and everything it depends on should be a static library rather than
 # a source set. Base is more of a "library" in the classic sense in that many
 # small parts of it are used in many different contexts. This combined with a
@@ -180,6 +187,10 @@ mixed_component("base") {
     "allocator/allocator_check.h",
     "allocator/allocator_extension.cc",
     "allocator/allocator_extension.h",
+    "allocator/dispatcher/dispatcher.cc",
+    "allocator/dispatcher/dispatcher.h",
+    "allocator/dispatcher/reentry_guard.cc",
+    "allocator/dispatcher/reentry_guard.h",
     "as_const.h",
     "at_exit.cc",
     "at_exit.h",
@@ -217,6 +228,8 @@ mixed_component("base") {
     "cancelable_callback.h",
     "check.cc",
     "check.h",
+    "check_is_test.cc",
+    "check_is_test.h",
     "check_op.cc",
     "check_op.h",
     "command_line.cc",
@@ -400,6 +413,7 @@ mixed_component("base") {
     "memory/raw_ptr_asan_service.cc",
     "memory/raw_ptr_asan_service.h",
     "memory/raw_ptr_exclusion.h",
+    "memory/raw_ref.h",
     "memory/raw_scoped_refptr_mismatch_checker.h",
     "memory/read_only_shared_memory_region.cc",
     "memory/read_only_shared_memory_region.h",
@@ -498,7 +512,6 @@ mixed_component("base") {
     "native_library.cc",
     "native_library.h",
     "no_destructor.h",
-    "notreached.cc",
     "notreached.h",
     "observer_list.h",
     "observer_list_internal.cc",
@@ -552,7 +565,6 @@ mixed_component("base") {
     "profiler/metadata_recorder.h",
     "profiler/module_cache.cc",
     "profiler/module_cache.h",
-    "profiler/native_unwinder.h",
     "profiler/profile_builder.h",
     "profiler/register_context.h",
     "profiler/sample_metadata.cc",
@@ -914,6 +926,7 @@ mixed_component("base") {
     "trace_event/trace_id_helper.h",
     "traits_bag.h",
     "tuple.h",
+    "types/always_false.h",
     "types/expected.h",
     "types/expected_internal.h",
     "types/id_type.h",
@@ -1266,9 +1279,9 @@ mixed_component("base") {
       "process/process_iterator_mac.cc",
       "process/process_mac.cc",
       "process/process_metrics_mac.cc",
+      "profiler/frame_pointer_unwinder.cc",
+      "profiler/frame_pointer_unwinder.h",
       "profiler/module_cache_mac.cc",
-      "profiler/native_unwinder_apple.cc",
-      "profiler/native_unwinder_apple.h",
       "profiler/stack_sampler_mac.cc",
       "profiler/suspendable_thread_delegate_mac.cc",
       "profiler/suspendable_thread_delegate_mac.h",
@@ -1314,8 +1327,8 @@ mixed_component("base") {
 
     if (ios_stack_profiler_enabled) {
       sources += [
-        "profiler/native_unwinder_apple.cc",
-        "profiler/native_unwinder_apple.h",
+        "profiler/frame_pointer_unwinder.cc",
+        "profiler/frame_pointer_unwinder.h",
         "profiler/suspendable_thread_delegate_mac.cc",
         "profiler/suspendable_thread_delegate_mac.h",
       ]
@@ -1415,15 +1428,13 @@ mixed_component("base") {
 
   configs += [
     "//build/config:precompiled_headers",
-
-    # TODO(crbug.com/1292951): Enable.
-    # "//build/config/compiler:prevent_unsafe_narrowing",
-
+    "//build/config/compiler:prevent_unsafe_narrowing",
     "//build/config/compiler:wexit_time_destructors",
     "//build/config/compiler:wglobal_constructors",
   ]
 
   deps = [
+    ":message_pump_buildflags",
     "//base/allocator:buildflags",
     "//base/third_party/double_conversion",
     "//base/third_party/dynamic_annotations",
@@ -1676,8 +1687,14 @@ mixed_component("base") {
       "logging_chromeos.cc",
       "system/sys_info_chromeos.cc",
     ]
-    if (is_chromeos_ash) {
-      sources += [ "power_monitor/power_monitor_device_source_chromeos.cc" ]
+
+    sources += [ "power_monitor/power_monitor_device_source_chromeos.cc" ]
+
+    if (current_cpu == "x64") {
+      sources += [
+        "profiler/frame_pointer_unwinder.cc",
+        "profiler/frame_pointer_unwinder.h",
+      ]
     }
   }
 
@@ -1792,6 +1809,7 @@ mixed_component("base") {
 
     deps += [
       "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.buildinfo",
+      "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.hwinfo",
       "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.media",
       "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.sys",
       "//third_party/fuchsia-sdk/sdk/pkg/async-default",
@@ -2178,13 +2196,20 @@ mixed_component("base") {
   }
 
   if (dep_libevent) {
-    deps += [ "//base/third_party/libevent" ]
+    deps += [ "//third_party/libevent" ]
   }
 
   if (use_libevent) {
     sources += [
       "message_loop/message_pump_libevent.cc",
       "message_loop/message_pump_libevent.h",
+    ]
+  }
+
+  if (enable_message_pump_epoll) {
+    sources += [
+      "message_loop/message_pump_epoll.cc",
+      "message_loop/message_pump_epoll.h",
     ]
   }
 
@@ -2229,8 +2254,7 @@ mixed_component("base") {
     ]
   }
 
-  if ((is_posix && !is_apple && !is_android && !is_chromeos_ash) ||
-      is_fuchsia) {
+  if ((is_posix && !is_apple && !is_android && !is_chromeos) || is_fuchsia) {
     sources += [ "power_monitor/power_monitor_device_source_stub.cc" ]
   }
 
@@ -2287,8 +2311,6 @@ mixed_component("base") {
       "trace_event/process_memory_dump.cc",
       "trace_event/process_memory_dump.h",
       "trace_event/task_execution_macros.h",
-      "trace_event/thread_instruction_count.cc",
-      "trace_event/thread_instruction_count.h",
       "trace_event/trace_arguments.cc",
       "trace_event/trace_arguments.h",
       "trace_event/trace_buffer.cc",

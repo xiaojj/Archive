@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "absl/container/flat_hash_map.h"
+#include "absl/strings/ascii.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "quiche/quic/core/congestion_control/loss_detection_interface.h"
@@ -475,7 +476,7 @@ class MockQuicConnectionVisitor : public QuicConnectionVisitorInterface {
               (const QuicNewConnectionIdFrame& frame), (override));
   MOCK_METHOD(void, SendRetireConnectionId, (uint64_t sequence_number),
               (override));
-  MOCK_METHOD(void, OnServerConnectionIdIssued,
+  MOCK_METHOD(bool, MaybeReserveConnectionId,
               (const QuicConnectionId& server_connection_id), (override));
   MOCK_METHOD(void, OnServerConnectionIdRetired,
               (const QuicConnectionId& server_connection_id), (override));
@@ -731,6 +732,9 @@ class PacketSavingConnection : public MockQuicConnection {
   PacketSavingConnection& operator=(const PacketSavingConnection&) = delete;
 
   ~PacketSavingConnection() override;
+
+  SerializedPacketFate GetSerializedPacketFate(
+      bool is_mtu_discovery, EncryptionLevel encryption_level) override;
 
   void SendOrQueuePacket(SerializedPacket packet) override;
 
@@ -1859,7 +1863,9 @@ class TestPacketWriter : public QuicPacketWriter {
     return framer_.coalesced_packet();
   }
 
-  size_t last_packet_size() { return last_packet_size_; }
+  size_t last_packet_size() const { return last_packet_size_; }
+
+  size_t total_bytes_written() const { return total_bytes_written_; }
 
   const QuicPacketHeader& last_packet_header() const {
     return last_packet_header_;
@@ -1934,6 +1940,7 @@ class TestPacketWriter : public QuicPacketWriter {
   ParsedQuicVersion version_;
   SimpleQuicFramer framer_;
   size_t last_packet_size_ = 0;
+  size_t total_bytes_written_ = 0;
   QuicPacketHeader last_packet_header_;
   bool write_blocked_ = false;
   bool write_should_fail_ = false;
@@ -2024,6 +2031,18 @@ class SavingHttp3DatagramVisitor : public QuicSpdyStream::Http3DatagramVisitor {
  private:
   std::vector<SavedHttp3Datagram> received_h3_datagrams_;
 };
+
+inline std::string EscapeTestParamName(absl::string_view name) {
+  std::string result(name);
+  // Escape all characters that are not allowed by gtest ([a-zA-Z0-9_]).
+  for (char& c : result) {
+    bool valid = absl::ascii_isalnum(c) || c == '_';
+    if (!valid) {
+      c = '_';
+    }
+  }
+  return result;
+}
 
 }  // namespace test
 }  // namespace quic
