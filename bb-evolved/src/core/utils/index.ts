@@ -362,6 +362,9 @@ export class DoubleClickEvent {
   singleClickHandler: (e: MouseEvent) => void = none
 
   private clickedOnce = false
+  private readonly stopPropagationHandler = (e: MouseEvent) => {
+    e.stopImmediatePropagation()
+  }
   private readonly doubleClickHandler = (e: MouseEvent) => {
     if (!this.clickedOnce) {
       this.clickedOnce = true
@@ -400,6 +403,7 @@ export class DoubleClickEvent {
       element.addEventListener('click', this.doubleClickHandler, {
         capture: true,
       })
+      element.addEventListener('dblclick', this.stopPropagationHandler, { capture: true })
     }
   }
   /**
@@ -415,6 +419,7 @@ export class DoubleClickEvent {
     element.removeEventListener('click', this.doubleClickHandler, {
       capture: true,
     })
+    element.removeEventListener('dblclick', this.stopPropagationHandler, { capture: true })
   }
 }
 /** 等待播放器准备好, 如果过早注入 DOM 元素可能会导致爆炸
@@ -571,3 +576,13 @@ export const getNumberValidator = (clampLower = -Infinity, clampUpper = Infinity
  * @param text 文本
  */
 export const pascalCase = (text: string) => lodash.upperFirst(lodash.camelCase(text))
+
+/**
+ * 生成一段随机 ID (产生十六进制字符, 如 `4ae127a4`)
+ * @param length 长度
+ */
+export const getRandomId = (length = 8) => {
+  const typedArray = new Uint8Array(Math.ceil(length / 2))
+  crypto.getRandomValues(typedArray)
+  return [...typedArray].map(it => it.toString(16).padStart(2, '0')).join('').substring(0, length)
+}

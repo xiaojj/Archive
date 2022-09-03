@@ -1,4 +1,6 @@
-import { defineComponentMetadata, defineOptionsMetadata } from '@/components/define'
+import {
+  defineComponentMetadata, defineOptionsMetadata, OptionsOfMetadata,
+} from '@/components/define'
 import { ComponentEntry } from '@/components/types'
 import { matchUrlPattern } from '@/core/utils'
 import { favoriteListUrls, videoUrls } from '@/core/utils/urls'
@@ -15,7 +17,10 @@ const options = defineOptionsMetadata({
     displayName: '在收藏夹播放页面仍然显示',
   },
 })
-const entry: ComponentEntry<typeof options> = async ({ settings }) => {
+
+type Options = OptionsOfMetadata<typeof options>
+
+const entry: ComponentEntry<Options> = async ({ settings }) => {
   if (favoriteListUrls.some(matchUrlPattern) && !settings.options.showInFavoritePages) {
     return
   }
@@ -56,10 +61,10 @@ export const component = defineComponentMetadata({
   },
   entry,
   unload: () => {
-    dqa('.ops .quick-favorite').forEach((it: HTMLElement) => (it.style.display = 'none'))
+    dqa('.be-quick-favorite').forEach((it: HTMLElement) => (it.style.display = ''))
   },
   reload: () => {
-    dqa('.ops .quick-favorite').forEach((it: HTMLElement) => (it.style.display = 'inline-block'))
+    dqa('.be-quick-favorite').forEach((it: HTMLElement) => (it.style.display = 'inline-block'))
   },
   urlInclude: videoUrls,
   // urlExclude: favoriteListUrls,
@@ -75,7 +80,7 @@ export const component = defineComponentMetadata({
           displayName: '快速收藏',
           run: context => {
             const { clickElement } = context
-            return clickElement('.quick-favorite', context)
+            return clickElement('.be-quick-favorite', context)
           },
         }
       })

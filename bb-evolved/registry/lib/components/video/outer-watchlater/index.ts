@@ -1,4 +1,6 @@
-import { defineComponentMetadata, defineOptionsMetadata } from '@/components/define'
+import {
+  defineComponentMetadata, defineOptionsMetadata, OptionsOfMetadata,
+} from '@/components/define'
 import { ComponentEntry } from '@/components/types'
 import { matchUrlPattern } from '@/core/utils'
 import { videoUrls, watchlaterUrls } from '@/core/utils/urls'
@@ -10,7 +12,10 @@ const options = defineOptionsMetadata({
     displayName: '在稍后再看页面中仍然显示',
   },
 })
-const entry: ComponentEntry<typeof options> = async ({ settings }) => {
+
+type Options = OptionsOfMetadata<typeof options>
+
+const entry: ComponentEntry<Options> = async ({ settings }) => {
   if (watchlaterUrls.some(matchUrlPattern) && !settings.options.showInWatchlaterPages) {
     return
   }
@@ -52,12 +57,12 @@ export const component = defineComponentMetadata({
   // urlExclude: watchlaterUrls,
   options,
   reload: () => {
-    dqa('.ops .watchlater').forEach((it: HTMLElement) => {
-      it.style.display = 'inline-block'
+    dqa('.be-outer-watchlater').forEach((it: HTMLElement) => {
+      it.style.display = ''
     })
   },
   unload: () => {
-    dqa('.ops .watchlater').forEach((it: HTMLElement) => {
+    dqa('.be-outer-watchlater').forEach((it: HTMLElement) => {
       it.style.display = 'none'
     })
   },
@@ -69,7 +74,7 @@ export const component = defineComponentMetadata({
           displayName: '稍后再看',
           run: context => {
             const { clickElement } = context
-            return clickElement('.video-toolbar .ops .watchlater, .more-ops-list .ops-watch-later, .video-toolbar-module .see-later-box', context)
+            return clickElement('.be-outer-watchlater', context)
           },
         }
       })
