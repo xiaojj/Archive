@@ -13,6 +13,7 @@ import {
   Theme,
 } from "@mui/material";
 import delayManager from "@/services/delay";
+import BaseLoading from "../base/base-loading";
 
 interface Props {
   groupName: string;
@@ -43,15 +44,28 @@ const TypeBox = styled(Box)(({ theme }) => ({
 
 const ProxyItem = (props: Props) => {
   const { groupName, proxy, selected, showType = true, sx, onClick } = props;
+
+  // -1/<=0 为 不显示
+  // -2 为 loading
   const [delay, setDelay] = useState(-1);
 
   useEffect(() => {
-    if (proxy) {
+    if (!proxy) return;
+
+    if (!proxy.provider) {
       setDelay(delayManager.getDelay(proxy.name, groupName));
+      return;
+    }
+
+    const { history = [] } = proxy;
+    if (history.length > 0) {
+      // 0ms以error显示
+      setDelay(history[history.length - 1].delay || 1e6);
     }
   }, [proxy]);
 
   const onDelay = useLockFn(async () => {
+    setDelay(-2);
     return delayManager
       .checkDelay(proxy.name, groupName)
       .then((result) => setDelay(result))
@@ -72,14 +86,9 @@ const ProxyItem = (props: Props) => {
                 ? alpha(primary.main, 0.15)
                 : alpha(primary.main, 0.35);
             const color = mode === "light" ? primary.main : primary.light;
-
             const showDelay = delay > 0;
-            const showIcon = !showDelay && selected;
 
             return {
-              ".the-check": { display: "none" },
-              ".the-delay": { display: showDelay ? "block" : "none" },
-              ".the-icon": { display: showIcon ? "block" : "none" },
               "&:hover .the-check": { display: !showDelay ? "block" : "none" },
               "&:hover .the-delay": { display: showDelay ? "block" : "none" },
               "&:hover .the-icon": { display: "none" },
@@ -95,6 +104,9 @@ const ProxyItem = (props: Props) => {
             <>
               {proxy.name}
 
+              {showType && !!proxy.provider && (
+                <TypeBox component="span">{proxy.provider}</TypeBox>
+              )}
               {showType && <TypeBox component="span">{proxy.type}</TypeBox>}
               {showType && proxy.udp && <TypeBox component="span">UDP</TypeBox>}
             </>
@@ -104,45 +116,64 @@ const ProxyItem = (props: Props) => {
         <ListItemIcon
           sx={{ justifyContent: "flex-end", color: "primary.main" }}
         >
-          <Widget
-            className="the-check"
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              onDelay();
-            }}
-            sx={(theme) => ({
-              ":hover": { bgcolor: alpha(theme.palette.primary.main, 0.15) },
-            })}
-          >
-            Check
-          </Widget>
+          {delay === -2 && (
+            <Widget>
+              <BaseLoading />
+            </Widget>
+          )}
 
-          <Widget
-            className="the-delay"
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              onDelay();
-            }}
-            color={
-              delay > 500
-                ? "error.main"
-                : delay < 100
-                ? "success.main"
-                : "text.secondary"
-            }
-            sx={(theme) => ({
-              ":hover": { bgcolor: alpha(theme.palette.primary.main, 0.15) },
-            })}
-          >
-            {delay > 1e5 ? "Error" : delay > 3000 ? "Timeout" : `${delay}ms`}
-          </Widget>
+          {!proxy.provider && delay !== -2 && (
+            // provider的节点不支持检测
+            <Widget
+              className="the-check"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onDelay();
+              }}
+              sx={({ palette }) => ({
+                display: "none", // hover才显示
+                ":hover": { bgcolor: alpha(palette.primary.main, 0.15) },
+              })}
+            >
+              Check
+            </Widget>
+          )}
 
-          <CheckCircleOutlineRounded
-            className="the-icon"
-            sx={{ fontSize: 16 }}
-          />
+          {delay > 0 && (
+            // 显示延迟
+            <Widget
+              className="the-delay"
+              onClick={(e) => {
+                if (proxy.provider) return;
+                e.preventDefault();
+                e.stopPropagation();
+                onDelay();
+              }}
+              color={
+                delay > 500
+                  ? "error.main"
+                  : delay < 100
+                  ? "success.main"
+                  : "text.secondary"
+              }
+              sx={({ palette }) =>
+                !proxy.provider
+                  ? { ":hover": { bgcolor: alpha(palette.primary.main, 0.15) } }
+                  : {}
+              }
+            >
+              {delay > 1e5 ? "Error" : delay > 3000 ? "Timeout" : `${delay}ms`}
+            </Widget>
+          )}
+
+          {delay !== -2 && delay <= 0 && selected && (
+            // 展示已选择的icon
+            <CheckCircleOutlineRounded
+              className="the-icon"
+              sx={{ fontSize: 16 }}
+            />
+          )}
         </ListItemIcon>
       </ListItemButton>
     </ListItem>
