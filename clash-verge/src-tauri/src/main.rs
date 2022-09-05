@@ -17,15 +17,24 @@ use tauri::{
 };
 
 fn main() -> std::io::Result<()> {
-  if server::check_singleton().is_err() {
+  let mut context = tauri::generate_context!();
+
+  let verge = Verge::new();
+
+  if server::check_singleton(verge.app_singleton_port).is_err() {
     println!("app exists");
     return Ok(());
+  }
+
+  for win in context.config_mut().tauri.windows.iter_mut() {
+    if verge.enable_silent_start.unwrap_or(false) {
+      win.visible = false;
+    }
   }
 
   #[cfg(target_os = "windows")]
   unsafe {
     use crate::utils::dirs;
-
     dirs::init_portable_flag();
   }
 
@@ -118,6 +127,7 @@ fn main() -> std::io::Result<()> {
       cmds::restart_sidecar,
       // clash
       cmds::get_clash_info,
+      cmds::get_clash_logs,
       cmds::patch_clash_config,
       cmds::change_clash_core,
       cmds::get_runtime_config,
@@ -166,13 +176,6 @@ fn main() -> std::io::Result<()> {
     builder = builder.menu(Menu::new().add_submenu(submenu_file));
   }
 
-  let mut context = tauri::generate_context!();
-  let verge = Verge::new();
-  for win in context.config_mut().tauri.windows.iter_mut() {
-    if verge.enable_silent_start.unwrap_or(false) {
-      win.visible = false;
-    }
-  }
   builder
     .build(context)
     .expect("error while running tauri application")
