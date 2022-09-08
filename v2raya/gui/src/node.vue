@@ -380,13 +380,9 @@
                     @click="handleClickAboutConnection(props.row)"
                   >
                     {{
-                      loadBalanceValid
-                        ? props.row.connected
-                          ? $t("operations.cancel")
-                          : $t("operations.select")
-                        : props.row.connected
-                        ? $t("operations.disconnect")
-                        : $t("operations.connect")
+                      props.row.connected
+                        ? $t("operations.cancel")
+                        : $t("operations.select")
                     }}
                   </b-button>
                   <b-button
@@ -517,13 +513,9 @@
                     @click="handleClickAboutConnection(props.row, subi)"
                   >
                     {{
-                      loadBalanceValid
-                        ? props.row.connected
-                          ? $t("operations.cancel")
-                          : $t("operations.select")
-                        : props.row.connected
-                        ? $t("operations.disconnect")
-                        : $t("operations.connect")
+                      props.row.connected
+                        ? $t("operations.cancel")
+                        : $t("operations.select")
                     }}
                   </b-button>
                   <b-button
@@ -697,6 +689,7 @@ import ClipboardJS from "clipboard";
 import { Base64 } from "js-base64";
 import ModalServer from "@/components/modalServer";
 import ModalSubscription from "@/components/modalSubcription";
+import ModalSharing from "@/components/modalSharing";
 import { waitingConnected } from "@/assets/js/networkInspect";
 import axios from "@/plugins/axios";
 import * as dayjs from "dayjs";
@@ -762,11 +755,6 @@ export default {
       clipboard: null
     };
   },
-  computed: {
-    loadBalanceValid() {
-      return localStorage["loadBalanceValid"] === "true";
-    }
-  },
   watch: {
     "runningState.running"() {
       this.updateConnectView();
@@ -782,7 +770,7 @@ export default {
       }
     },
     observatory(val) {
-      for (const info of val.body) {
+      for (const info of val.body.outboundStatus) {
         this.connectedServerInfo.some(x => {
           if (
             info.which._type === x.which._type &&
@@ -887,13 +875,17 @@ export default {
       } else {
         tabIndex = 2 + which.sub;
       }
-
       let tryCnt = 0;
       const maxTry = 5;
       const tryInterval = 500;
       function waitingAndLocate() {
-        let nodes = document.querySelectorAll(".main-tabs .tabs li");
-        if (!nodes[tabIndex].classList.contains("is-active")) {
+        if (
+          !document
+            .querySelector(
+              `.main-tabs > .tabs > ul > li:nth-child(${1 + tabIndex})`
+            )
+            .classList.contains("is-active")
+        ) {
           tryCnt++;
           if (tryCnt > maxTry) {
             return;
@@ -919,7 +911,7 @@ export default {
             console.warn("node not found");
             return;
           }
-          node.scrollIntoView({ block: "end", inline: "center" });
+          node.scrollIntoView({ block: "center", inline: "center" });
           let highlightClass = "highlight-row-connected";
           if (that.runningState.running !== that.$t("common.isRunning")) {
             highlightClass = "highlight-row-disconnected";
@@ -1124,6 +1116,10 @@ export default {
       } else {
         this.connectedServerInfo = [];
       }
+
+      this.connectedServerInfo.sort((x, y) => {
+        return x.info.name > y.info.name;
+      });
 
       this.connectedServerInTab.server = false;
       for (const i in this.connectedServerInTab.subscriptionServer) {
@@ -1429,75 +1425,13 @@ export default {
         handleResponse(res, this, () => {
           this.$buefy.modal.open({
             width: 500,
-            content: `
-<div class="modal-card" style="max-width: 500px;margin:auto">
-                    <header class="modal-card-head">
-                        <p class="modal-card-title has-text-centered">${
-                          TYPE_MAP[row._type]
-                        }</p>
-                    </header>
-                    <section class="modal-card-body lazy" style="text-align: center">
-                        <div><canvas id="canvas" class="qrcode"></canvas></div>
-                        <div class="tags has-addons is-centered" style="position: relative">
-                            <span class="tag is-rounded is-dark sharingAddressTag" style="position: relative" data-clipboard-text="${
-                              res.data.data.sharingAddress
-                            }">
-                                <div class="tag-cover tag is-rounded" style="display: none;"></div>
-                                <span class="has-ellipsis" style="max-width:10em">
-                                    ${row.name || row.host || row.address}
-                                </span>
-                            </span>
-                            <div id="tag-cover-text">${this.$t(
-                              "operations.copyLink"
-                            )}</div>
-                            <span class="tag is-rounded is-primary sharingAddressTag" style="position: relative" data-clipboard-text="${
-                              res.data.data.sharingAddress
-                            }">
-                                <span class="has-ellipsis" style="max-width:25em">
-                                  ${res.data.data.sharingAddress}
-                                </span>
-                                <div class="tag-cover tag is-rounded" style="display: none;"></div>
-                            </span>
-                        </div>
-                    </section>
-                    <footer class="modal-card-foot" style="justify-content: center">
-                        <a class="is-link" href="https://github.com/v2rayA/v2rayA" target="_blank">
-                          <img class="leave-right" src="https://img.shields.io/github/stars/mzz2017/v2rayA.svg?style=social" alt="stars">
-                          <img class="leave-right" src="https://img.shields.io/github/forks/mzz2017/v2rayA.svg?style=social" alt="forks">
-                          <img class="leave-right" src="https://img.shields.io/github/watchers/mzz2017/v2rayA.svg?style=social" alt="watchers">
-                        </a>
-                    </footer>
-                </div>
-`
-          });
-          this.$nextTick(() => {
-            let add = res.data.data.sharingAddress;
-            if (row._type === CONST.SubscriptionType) {
-              add = "sub://" + Base64.encode(add);
+            component: ModalSharing,
+            props: {
+              title: TYPE_MAP[row._type],
+              sharingAddress: res.data.data.sharingAddress,
+              shortDesc: row.name || row.host || row.address,
+              type: row._type
             }
-            let canvas = document.getElementById("canvas");
-            QRCode.toCanvas(
-              canvas,
-              add,
-              { errorCorrectionLevel: "H" },
-              function(error) {
-                if (error) console.error(error);
-                // console.log("QRCode has been generated successfully!");
-              }
-            );
-            let targets = document.querySelectorAll(".sharingAddressTag");
-            let covers = document.querySelectorAll(".tag-cover");
-            let coverText = document.querySelector("#tag-cover-text");
-            let enter = () => {
-              covers.forEach(x => (x.style.display = "unset"));
-              coverText.style.display = "flex";
-            };
-            let leave = () => {
-              covers.forEach(x => (x.style.display = "none"));
-              coverText.style.display = "none";
-            };
-            targets.forEach(x => x.addEventListener("mouseenter", enter));
-            targets.forEach(x => x.addEventListener("mouseleave", leave));
           });
         });
       });

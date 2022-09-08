@@ -8,14 +8,13 @@ import (
 	"github.com/v2rayA/v2rayA/conf"
 	"github.com/v2rayA/v2rayA/core/serverObj"
 	"github.com/v2rayA/v2rayA/core/v2ray/asset"
-	"github.com/v2rayA/v2rayA/core/v2ray/service"
 	"github.com/v2rayA/v2rayA/core/v2ray/where"
 	"github.com/v2rayA/v2rayA/db/configure"
 	"github.com/v2rayA/v2rayA/pkg/util/log"
 	"net"
 	"os"
 	"os/exec"
-	"path"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -39,7 +38,7 @@ func NewProcess(tmpl *Template, prestart func() error, poststart func() error) (
 	process = &Process{
 		template: tmpl,
 	}
-	if tmpl.Observatory != nil {
+	if tmpl.MultiObservatory != nil {
 		// NOTICE: tag2WhichIndex is reliable because once connected servers are changed when v2ray is running,
 		// the func UpdateV2RayConfig should be invoked and tag2WhichIndex will be regenerated.
 		tag2WhichIndex := make(map[string]int)
@@ -151,7 +150,7 @@ func NewProcess(tmpl *Template, prestart func() error, poststart func() error) (
 		if time.Since(startTime) > 15*time.Second {
 			return nil, fmt.Errorf("timeout: check the log for more information")
 		}
-		time.Sleep(200 * time.Millisecond)
+		time.Sleep(100 * time.Millisecond)
 	}
 	log.Trace("Cost of waiting for v2ray-core: %v", time.Since(startTime).String())
 	return process, nil
@@ -181,6 +180,7 @@ func (w logInfoWriter) Write(p []byte) (n int, err error) {
 		} else {
 			log.Info("%v", line)
 		}
+
 	}
 	return len(p), nil
 }
@@ -223,9 +223,10 @@ func StartCoreProcess(ctx context.Context) (*os.Process, error) {
 	if err != nil {
 		return nil, err
 	}
-	dir := path.Dir(v2rayBinPath)
+	dir := filepath.Dir(v2rayBinPath)
 	var arguments = []string{
 		v2rayBinPath,
+		"run",
 		"--config=" + asset.GetV2rayConfigPath(),
 	}
 	if confdir := asset.GetV2rayConfigDirPath(); confdir != "" {
@@ -234,21 +235,16 @@ func StartCoreProcess(ctx context.Context) (*os.Process, error) {
 	log.Debug(strings.Join(arguments, " "))
 	assetDir := asset.GetV2rayLocationAssetOverride()
 	env := append(
-		[]string{
-			"V2RAY_LOCATION_ASSET=" + assetDir,
-			"XRAY_LOCATION_ASSET=" + assetDir,
-		},
-		os.Environ()...,
+		os.Environ(),
+		"V2RAY_LOCATION_ASSET="+assetDir,
 	)
-	if service.CheckMemconservativeSupported() == nil {
-		memstat, err := mem.VirtualMemory()
-		if err != nil {
-			log.Warn("cannot get memory info: %v", err)
-		} else {
-			if memMiB := memstat.Available / 1024 / 1024; memMiB < 2048 {
-				env = append(env, "V2RAY_CONF_GEOLOADER=memconservative")
-				log.Info("low memory: %vMiB, set V2RAY_CONF_GEOLOADER=memconservative", memMiB)
-			}
+	memstat, err := mem.VirtualMemory()
+	if err != nil {
+		log.Warn("cannot get memory info: %v", err)
+	} else {
+		if memMiB := memstat.Available / 1024 / 1024; memMiB < 2048 {
+			env = append(env, "V2RAY_CONF_GEOLOADER=memconservative")
+			log.Info("low memory: %vMiB, set V2RAY_CONF_GEOLOADER=memconservative", memMiB)
 		}
 	}
 	proc, err := RunWithLog(ctx, v2rayBinPath, arguments, dir, env)
@@ -273,7 +269,7 @@ func findAvailablePluginPorts(vms []serverObj.ServerObj) (pluginPortMap map[int]
 				port = l.Addr().(*net.TCPAddr).Port
 				break
 			}
-			time.Sleep(100 * time.Millisecond)
+			time.Sleep(30 * time.Millisecond)
 		}
 		pluginPortMap[i] = port
 	}

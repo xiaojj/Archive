@@ -35,12 +35,12 @@ func Import(url string, which *configure.Which) (err error) {
 			return fmt.Errorf("failed to resolve addresses: %w", err)
 		}
 		for _, info := range infos {
-			err = configure.AppendServers([]*configure.ServerRawV2{{ServerObj: info}})
+			err = configure.AppendServers([]*configure.ServerRaw{{ServerObj: info}})
 		}
 		return err
 	}
-	supportedPrefix := []string{"vmess://", "vless://", "ss://", "ssr://", "pingtunnel://", "ping-tunnel://",
-		"trojan://", "trojan-go://", "http-proxy://", "https-proxy://", "socks5://", "http2://"}
+	supportedPrefix := []string{"vmess://", "vless://", "ss://", "ssr://", "trojan://", "trojan-go://", "http-proxy://",
+		"https-proxy://", "socks5://", "http2://"}
 	if PluginManagerValidateLink(url) || common.HasAnyPrefix(url, supportedPrefix) {
 		var obj serverObj.ServerObj
 		obj, err = ResolveURL(url)
@@ -53,13 +53,13 @@ func Import(url string, which *configure.Which) (err error) {
 			if which.TYPE != configure.ServerType || ind < 0 || ind >= configure.GetLenServers() {
 				return fmt.Errorf("bad request")
 			}
-			var sr *configure.ServerRawV2
+			var sr *configure.ServerRaw
 			sr, err = which.LocateServerRaw()
 			if err != nil {
 				return
 			}
 			sr.ServerObj = obj
-			if err = configure.SetServer(ind, &configure.ServerRawV2{ServerObj: obj}); err != nil {
+			if err = configure.SetServer(ind, &configure.ServerRaw{ServerObj: obj}); err != nil {
 				return
 			}
 			css := configure.GetConnectedServers()
@@ -74,7 +74,7 @@ func Import(url string, which *configure.Which) (err error) {
 			}
 		} else {
 			// append a server
-			err = configure.AppendServers([]*configure.ServerRawV2{{ServerObj: obj}})
+			err = configure.AppendServers([]*configure.ServerRaw{{ServerObj: obj}})
 		}
 	} else {
 		// subscription
@@ -99,24 +99,24 @@ func Import(url string, which *configure.Which) (err error) {
 		}
 
 		// info to serverRawV2
-		servers := make([]configure.ServerRawV2, len(infos))
+		servers := make([]configure.ServerRaw, len(infos))
 		for i, v := range infos {
-			servers[i] = configure.ServerRawV2{ServerObj: v}
+			servers[i] = configure.ServerRaw{ServerObj: v}
 		}
 
 		// deduplicate
-		unique := make(map[configure.ServerRawV2]interface{})
+		unique := make(map[configure.ServerRaw]interface{})
 		for _, s := range servers {
 			unique[s] = nil
 		}
-		uniqueServers := make([]configure.ServerRawV2, 0)
+		uniqueServers := make([]configure.ServerRaw, 0)
 		for _, s := range servers {
 			if _, ok := unique[s]; ok {
 				uniqueServers = append(uniqueServers, s)
 				delete(unique, s)
 			}
 		}
-		err = configure.AppendSubscriptions([]*configure.SubscriptionRawV2{{
+		err = configure.AppendSubscriptions([]*configure.SubscriptionRaw{{
 			Address: source,
 			Status:  string(touch.NewUpdateStatus()),
 			Servers: uniqueServers,

@@ -1,8 +1,10 @@
 package controller
 
 import (
+	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/v2rayA/v2rayA/common"
+	"github.com/v2rayA/v2rayA/core/v2ray"
 	"github.com/v2rayA/v2rayA/db/configure"
 	"github.com/v2rayA/v2rayA/server/service"
 )
@@ -29,6 +31,35 @@ func PostOutbound(ctx *gin.Context) {
 	GetOutbounds(ctx)
 }
 
+func GetOutbound(ctx *gin.Context) {
+	setting := configure.GetOutboundSetting(ctx.Query("outbound"))
+	common.ResponseSuccess(ctx, gin.H{
+		"setting": setting,
+	})
+}
+
+func PutOutbound(ctx *gin.Context) {
+	var data struct {
+		Outbound string                    `json:"outbound"`
+		Setting  configure.OutboundSetting `json:"setting"`
+	}
+	if err := ctx.ShouldBindJSON(&data); err != nil || data.Outbound == "" {
+		common.ResponseError(ctx, logError("bad request"))
+		return
+	}
+	if err := configure.SetOutboundSetting(data.Outbound, data.Setting); err != nil {
+		common.ResponseError(ctx, logError(err))
+		return
+	}
+	if v2ray.ProcessManager.Running() && configure.GetConnectedServers().Len() > 0 {
+		err := v2ray.UpdateV2RayConfig()
+		if err != nil {
+			common.ResponseError(ctx, fmt.Errorf("invalid config: %w", err))
+		}
+	}
+	common.ResponseSuccess(ctx, nil)
+}
+
 func DeleteOutbound(ctx *gin.Context) {
 	updatingMu.Lock()
 	if updating {
@@ -49,6 +80,10 @@ func DeleteOutbound(ctx *gin.Context) {
 	}
 	if err := ctx.ShouldBindJSON(&data); err != nil || data.Outbound == "" {
 		common.ResponseError(ctx, logError("bad request"))
+		return
+	}
+	if data.Outbound == "proxy" {
+		common.ResponseError(ctx, logError("outbound \"proxy\" cannot be deleted"))
 		return
 	}
 	if w := configure.GetConnectedServersByOutbound(data.Outbound); w != nil {

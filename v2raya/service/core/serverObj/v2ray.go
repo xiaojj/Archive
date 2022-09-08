@@ -3,21 +3,19 @@ package serverObj
 import (
 	"encoding/base64"
 	"fmt"
+	jsoniter "github.com/json-iterator/go"
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
+	"github.com/v2rayA/v2rayA/common"
 	"github.com/v2rayA/v2rayA/common/ntp"
+	"github.com/v2rayA/v2rayA/core/coreObj"
+	"github.com/v2rayA/v2rayA/pkg/util/log"
 	"net"
 	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
-
-	jsoniter "github.com/json-iterator/go"
-	"github.com/v2rayA/v2rayA/common"
-	"github.com/v2rayA/v2rayA/core/coreObj"
-	"github.com/v2rayA/v2rayA/core/v2ray/service"
-	"github.com/v2rayA/v2rayA/pkg/util/log"
 )
 
 func init() {
@@ -254,9 +252,6 @@ func (v *V2Ray) Configuration(info PriorInfo) (c Configuration, err error) {
 		//TODO: QUIC
 		switch strings.ToLower(v.Net) {
 		case "grpc":
-			if err := service.CheckGrpcSupported(); err != nil {
-				return Configuration{}, err
-			}
 			if v.Path == "" {
 				v.Path = "GunService"
 			}

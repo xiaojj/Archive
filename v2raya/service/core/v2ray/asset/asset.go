@@ -118,9 +118,6 @@ func GetGFWListModTime() (time.Time, error) {
 	}
 	return files.GetFileModTime(fullpath)
 }
-func IsCustomExists() bool {
-	return DoesV2rayAssetExist("custom.dat")
-}
 
 func GetConfigBytes() (b []byte, err error) {
 	b, err = os.ReadFile(GetV2rayConfigPath())

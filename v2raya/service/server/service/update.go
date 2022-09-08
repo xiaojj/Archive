@@ -3,10 +3,11 @@ package service
 import (
 	"bytes"
 	"fmt"
-	"github.com/v2rayA/v2rayA/common"
-	"github.com/v2rayA/v2rayA/conf"
 	"net/http"
 	"strings"
+
+	"github.com/v2rayA/v2rayA/common"
+	"github.com/v2rayA/v2rayA/conf"
 )
 
 func CheckUpdate() (foundNew bool, remoteVersion string, err error) {

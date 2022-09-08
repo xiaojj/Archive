@@ -1,7 +1,6 @@
 package v2ray
 
 import (
-	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -18,7 +17,6 @@ import (
 	"github.com/v2rayA/v2rayA/core/serverObj"
 	"github.com/v2rayA/v2rayA/core/specialMode"
 	"github.com/v2rayA/v2rayA/core/v2ray/asset"
-	"github.com/v2rayA/v2rayA/core/v2ray/service"
 	"github.com/v2rayA/v2rayA/core/v2ray/where"
 	"github.com/v2rayA/v2rayA/db/configure"
 	"github.com/v2rayA/v2rayA/pkg/plugin"
@@ -44,10 +42,10 @@ type Template struct {
 		Rules          []coreObj.RoutingRule `json:"rules"`
 		Balancers      []coreObj.Balancer    `json:"balancers,omitempty"`
 	} `json:"routing"`
-	DNS         *coreObj.DNS         `json:"dns,omitempty"`
-	FakeDns     *coreObj.FakeDns     `json:"fakedns,omitempty"`
-	Observatory *coreObj.Observatory `json:"observatory,omitempty"`
-	API         *coreObj.APIObject   `json:"api,omitempty"`
+	DNS              *coreObj.DNS              `json:"dns,omitempty"`
+	FakeDns          *coreObj.FakeDns          `json:"fakedns,omitempty"`
+	MultiObservatory *coreObj.MultiObservatory `json:"multiObservatory,omitempty"`
+	API              *coreObj.APIObject        `json:"api,omitempty"`
 
 	Variant               where.Variant       `json:"-"`
 	CoreVersion           string              `json:"-"`
@@ -294,14 +292,7 @@ func (t *Template) setDNS(outbounds []serverInfo, supportUDP map[string]bool) (r
 			if firstUDPSupportedOutboundTag != "" {
 				external = []string{"8.8.8.8 -> " + firstUDPSupportedOutboundTag, "1.1.1.1 -> " + firstUDPSupportedOutboundTag}
 			} else {
-				if err := service.CheckTcpDnsSupported(); err == nil {
-					external = []string{"tcp://dns.opendns.com:5353 -> " + firstOutboundTag, "tcp://dns.google -> " + firstOutboundTag}
-				} else if err = service.CheckDohSupported(); err == nil {
-					external = []string{"https://1.1.1.1/dns-query -> " + firstOutboundTag, "https://dns.google/dns-query -> " + firstOutboundTag}
-				} else {
-					// compromise
-					external = []string{"208.67.220.220:5353 -> direct", "208.67.222.222 -> direct"}
-				}
+				external = []string{"tcp://dns.opendns.com:5353 -> " + firstOutboundTag, "tcp://dns.google -> " + firstOutboundTag}
 			}
 		case configure.AntipollutionDoH:
 			external = []string{"https://doh.pub/dns-query -> direct", "https://rubyfish.cn/dns-query -> direct"}
@@ -360,16 +351,9 @@ func (t *Template) setDNS(outbounds []serverInfo, supportUDP map[string]bool) (r
 	domainsToLookup = common.Deduplicate(domainsToLookup)
 	if len(domainsToLookup) > 0 {
 		var dnsList []string
-		if service.CheckTcpDnsSupported() == nil {
-			dnsList = []string{
-				"tcp://208.67.220.220:5353 -> direct",
-				"tcp://119.29.29.29:53 -> direct",
-			}
-		} else {
-			dnsList = []string{
-				"208.67.220.220:5353 -> direct",
-				"119.29.29.29:53 -> direct",
-			}
+		dnsList = []string{
+			"tcp://208.67.220.220:5353 -> direct",
+			"tcp://119.29.29.29:53 -> direct",
 		}
 		d, r := parseAdvancedDnsServers(dnsList, domainsToLookup)
 		t.DNS.Servers = append(t.DNS.Servers, d...)
@@ -377,11 +361,7 @@ func (t *Template) setDNS(outbounds []serverInfo, supportUDP map[string]bool) (r
 	}
 	// hard code for SNI problem like apple pushing
 	t.DNS.Hosts = make(coreObj.Hosts)
-	if service.CheckHostsListSupported() == nil {
-		t.DNS.Hosts["courier.push.apple.com"] = []string{"1-courier.push.apple.com"}
-	} else {
-		t.DNS.Hosts["courier.push.apple.com"] = "1-courier.push.apple.com"
-	}
+	t.DNS.Hosts["courier.push.apple.com"] = []string{"1-courier.push.apple.com"}
 
 	// deduplicate
 	strRouting := make([]string, 0, len(routing))
@@ -477,7 +457,6 @@ func (t *Template) setDNSRouting(routing []coreObj.RoutingRule, supportUDP map[s
 					Type:        "field",
 					OutboundTag: "direct",
 					InboundTag: []string{
-						// do not worry the system proxy case.
 						"transparent",
 					},
 					Port: "53",
@@ -842,16 +821,12 @@ func parseRoutingA(t *Template, routingInboundTags []string) error {
 }
 
 func (t *Template) setTransparentRouting() (err error) {
-	tproxyInbounds := []string{"transparent"}
-	if t.Setting.TransparentType == configure.TransparentSystemProxy {
-		tproxyInbounds = append(tproxyInbounds, "transparent2")
-	}
 	switch t.Setting.Transparent {
 	case configure.TransparentProxy:
 	case configure.TransparentWhitelist:
-		return t.AppendRoutingRuleByMode(configure.WhitelistMode, tproxyInbounds)
+		return t.AppendRoutingRuleByMode(configure.WhitelistMode, []string{"transparent"})
 	case configure.TransparentGfwlist:
-		return t.AppendRoutingRuleByMode(configure.GfwlistMode, tproxyInbounds)
+		return t.AppendRoutingRuleByMode(configure.GfwlistMode, []string{"transparent"})
 	case configure.TransparentFollowRule:
 		// transparent mode is the same as rule
 		for i := range t.Routing.Rules {
@@ -863,7 +838,7 @@ func (t *Template) setTransparentRouting() (err error) {
 				}
 			}
 			if ok {
-				t.Routing.Rules[i].InboundTag = append(t.Routing.Rules[i].InboundTag, tproxyInbounds...)
+				t.Routing.Rules[i].InboundTag = append(t.Routing.Rules[i].InboundTag, "transparent")
 			}
 		}
 	}
@@ -1035,19 +1010,12 @@ func GenerateIdFromAccounts() (id string, err error) {
 	return id, nil
 }
 
-func SetVlessGrpcInbound(vlessGrpc *coreObj.Inbound) (err error) {
-	config := conf.GetEnvironmentConfig()
-	if len(config.VlessGrpcInboundCertKey) < 2 {
-		return fmt.Errorf("VLESS-GPRC inbound depends on TLS cert, close the inbound or add cert by comand line argument --vless-grpc-inbound-cert-key or environment variable V2RAYA_VLESS_GRPC_INBOUND_CERT_KEY")
-	}
-	cert, key := config.VlessGrpcInboundCertKey[0], config.VlessGrpcInboundCertKey[1]
-	vlessGrpc.StreamSettings.TLSSettings.Certificates[0].CertificateFile = cert
-	vlessGrpc.StreamSettings.TLSSettings.Certificates[0].KeyFile = key
+func SetVmessInbound(vmess *coreObj.Inbound) (err error) {
 	id, err := GenerateIdFromAccounts()
 	if err != nil {
 		return err
 	}
-	vlessGrpc.Settings.Clients = []coreObj.VlessClient{{Id: id}}
+	vmess.Settings.Clients = []coreObj.VlessClient{{Id: id}}
 	return nil
 }
 
@@ -1058,13 +1026,10 @@ func (t *Template) setInbound() error {
 		t.Inbounds[1].Port = p.Http
 		t.Inbounds[2].Port = p.Socks5WithPac
 		t.Inbounds[3].Port = p.HttpWithPac
-		vlessGrpc := &t.Inbounds[4]
-		vlessGrpc.Port = p.VlessGrpc
-		if p.VlessGrpc > 0 {
-			if err := service.CheckGrpcSupported(); err != nil {
-				return fmt.Errorf("not support grpc: %w", err)
-			}
-			if err := SetVlessGrpcInbound(vlessGrpc); err != nil {
+		vmess := &t.Inbounds[4]
+		vmess.Port = p.Vmess
+		if p.Vmess > 0 {
+			if err := SetVmessInbound(vmess); err != nil {
 				return err
 			}
 		}
@@ -1085,12 +1050,6 @@ func (t *Template) setInbound() error {
 				Protocol: "http",
 				Listen:   "127.0.0.1",
 				Tag:      "transparent",
-			})
-			t.Inbounds = append(t.Inbounds, coreObj.Inbound{
-				Port:     32346,
-				Protocol: "socks",
-				Listen:   "127.0.0.1",
-				Tag:      "transparent2",
 			})
 		}
 
@@ -1124,7 +1083,7 @@ type serverInfo struct {
 	PluginPort   int
 }
 
-func Ps2OutboundTag(ps string) string {
+func GroupWrapper(ps string) string {
 	return fmt.Sprintf("『%v』", ps)
 }
 
@@ -1183,8 +1142,7 @@ func (t *Template) setWhitelistRouting(whitelist []Addr) {
 func (t *Template) setGroupRouting() {
 	outbounds := t.outNames()
 	for i := range t.Routing.Rules {
-		if t.Routing.Rules[i].OutboundTag != "" &&
-			outbounds[t.Routing.Rules[i].OutboundTag] == true {
+		if t.Routing.Rules[i].OutboundTag != "" && outbounds[t.Routing.Rules[i].OutboundTag] == true {
 			t.Routing.Rules[i].BalancerTag, t.Routing.Rules[i].OutboundTag = t.Routing.Rules[i].OutboundTag, ""
 		}
 	}
@@ -1193,6 +1151,7 @@ func (t *Template) setGroupRouting() {
 type ServerData struct {
 	RawServerInfos          []serverInfo
 	ServerInfos             []serverInfo
+	OutboundName2Setting    map[string]configure.OutboundSetting
 	Link2ServerInfos        map[string][]*serverInfo
 	Link2ServerObj          map[string]serverObj.ServerObj
 	OutboundName2ServerObjs map[string][]serverObj.ServerObj
@@ -1234,12 +1193,18 @@ func NewServerData(serverInfos []serverInfo) (serverData *ServerData) {
 		}
 	}
 
+	OutboundName2Setting := make(map[string]configure.OutboundSetting)
+	for outbound := range outboundName2ServerObjs {
+		OutboundName2Setting[outbound] = configure.GetOutboundSetting(outbound)
+	}
+
 	return &ServerData{
 		RawServerInfos:          rawServerInfos,
 		ServerInfos:             serverInfos,
 		Link2ServerInfos:        link2ServerInfosAfter,
 		Link2ServerObj:          link2ServerObj,
 		OutboundName2ServerObjs: outboundName2ServerObjs,
+		OutboundName2Setting:    OutboundName2Setting,
 	}
 }
 
@@ -1296,9 +1261,6 @@ func (t *Template) resolveOutbounds(
 		for _, sInfo := range sInfos {
 			if len(serverData.OutboundName2ServerObjs[sInfo.OutboundName]) > 1 {
 				// balancer
-				if err = service.CheckBalancerSupported(); err != nil {
-					return nil, nil, err
-				}
 				if !usedByBalancer {
 					usedByBalancer = true
 					balancerPluginPort = sInfo.PluginPort
@@ -1345,7 +1307,7 @@ func (t *Template) resolveOutbounds(
 		}
 		if usedByBalancer {
 			// the v2ray outbound is shared by balancers
-			outboundTag := Ps2OutboundTag(obj.GetName())
+			outboundTag := GroupWrapper(obj.GetName())
 			c, err := obj.Configuration(serverObj.PriorInfo{
 				Variant:     t.Variant,
 				CoreVersion: t.CoreVersion,
@@ -1432,57 +1394,69 @@ func (t *Template) SetAPI(serverData *ServerData) (port int, err error) {
 			_ = l.Close()
 			break
 		}
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(30 * time.Millisecond)
 	}
+	// observatory
 	if serverData != nil {
 		outbounds := t.outNames()
-		mSubjectSelector := make(map[string]struct{})
 		for outbound, isGroup := range outbounds {
 			if !isGroup {
 				continue
 			}
 
-			strategy := "leastPing"
-			interval := 10 * time.Second
+			//TODO: random, leastload
+			strategy := serverData.OutboundName2Setting[outbound].Type
+			interval, err := time.ParseDuration(serverData.OutboundName2Setting[outbound].ProbeInterval)
+			if err != nil {
+				log.Warn("observatory: %v", err)
+				interval = 10 * time.Second
+			}
 			var selector []string
 
 			for _, vi := range serverData.OutboundName2ServerObjs[outbound] {
-				selector = append(selector, Ps2OutboundTag(vi.GetName()))
+				selector = append(selector, GroupWrapper(vi.GetName()))
 			}
 
 			t.Routing.Balancers = append(t.Routing.Balancers, coreObj.Balancer{
 				Tag:      outbound,
 				Selector: selector,
 				Strategy: coreObj.BalancerStrategy{
-					//TODO: configure.GetOutboundSetting
-					Type: strategy,
+					Type: strategy.String(),
+					Settings: &coreObj.StrategySettings{
+						ObserverTag: outbound,
+					},
 				},
 			})
 
-			if strategy == "leastPing" {
-				if err = service.CheckObservatorySupported(); err != nil {
-					return port, fmt.Errorf("not support observatory based load balance: %w", err)
+			if strings.ToLower(strategy.String()) == "leastping" {
+				if t.MultiObservatory == nil {
+					t.MultiObservatory = &coreObj.MultiObservatory{}
 				}
-				if t.Observatory == nil {
-					t.Observatory = &coreObj.Observatory{
-						ProbeURL:      "https://gstatic.com/generate_204",
-						ProbeInterval: interval.String(),
-					}
+				probeUrl := serverData.OutboundName2Setting[outbound].ProbeURL
+				if _, err := url.Parse(probeUrl); err != nil {
+					log.Warn("observatory: %v", err)
+					probeUrl = "https://gstatic.com/generate_204"
 				}
-				for _, s := range selector {
-					mSubjectSelector[s] = struct{}{}
-				}
+				t.MultiObservatory.Observers = append(t.MultiObservatory.Observers, coreObj.ObservatoryItem{
+					Tag: outbound,
+					Settings: coreObj.Observatory{
+						SubjectSelector: selector,
+						ProbeURL:        probeUrl,
+						ProbeInterval:   interval.String(),
+					},
+				})
 			}
 		}
-		if t.Observatory != nil {
-			var subjectSelector []string
-			for s := range mSubjectSelector {
-				subjectSelector = append(subjectSelector, s)
-			}
-			t.Observatory.SubjectSelector = subjectSelector
-
+		if t.MultiObservatory != nil {
 			services = append(services, "ObservatoryService")
-			t.ApiCloses = append(t.ApiCloses, ObservatoryProducer(port))
+
+			var observatoryTags []string
+			for name, isGroup := range t.outNames() {
+				if isGroup {
+					observatoryTags = append(observatoryTags, name)
+				}
+			}
+			t.ApiCloses = append(t.ApiCloses, ObservatoryProducer(port, observatoryTags))
 		}
 	}
 	t.API = &coreObj.APIObject{
@@ -1508,8 +1482,8 @@ func (t *Template) SetAPI(serverData *ServerData) (port int, err error) {
 	return port, nil
 }
 
-func (t *Template) setVlessGrpcRouting() {
-	if configure.GetPortsNotNil().VlessGrpc <= 0 {
+func (t *Template) setVmessInboundRouting() {
+	if configure.GetPortsNotNil().Vmess <= 0 {
 		return
 	}
 	for i := range t.Routing.Rules {
@@ -1520,7 +1494,7 @@ func (t *Template) setVlessGrpcRouting() {
 			}
 		}
 		if bHasRule {
-			t.Routing.Rules[i].InboundTag = append(t.Routing.Rules[i].InboundTag, "vlessGrpc")
+			t.Routing.Rules[i].InboundTag = append(t.Routing.Rules[i].InboundTag, "vmess")
 		}
 	}
 }
@@ -1549,19 +1523,12 @@ func NewTemplate(serverInfos []serverInfo, setting *configure.Setting) (t *Templ
 		t.Log.Loglevel = "info"
 		t.Log.Access = ""
 		t.Log.Error = ""
-	} else if logLevel >= log.ParseLevel("info") && service.CheckLogNoneSupported() == nil {
+	} else if logLevel >= log.ParseLevel("info") {
 		t.Log.Loglevel = "info"
 		t.Log.Access = ""
 		t.Log.Error = "none"
 	} else {
 		t.Log = nil
-	}
-	// fakedns
-	if specialMode.ShouldUseFakeDns() && service.CheckFakednsAutoConfigureSupported() != nil {
-		t.FakeDns = &coreObj.FakeDns{
-			IpPool:   "198.18.0.0/15",
-			PoolSize: 65535,
-		}
 	}
 	// resolve Outbounds
 	supportUDP, outboundTags, err := t.resolveOutbounds(serverData)
@@ -1594,8 +1561,8 @@ func NewTemplate(serverInfos []serverInfo, setting *configure.Setting) (t *Templ
 			return nil, err
 		}
 	}
-	//set vlessGrpc routing
-	t.setVlessGrpcRouting()
+	//set vmess inbound routing
+	t.setVmessInboundRouting()
 	// set api
 	if t.API == nil {
 		if _, err = t.SetAPI(serverData); err != nil {
@@ -1852,30 +1819,5 @@ func (t *Template) InsertMappingOutbound(o serverObj.ServerObj, inboundPort stri
 		InboundTag:  []string{"inbound" + inboundPort},
 	}
 	t.Routing.Rules = append(tmp, t.Routing.Rules...)
-	return
-}
-
-func getHosts() (h coreObj.Hosts) {
-	h = make(coreObj.Hosts)
-	b, err := os.ReadFile("/etc/hosts")
-	if err != nil {
-		return
-	}
-	regex := regexp.MustCompile(`\s+`)
-	lines := bytes.Split(b, []byte("\n"))
-	for _, line := range lines {
-		line = bytes.TrimSpace(line)
-		if bytes.HasPrefix(line, []byte("#")) {
-			continue
-		}
-		s := string(regex.ReplaceAll(line, []byte(" ")))
-		arr := strings.Split(s, " ")
-		lenArr := len(arr)
-		if lenArr > 1 {
-			for i := 1; i < lenArr; i++ {
-				h[arr[i]] = arr[0]
-			}
-		}
-	}
 	return
 }

@@ -20,10 +20,10 @@ func SetReadOnly() {
 
 func initDB() {
 	confPath := conf.GetEnvironmentConfig().Config
-	dbPath := filepath.Join(confPath, "boltv4.db")
+	dbPath := filepath.Join(confPath, "bolt.db")
 	if readOnly {
 		// trick: not really read-only
-		f, err := os.CreateTemp(os.TempDir(), "v2raya_tmp_boltv4_*.db")
+		f, err := os.CreateTemp(os.TempDir(), "v2raya_tmp_bolt_*.db")
 		if err != nil {
 			panic(err)
 		}

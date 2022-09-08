@@ -1,5 +1,6 @@
 export default {
   common: {
+    outboundSetting: "Outbound Setting",
     setting: "Setting",
     about: "About",
     loggedAs: "Logged as <b>{username}</b>",
@@ -133,7 +134,8 @@ export default {
       updateGfwlistAtIntervals: "Update GFWList Regularly (Unit: hour)",
       dependTransparentMode: "Follows Transparent Proxy/System Proxy",
       closed: "Off",
-      advanced: "Advanced Setting"
+      advanced: "Advanced Setting",
+      leastPing: "Least Latency First"
     },
     messages: {
       gfwlist:
@@ -157,7 +159,6 @@ export default {
                           <p>Whitelist:</p>
                           <p>TCP: {tcpPorts}</p>
                           <p>UDP: {udpPorts}</p>`,
-      xtlsNotWithWs: `xtls cannot work with websocket`,
       grpcShouldWithTls: `gRPC must be with TLS`,
       ssPluginImpl:
         "★default: 'transport' for simple-obfs, 'chained' for v2ray-plugin." +
@@ -172,8 +173,8 @@ export default {
     portHttp: "Port of HTTP",
     portSocks5WithPac: "Port of SOCKS5(with Rule)",
     portHttpWithPac: "Port of HTTP(with Rule)",
-    portVlessGrpc: "Port of VLESS-GRPC(with Rule)",
-    portVlessGrpcPrompt: "Link of VLESS-GRPC port",
+    portVmess: "Port of VMess(with Rule)",
+    portVmessLink: "Link of VMess port",
     messages: [
       "Service address default as 0.0.0.0:2017 can be changed by setting environment variable <code>V2RAYA_ADDRESS</code> and command argument<code>--address</code>.",
       "If you start v2raya docker container with port mapping instead of <code>--network host</code>, you can remapping ports in this way.",
@@ -273,11 +274,11 @@ export default {
   version: {
     higherVersionNeeded:
       "This operation need higher version of v2rayA than {version}",
-    v2rayInvalid:
-      "geosite.dat, geoip.dat or v2ray-core may not be installed correctly",
-    lowCoreVersion: "the version of core is too low, unexpected behavior may occur"
+    v2rayInvalid: "geosite.dat, geoip.dat or v2ray-core may not be installed correctly",
+    v2rayNotV5:
+      "The version of v2ray-core is not v5. Use v5 or downgrade v2rayA to v1.5"
   },
-  about: `<p>v2rayA is a web GUI client of V2Ray. Frontend is built with Vue.js and backend is built with golang.</p>
+  about: `<p>v2rayA is a web GUI client of V2Ray.</p>
           <p class="about-small">Default ports:</p>
           <p class="about-small">2017: v2rayA service port</p>
           <p class="about-small">20170: SOCKS protocol</p>
@@ -285,9 +286,9 @@ export default {
           <p class="about-small">20172: HTTP protocol with "Rule of Splitting Traffic"</p>
           <p class="about-small">Other ports：</p>
           <p class="about-small">32345: tproxy, needed by transparent proxy </p>
-          <p class="about-small">32346: port of plugins such as trojan, ssr and pingtunnel</p>
           <p>All data is stored in local instead of in the cloud. </p>
-          <p>Problems found during use can be reported at <a href="https://github.com/v2rayA/v2rayA/issues">issues</a>.</p>`,
+          <p>Problems found during use can be reported at <a href="https://github.com/v2rayA/v2rayA/issues">issues</a>.</p>
+          <p>Documentation: <a href="https://v2raya.org">https://v2raya.org</a></p>`,
   axios: {
     messages: {
       optimizeBackend: "Adjust v2rayA service address？",
