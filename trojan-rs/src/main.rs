@@ -27,6 +27,11 @@ mod types;
 mod utils;
 
 fn main() {
+    #[cfg(debug_assertions)]
+    #[cfg(not(target_os = "windows"))]
+    unsafe {
+        backtrace_on_stack_overflow::enable()
+    };
     config::setup_logger(&OPTIONS.log_file, OPTIONS.log_level);
     panic::set_hook(Box::new(|info| {
         let trace = Backtrace::new();
@@ -37,7 +42,7 @@ fn main() {
             if let Mode::Dns(_) = OPTIONS.mode {
                 dns::set_dns_server("".to_owned());
             }
-                }
+            }
         }
     }));
     if let Err(err) = match OPTIONS.mode {
