@@ -26,7 +26,7 @@
 > 或<br/>
 > 如果你的系统不是 Linux, MacOS, Windows, 或不想用 nami, 你可以去 [releases](https://github.com/txthinking/brook/releases) 自己下载命令文件<br/>
 > 或<br/>
-> 一键脚本，目前仅支持部分命令参数: `bash <(curl https://bash.ooo/brook.sh)`<br/>
+> 一键脚本: `bash <(curl https://bash.ooo/brook.sh)`<br/>
 > 或<br/>
 > 使用网上其他同学写的脚本<br/>
 > 或<br/>
@@ -88,15 +88,15 @@ nami install brook
 ### 运行 brook server
 
 ```
-SRC --TCP--> brook client/relayoverbrook/dns/tproxy/GUI Client --TCP(Brook Protocol)--> brook server --TCP--> DST
-SRC --UDP--> brook client/relayoverbrook/dns/tproxy/GUI Client --UDP/TCP(Brook Protocol)--> brook server --UDP--> DST
-```
-
-```
 brook server --listen :9999 --password hello
 ```
 
-获取 brook link
+然后
+
+- server: `1.2.3.4:9999`
+- password: `hello`
+
+或 获取 brook link
 
 ```
 brook link --server 1.2.3.4:9999 --password hello --name 'my brook server'
@@ -111,21 +111,21 @@ brook link --server 1.2.3.4:9999 --password hello --udpovertcp --name 'my brook 
 ### 运行 brook wsserver
 
 ```
-SRC --TCP--> brook wsclient/relayoverbrook/dns/tproxy/GUI Client --TCP(Brook Protocol)--> brook wsserver --TCP--> DST
-SRC --UDP--> brook wsclient/relayoverbrook/dns/tproxy/GUI Client --TCP(Brook Protocol)--> brook wsserver --UDP--> DST
-```
-
-```
 brook wsserver --listen :9999 --password hello
 ```
 
-获取 brook link
+然后
+
+- server: `ws://1.2.3.4:9999`
+- password: `hello`
+
+或 获取 brook link
 
 ```
 brook link --server ws://1.2.3.4:9999 --password hello --name 'my brook wsserver'
 ```
 
-或获取 brook link 指定个域名, 甚至不是你自己的域名也可以
+或 获取 brook link 指定个域名, 甚至不是你自己的域名也可以
 
 ```
 brook link --server ws://hello.com:9999 --password hello --address 1.2.3.4:9999 --name 'my brook wsserver'
@@ -139,7 +139,12 @@ brook link --server ws://hello.com:9999 --password hello --address 1.2.3.4:9999 
 brook wssserver --domainaddress domain.com:443 --password hello
 ```
 
-获取 brook link
+然后
+
+- server: `wss://domain.com:443`
+- password: `hello`
+
+或 获取 brook link
 
 ```
 brook link --server wss://domain.com:443 --password hello --name 'my brook wssserver'
@@ -153,7 +158,12 @@ brook link --server wss://domain.com:443 --password hello --name 'my brook wssse
 brook wssserver --domainaddress domain.com:443 --password hello --cert /root/cert.pem --certkey /root/certkey.pem
 ```
 
-获取 brook link
+然后
+
+- server: `wss://domain.com:443`
+- password: `hello`
+
+或 获取 brook link
 
 ```
 brook link --server wss://domain.com:443 --password hello --name 'my brook wssserver'
@@ -277,15 +287,14 @@ brook link --server wss://domain.com:443 --password hello --withoutBrookProtocol
 ### 运行 brook socks5, 一个独立的标准 socks5 server
 
 ```
-SRC --TCP--> brook socks5 --TCP--> DST
-SRC --UDP--> brook socks5 --UDP--> DST
-```
-
-```
 brook socks5 --listen :1080 --socks5ServerIP 1.2.3.4
 ```
 
-获取 brook link
+然后
+
+- server: `1.2.3.4:1080`
+
+或 获取 brook link
 
 ```
 brook link --server socks5://1.2.3.4:1080
@@ -297,7 +306,13 @@ brook link --server socks5://1.2.3.4:1080
 brook socks5 --listen :1080 --socks5ServerIP 1.2.3.4 --username hello --password world
 ```
 
-获取 brook link
+然后
+
+- server: `1.2.3.4:1080`
+- username: `hello`
+- password: `world`
+
+或 获取 brook link
 
 ```
 brook link --server socks5://1.2.3.4:1080 --username hello --password world
@@ -306,20 +321,10 @@ brook link --server socks5://1.2.3.4:1080 --username hello --password world
 ### brook relayoverbrook 中继任何 TCP 和 UDP server, 让其走 brook 协议. 它与 brook server wsserver wssserver 一起工作
 
 ```
-SRC --TCP--> brook relayoverbrook --TCP(Brook Protocol) --> brook server/wsserver/wssserver --TCP--> DST
-SRC --UDP--> brook relayoverbrook --TCP/UDP(Brook Protocol) --> brook server/wsserver/wssserver --UDP--> DST
-```
-
-```
 brook relayoverbrook ... --from 127.0.0.1:5353 --to 8.8.8.8:53
 ```
 
 ### brook dns 用来创建一个加密 DNS Server, TCP and UDP, 它与 brook server wsserver wssserver 一起工作
-
-```
-SRC --TCP--> brook dns --TCP(Brook Protocol) --> brook server/wsserver/wssserver --TCP--> DST
-SRC --UDP--> brook dns --TCP/UDP(Brook Protocol) --> brook server/wsserver/wssserver --UDP--> DST
-```
 
 ```
 brook dns ... --listen 127.0.0.1:53
@@ -403,11 +408,6 @@ brook tproxy --link 'brook://...' --dnsListen :53
 7. 默認, OpenWrt 將會下發 router 的 IP 為電腦或手機的網關和 DNS
 
 ### brook relay 可以中继任何 TCP 和 UDP server, 这是一个独立的功能, 它不依赖 brook server wsserver wssserver
-
-```
-SRC --TCP--> brook relay --TCP--> DST
-SRC --UDP--> brook relay --UDP--> DST
-```
 
 ```
 brook relay --from :9999 --to 1.2.3.4:9999

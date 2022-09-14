@@ -1150,7 +1150,7 @@ Install brook command</h3>
 or<br/>
 If your system is not Linux, MacOS, Windows, or don&#39;t want nami, you can download it directly on the <a href="https://github.com/txthinking/brook/releases" rel="nofollow">releases</a> page<br/>
 or<br/>
-the script but only some parameters are supported: <code>bash &lt;(curl https://bash.ooo/brook.sh)</code><br/>
+the one line install script: <code>bash &lt;(curl https://bash.ooo/brook.sh)</code><br/>
 or<br/>
 scripts written by others<br/>
 or<br/>
@@ -1220,14 +1220,17 @@ Examples</h2>
 <h3><a name="run-brook-server" class="anchor" href="#run-brook-server" rel="nofollow" aria-hidden="true"><span class="octicon octicon-link"></span></a>
 Run brook server</h3>
 
-<pre><code>SRC --TCP--&gt; brook client/relayoverbrook/dns/tproxy/GUI Client --TCP(Brook Protocol)--&gt; brook server --TCP--&gt; DST
-SRC --UDP--&gt; brook client/relayoverbrook/dns/tproxy/GUI Client --UDP/TCP(Brook Protocol)--&gt; brook server --UDP--&gt; DST
-</code></pre>
-
 <pre><code>brook server --listen :9999 --password hello
 </code></pre>
 
-<p>Get brook link</p>
+<p>then</p>
+
+<ul>
+<li>server: <code>1.2.3.4:9999</code></li>
+<li>password: <code>hello</code></li>
+</ul>
+
+<p>or get brook link</p>
 
 <pre><code>brook link --server 1.2.3.4:9999 --password hello --name &#39;my brook server&#39;
 </code></pre>
@@ -1239,14 +1242,17 @@ SRC --UDP--&gt; brook client/relayoverbrook/dns/tproxy/GUI Client --UDP/TCP(Broo
 <h3><a name="run-brook-wsserver" class="anchor" href="#run-brook-wsserver" rel="nofollow" aria-hidden="true"><span class="octicon octicon-link"></span></a>
 Run brook wsserver</h3>
 
-<pre><code>SRC --TCP--&gt; brook wsclient/relayoverbrook/dns/tproxy/GUI Client --TCP(Brook Protocol)--&gt; brook wsserver --TCP--&gt; DST
-SRC --UDP--&gt; brook wsclient/relayoverbrook/dns/tproxy/GUI Client --TCP(Brook Protocol)--&gt; brook wsserver --UDP--&gt; DST
-</code></pre>
-
 <pre><code>brook wsserver --listen :9999 --password hello
 </code></pre>
 
-<p>Get brook link</p>
+<p>then</p>
+
+<ul>
+<li>server: <code>ws://1.2.3.4:9999</code></li>
+<li>password: <code>hello</code></li>
+</ul>
+
+<p>or get brook link</p>
 
 <pre><code>brook link --server ws://1.2.3.4:9999 --password hello --name &#39;my brook wsserver&#39;
 </code></pre>
@@ -1265,7 +1271,14 @@ Run brook wssserver: automatically certificate</h3>
 <pre><code>brook wssserver --domainaddress domain.com:443 --password hello
 </code></pre>
 
-<p>Get brook link</p>
+<p>then</p>
+
+<ul>
+<li>server: <code>wss://domain.com:443</code></li>
+<li>password: <code>hello</code></li>
+</ul>
+
+<p>or get brook link</p>
 
 <pre><code>brook link --server wss://domain.com:443 --password hello --name &#39;my brook wssserver&#39;
 </code></pre>
@@ -1279,7 +1292,14 @@ Run brook wssserver Use a certificate issued by an existing trust authority</h3>
 <pre><code>brook wssserver --domainaddress domain.com:443 --password hello --cert /root/cert.pem --certkey /root/certkey.pem
 </code></pre>
 
-<p>Get brook link</p>
+<p>then</p>
+
+<ul>
+<li>server: <code>wss://domain.com:443</code></li>
+<li>password: <code>hello</code></li>
+</ul>
+
+<p>or get brook link</p>
 
 <pre><code>brook link --server wss://domain.com:443 --password hello --name &#39;my brook wssserver&#39;
 </code></pre>
@@ -1306,7 +1326,7 @@ Run brook wssserver issue untrusted certificates yourself, any domain</h3>
 <pre><code>brook wssserver --domainaddress domain.com:443 --password hello --cert /root/cert.pem --certkey /root/certkey.pem
 </code></pre>
 
-<p>Get brook link with <code>--insecure</code></p>
+<p>get brook link with <code>--insecure</code></p>
 
 <pre><code>brook link --server wss://domain.com:443 --password hello --name &#39;my brook wssserver&#39; --address 1.2.3.4:443 --insecure
 </code></pre>
@@ -1329,7 +1349,7 @@ withoutBrookProtocol automatically certificate</h3>
 <pre><code>brook wssserver --domainaddress domain.com:443 --password hello --withoutBrookProtocol
 </code></pre>
 
-<p>Get brook link</p>
+<p>get brook link</p>
 
 <pre><code>brook link --server wss://domain.com:443 --password hello --withoutBrookProtocol
 </code></pre>
@@ -1343,7 +1363,7 @@ withoutBrookProtocol Use a certificate issued by an existing trust authority</h3
 <pre><code>brook wssserver --domainaddress domain.com:443 --password hello --cert /root/cert.pem --certkey /root/certkey.pem --withoutBrookProtocol
 </code></pre>
 
-<p>Get brook link</p>
+<p>get brook link</p>
 
 <pre><code>brook link --server wss://domain.com:443 --password hello --name &#39;my brook wssserver&#39; --withoutBrookProtocol
 </code></pre>
@@ -1394,14 +1414,16 @@ brook server wsserver wssserver block domain and ip on server-side</h3>
 <h3><a name="run-brook-socks5-a-stand-alone-standard-socks5-server" class="anchor" href="#run-brook-socks5-a-stand-alone-standard-socks5-server" rel="nofollow" aria-hidden="true"><span class="octicon octicon-link"></span></a>
 Run brook socks5, A stand-alone standard socks5 server</h3>
 
-<pre><code>SRC --TCP--&gt; brook socks5 --TCP--&gt; DST
-SRC --UDP--&gt; brook socks5 --UDP--&gt; DST
-</code></pre>
-
 <pre><code>brook socks5 --listen :1080 --socks5ServerIP 1.2.3.4
 </code></pre>
 
-<p>Get brook link</p>
+<p>then</p>
+
+<ul>
+<li>server: <code>1.2.3.4:1080</code></li>
+</ul>
+
+<p>or get brook link</p>
 
 <pre><code>brook link --server socks5://1.2.3.4:1080
 </code></pre>
@@ -1411,25 +1433,25 @@ Run brook socks5 with username and password. A stand-alone standard socks5 serve
 <pre><code>brook socks5 --listen :1080 --socks5ServerIP 1.2.3.4 --username hello --password world
 </code></pre>
 
-<p>Get brook link</p>
+<p>then</p>
+
+<ul>
+<li>server: <code>1.2.3.4:1080</code></li>
+<li>username: <code>hello</code></li>
+<li>password: <code>world</code></li>
+</ul>
+
+<p>or get brook link</p>
 
 <pre><code>brook link --server socks5://1.2.3.4:1080 --username hello --password world
 </code></pre>
 <h3><a name="brook-relayoverbrook-can-relay-a-local-address-to-a-remote-address-over-brook-both-tcp-and-udp-it-works-with-brook-server-wsserver-wssserver" class="anchor" href="#brook-relayoverbrook-can-relay-a-local-address-to-a-remote-address-over-brook-both-tcp-and-udp-it-works-with-brook-server-wsserver-wssserver" rel="nofollow" aria-hidden="true"><span class="octicon octicon-link"></span></a>
 brook relayoverbrook can relay a local address to a remote address over brook, both TCP and UDP, it works with brook server wsserver wssserver.</h3>
 
-<pre><code>SRC --TCP--&gt; brook relayoverbrook --TCP(Brook Protocol) --&gt; brook server/wsserver/wssserver --TCP--&gt; DST
-SRC --UDP--&gt; brook relayoverbrook --TCP/UDP(Brook Protocol) --&gt; brook server/wsserver/wssserver --UDP--&gt; DST
-</code></pre>
-
 <pre><code>brook relayoverbrook ... --from 127.0.0.1:5353 --to 8.8.8.8:53
 </code></pre>
 <h3><a name="brook-dns-can-create-a-encrypted-dns-server-both-tcp-and-udp-it-works-with-brook-server-wsserver-wssserver" class="anchor" href="#brook-dns-can-create-a-encrypted-dns-server-both-tcp-and-udp-it-works-with-brook-server-wsserver-wssserver" rel="nofollow" aria-hidden="true"><span class="octicon octicon-link"></span></a>
 brook dns can create a encrypted DNS server, both TCP and UDP, it works with brook server wsserver wssserver.</h3>
-
-<pre><code>SRC --TCP--&gt; brook dns --TCP(Brook Protocol) --&gt; brook server/wsserver/wssserver --TCP--&gt; DST
-SRC --UDP--&gt; brook dns --TCP/UDP(Brook Protocol) --&gt; brook server/wsserver/wssserver --UDP--&gt; DST
-</code></pre>
 
 <pre><code>brook dns ... --listen 127.0.0.1:53
 </code></pre>
@@ -1520,10 +1542,6 @@ GUI for official OpenWrt</h3>
 </ol>
 <h3><a name="brook-relay-can-relay-a-address-to-a-remote-address-it-can-relay-any-tcp-and-udp-server" class="anchor" href="#brook-relay-can-relay-a-address-to-a-remote-address-it-can-relay-any-tcp-and-udp-server" rel="nofollow" aria-hidden="true"><span class="octicon octicon-link"></span></a>
 brook relay can relay a address to a remote address. It can relay any tcp and udp server</h3>
-
-<pre><code>SRC --TCP--&gt; brook relay --TCP--&gt; DST
-SRC --UDP--&gt; brook relay --UDP--&gt; DST
-</code></pre>
 
 <pre><code>brook relay --from :9999 --to 1.2.3.4:9999
 </code></pre>
