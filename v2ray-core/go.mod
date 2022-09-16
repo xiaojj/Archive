@@ -9,9 +9,9 @@ require (
 	github.com/go-playground/validator/v10 v10.11.0
 	github.com/golang/mock v1.6.0
 	github.com/golang/protobuf v1.5.2
-	github.com/google/go-cmp v0.5.8
+	github.com/google/go-cmp v0.5.9
 	github.com/gorilla/websocket v1.5.0
-	github.com/jhump/protoreflect v1.12.0
+	github.com/jhump/protoreflect v1.13.0
 	github.com/lucas-clemente/quic-go v0.29.0
 	github.com/marten-seemann/qtls-go1-18 v0.1.2
 	github.com/marten-seemann/qtls-go1-19 v0.1.0
@@ -30,7 +30,7 @@ require (
 	golang.org/x/net v0.0.0-20220624214902-1bab6f366d9e
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
 	golang.org/x/sys v0.0.0-20220520151302-bc2c85ada10a
-	google.golang.org/grpc v1.48.0
+	google.golang.org/grpc v1.49.0
 	google.golang.org/protobuf v1.28.1
 	gopkg.in/yaml.v3 v3.0.1
 	h12.io/socks v1.0.3

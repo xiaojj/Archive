@@ -6,13 +6,12 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/xtls/xray-core/infra/conf"
-	_ "github.com/xtls/xray-core/main/distro/all" // register all features
-
 	"github.com/Ehco1996/ehco/internal/config"
 	"github.com/Ehco1996/ehco/internal/tls"
 	"github.com/Ehco1996/ehco/internal/web"
 	"github.com/xtls/xray-core/core"
+	"github.com/xtls/xray-core/infra/conf"
+	_ "github.com/xtls/xray-core/main/distro/all" // register all features
 	"github.com/xtls/xray-core/proxy/trojan"
 )
 
@@ -25,6 +24,7 @@ const (
 )
 
 func StartXrayServer(ctx context.Context, cfg *config.Config) (*core.Instance, error) {
+	initXrayLogger()
 	for _, inbound := range cfg.XRayConfig.InboundConfigs {
 		// add tls certs for trojan
 		if inbound.Tag == XrayTrojanProxyTag {
@@ -57,9 +57,11 @@ func StartXrayServer(ctx context.Context, cfg *config.Config) (*core.Instance, e
 			for idx := range s.Fallbacks {
 				dest := s.Fallbacks[idx].Dest
 				go func() {
-					L.Infof("start fallback server for trojan at %s", dest)
-					http.Handle("/", http.HandlerFunc(web.Index))
-					http.ListenAndServe(dest, nil)
+					l.Infof("start fallback server for trojan at %s", dest)
+					mux := http.NewServeMux()
+					mux.HandleFunc("/", web.MakeIndexF(l))
+					s := &http.Server{Addr: dest, Handler: mux}
+					l.Fatal(s.ListenAndServe())
 				}()
 			}
 		}
@@ -77,6 +79,7 @@ func StartXrayServer(ctx context.Context, cfg *config.Config) (*core.Instance, e
 }
 
 func StartSyncTask(ctx context.Context, cfg *config.Config) error {
+	initXrayLogger()
 	// find api port and server, hard code api Tag to `api`
 	var grpcEndPoint string
 	var proxyTag string
@@ -99,7 +102,7 @@ func StartSyncTask(ctx context.Context, cfg *config.Config) error {
 		return errors.New("[xray] can't find proxy tag in config")
 	}
 
-	L.Infof("api port: %s, proxy tag: %s", grpcEndPoint, proxyTag)
+	l.Infof("api port: %s, proxy tag: %s", grpcEndPoint, proxyTag)
 
 	up, err := NewUserPool(ctx, grpcEndPoint)
 	if err != nil {
