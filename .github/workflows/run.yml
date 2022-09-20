@@ -41,6 +41,7 @@ jobs:
           ${GCRS} https://github.com/txthinking/brook brook
           ${GCRS} https://github.com/Dreamacro/clash clash
           ${GCRS} https://github.com/ihciah/shadow-tls shadow-tls
+          ${GCRS} https://github.com/SagerNet/sing-box sing-box
           # GFW Client Projects
           ${GCRS} https://github.com/shadowsocks/shadowsocks-windows shadowsocks-windows
           ${GCRS} https://github.com/shadowsocks/shadowsocks-android shadowsocks-android
