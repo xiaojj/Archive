@@ -56,6 +56,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "net/base/features.h"
@@ -75,17 +76,20 @@ using base::Time;
 namespace net {
 
 static constexpr int kMinutesInTwelveHours = 12 * 60;
+static constexpr int kMinutesInTwentyFourHours = 24 * 60;
 
 namespace {
 
 // Determine the cookie domain to use for setting the specified cookie.
 bool GetCookieDomain(const GURL& url,
                      const ParsedCookie& pc,
+                     CookieInclusionStatus& status,
                      std::string* result) {
   std::string domain_string;
   if (pc.HasDomain())
     domain_string = pc.Domain();
-  return cookie_util::GetCookieDomainWithString(url, domain_string, result);
+  return cookie_util::GetCookieDomainWithString(url, domain_string, status,
+                                                result);
 }
 
 // Compares cookies using name, domain and path, so that "equivalent" cookies
@@ -348,8 +352,7 @@ int ValidateAndAdjustSourcePort(int port) {
 }
 
 // Tests that a cookie has the attributes for a valid __Host- prefix without
-// testing that the prefix is in the cookie name. This is used to verify the
-// Partitioned attribute.
+// testing that the prefix is in the cookie name.
 bool HasValidHostPrefixAttributes(const GURL& url,
                                   bool secure,
                                   const std::string& domain,
@@ -359,25 +362,15 @@ bool HasValidHostPrefixAttributes(const GURL& url,
   return domain.empty() || (url.HostIsIPAddress() && url.host() == domain);
 }
 
-// Per rfc6265bis the maximum expiry date is no further than 400 days in the
-// future. Clamping only occurs when kClampCookieExpiryTo400Days is enabled.
-base::Time ValidateAndAdjustExpiryDate(const base::Time& expiry_date,
-                                       const base::Time& creation_date) {
-  if (expiry_date.is_null())
-    return expiry_date;
-  base::Time fixed_creation_date = creation_date;
-  if (fixed_creation_date.is_null()) {
-    // TODO(crbug.com/1264458): This shouldn't be necessary, let's examine
-    // where creation_date is null but expiry_date isn't and figure out
-    // what's happening. This blocks the launch until resolved.
-    fixed_creation_date = base::Time::Now();
-  }
-  if (base::FeatureList::IsEnabled(features::kClampCookieExpiryTo400Days)) {
-    base::Time maximum_expiry_date = fixed_creation_date + base::Days(400);
-    if (expiry_date > maximum_expiry_date)
-      return maximum_expiry_date;
-  }
-  return expiry_date;
+// Test that a cookie has the attributes for a valid Parititioned attribute.
+// For M104, we do not require that Partitioned cookies do not have the Domain
+// attribute.
+// TODO(crbug.com/1296161): Determine if we need to delete this function.
+bool HasValidAttributesForPartitioned(const GURL& url,
+                                      bool secure,
+                                      const std::string& path,
+                                      bool is_same_party) {
+  return url.SchemeIsCryptographic() && secure && path == "/" && !is_same_party;
 }
 
 }  // namespace
@@ -502,18 +495,32 @@ Time CanonicalCookie::ParseExpiration(const ParsedCookie& pc,
       base::TimeDelta clock_skew = (current - server_time);
       // Record the magnitude (absolute value) of the skew in minutes.
       int clock_skew_magnitude = clock_skew.magnitude().InMinutes();
+      // Determine the new expiry with clock skew factored in.
+      Time adjusted_expiry = parsed_expiry + (current - server_time);
       if (clock_skew.is_positive() || clock_skew.is_zero()) {
         UMA_HISTOGRAM_CUSTOM_COUNTS("Cookie.ClockSkew.AddMinutes",
                                     clock_skew_magnitude, 1,
                                     kMinutesInTwelveHours, 100);
+        UMA_HISTOGRAM_CUSTOM_COUNTS("Cookie.ClockSkew.AddMinutes12To24Hours",
+                                    clock_skew_magnitude, kMinutesInTwelveHours,
+                                    kMinutesInTwentyFourHours, 100);
+        // Also record the range of minutes added that allowed the cookie to
+        // avoid expiring immediately.
+        if (parsed_expiry <= Time::Now() && adjusted_expiry > Time::Now()) {
+          UMA_HISTOGRAM_CUSTOM_COUNTS(
+              "Cookie.ClockSkew.WithoutAddMinutesExpires", clock_skew_magnitude,
+              1, kMinutesInTwentyFourHours, 100);
+        }
       } else if (clock_skew.is_negative()) {
         // These histograms only support positive numbers, so negative skews
         // will be converted to positive (via magnitude) before recording.
         UMA_HISTOGRAM_CUSTOM_COUNTS("Cookie.ClockSkew.SubtractMinutes",
                                     clock_skew_magnitude, 1,
                                     kMinutesInTwelveHours, 100);
+        UMA_HISTOGRAM_CUSTOM_COUNTS(
+            "Cookie.ClockSkew.SubtractMinutes12To24Hours", clock_skew_magnitude,
+            kMinutesInTwelveHours, kMinutesInTwentyFourHours, 100);
       }
-      Time adjusted_expiry = parsed_expiry + (current - server_time);
       // Record if we were going to expire the cookie before we added the clock
       // skew.
       UMA_HISTOGRAM_BOOLEAN(
@@ -525,6 +532,32 @@ Time CanonicalCookie::ParseExpiration(const ParsedCookie& pc,
 
   // Invalid or no expiration, session cookie.
   return Time();
+}
+
+// static
+base::Time CanonicalCookie::ValidateAndAdjustExpiryDate(
+    const base::Time& expiry_date,
+    const base::Time& creation_date) {
+  if (expiry_date.is_null())
+    return expiry_date;
+  base::Time fixed_creation_date = creation_date;
+  if (fixed_creation_date.is_null()) {
+    // TODO(crbug.com/1264458): Push this logic into
+    // CanonicalCookie::CreateSanitizedCookie. The four sites that call it
+    // with a null `creation_date` (CanonicalCookie::Create cannot be called
+    // this way) are:
+    // * GaiaCookieManagerService::ForceOnCookieChangeProcessing
+    // * CookiesSetFunction::Run
+    // * cookie_store.cc::ToCanonicalCookie
+    // * network_handler.cc::MakeCookieFromProtocolValues
+    fixed_creation_date = base::Time::Now();
+  }
+  if (base::FeatureList::IsEnabled(features::kClampCookieExpiryTo400Days)) {
+    base::Time maximum_expiry_date = fixed_creation_date + base::Days(400);
+    if (expiry_date > maximum_expiry_date)
+      return maximum_expiry_date;
+  }
+  return expiry_date;
 }
 
 // static
@@ -562,7 +595,7 @@ std::unique_ptr<CanonicalCookie> CanonicalCookie::Create(
                             !base::IsStringASCII(parsed_cookie.Domain()));
 
   std::string cookie_domain;
-  if (!GetCookieDomain(url, parsed_cookie, &cookie_domain)) {
+  if (!GetCookieDomain(url, parsed_cookie, *status, &cookie_domain)) {
     DVLOG(net::cookie_util::kVlogSetCookies)
         << "Create() failed to get a valid cookie domain";
     status->AddExclusionReason(CookieInclusionStatus::EXCLUDE_INVALID_DOMAIN);
@@ -583,6 +616,11 @@ std::unique_ptr<CanonicalCookie> CanonicalCookie::Create(
   CookiePrefix prefix = GetCookiePrefix(parsed_cookie.Name());
   bool is_cookie_prefix_valid = IsCookiePrefixValid(prefix, url, parsed_cookie);
   RecordCookiePrefixMetrics(prefix, is_cookie_prefix_valid);
+
+  if (parsed_cookie.Name() == "") {
+    is_cookie_prefix_valid = !HasHiddenPrefixName(parsed_cookie.Value());
+  }
+
   if (!is_cookie_prefix_valid) {
     DVLOG(net::cookie_util::kVlogSetCookies)
         << "Create() failed because the cookie violated prefix rules.";
@@ -740,7 +778,7 @@ std::unique_ptr<CanonicalCookie> CanonicalCookie::CreateSanitizedCookie(
     status->AddExclusionReason(
         net::CookieInclusionStatus::EXCLUDE_INVALID_DOMAIN);
   } else if (!cookie_util::GetCookieDomainWithString(url, domain_attribute,
-                                                     &cookie_domain)) {
+                                                     *status, &cookie_domain)) {
     status->AddExclusionReason(
         net::CookieInclusionStatus::EXCLUDE_INVALID_DOMAIN);
   }
@@ -794,11 +832,16 @@ std::unique_ptr<CanonicalCookie> CanonicalCookie::CreateSanitizedCookie(
         net::CookieInclusionStatus::EXCLUDE_INVALID_PREFIX);
   }
 
+  if (name == "" && HasHiddenPrefixName(value)) {
+    status->AddExclusionReason(
+        net::CookieInclusionStatus::EXCLUDE_INVALID_PREFIX);
+  }
+
   if (!IsCookieSamePartyValid(same_party, secure, same_site)) {
     status->AddExclusionReason(
         net::CookieInclusionStatus::EXCLUDE_INVALID_SAMEPARTY);
   }
-  if (!IsCookiePartitionedValid(url, secure, domain_attribute, cookie_path,
+  if (!IsCookiePartitionedValid(url, secure, cookie_path,
                                 /*is_partitioned=*/partition_key.has_value(),
                                 /*is_same_party=*/same_party,
                                 /*partition_has_nonce=*/
@@ -1449,6 +1492,12 @@ bool CanonicalCookie::IsCanonical() const {
   // would fail this check. Note that we still don't want to enforce length
   // checks on domain or path for the reason stated above.
 
+  // TODO(crbug.com/1264458): Eventually we should push this logic into
+  // IsCanonicalForFromStorage, but for now we allow cookies already stored with
+  // high expiration dates to be retrieved.
+  if (ValidateAndAdjustExpiryDate(expiry_date_, creation_date_) != expiry_date_)
+    return false;
+
   return IsCanonicalForFromStorage();
 }
 
@@ -1493,23 +1542,31 @@ bool CanonicalCookie::IsCanonicalForFromStorage() const {
     return false;
 
   CookiePrefix prefix = GetCookiePrefix(name_);
-  bool partition_key_has_nonce = CookiePartitionKey::HasNonce(partition_key_);
-  if (prefix == COOKIE_PREFIX_HOST ||
-      (IsPartitioned() && !partition_key_has_nonce)) {
-    if (!secure_ || path_ != "/" || domain_.empty() || domain_[0] == '.')
-      return false;
-  } else if (prefix == COOKIE_PREFIX_SECURE && !secure_) {
-    return false;
+  switch (prefix) {
+    case COOKIE_PREFIX_HOST:
+      if (!secure_ || path_ != "/" || domain_.empty() || domain_[0] == '.')
+        return false;
+      break;
+    case COOKIE_PREFIX_SECURE:
+      if (!secure_)
+        return false;
+      break;
+    default:
+      break;
   }
+
+  if (name_ == "" && HasHiddenPrefixName(value_))
+    return false;
 
   if (!IsCookieSamePartyValid(same_party_, secure_, same_site_))
     return false;
 
   if (IsPartitioned()) {
-    if (partition_key_has_nonce)
+    if (CookiePartitionKey::HasNonce(partition_key_))
       return true;
-    if (same_party_)
+    if (!secure_ || path_ != "/" || same_party_) {
       return false;
+    }
   }
 
   return true;
@@ -1624,6 +1681,40 @@ CookieEffectiveSameSite CanonicalCookie::GetEffectiveSameSite(
   }
 }
 
+// static
+bool CanonicalCookie::HasHiddenPrefixName(
+    const base::StringPiece cookie_value) {
+  // Skip BWS as defined by HTTPSEM as SP or HTAB (0x20 or 0x9).
+  base::StringPiece value_without_BWS =
+      base::TrimString(cookie_value, " \t", base::TRIM_LEADING);
+
+  const base::StringPiece host_prefix = "__Host-";
+
+  // Compare the value to the host_prefix.
+  if (base::StartsWith(value_without_BWS, host_prefix)) {
+    // The prefix matches, now check if the value string contains a subsequent
+    // '='.
+    if (value_without_BWS.find_first_of('=', host_prefix.size()) !=
+        base::StringPiece::npos) {
+      // This value contains a hidden prefix name.
+      return true;
+    }
+    return false;
+  }
+
+  // Do a similar check for the secure prefix
+  const base::StringPiece secure_prefix = "__Secure-";
+
+  if (base::StartsWith(value_without_BWS, secure_prefix)) {
+    if (value_without_BWS.find_first_of('=', secure_prefix.size()) !=
+        base::StringPiece::npos) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 bool CanonicalCookie::IsRecentlyCreated(base::TimeDelta age_threshold) const {
   return (base::Time::Now() - creation_date_) <= age_threshold;
 }
@@ -1652,7 +1743,6 @@ bool CanonicalCookie::IsCookiePartitionedValid(
     bool partition_has_nonce) {
   return IsCookiePartitionedValid(
       url, /*secure=*/parsed_cookie.IsSecure(),
-      parsed_cookie.HasDomain() ? parsed_cookie.Domain() : "",
       parsed_cookie.HasPath() ? parsed_cookie.Path() : "",
       /*is_partitioned=*/parsed_cookie.IsPartitioned(),
       /*is_same_party=*/parsed_cookie.IsSameParty(), partition_has_nonce);
@@ -1661,7 +1751,6 @@ bool CanonicalCookie::IsCookiePartitionedValid(
 // static
 bool CanonicalCookie::IsCookiePartitionedValid(const GURL& url,
                                                bool secure,
-                                               const std::string& domain,
                                                const std::string& path,
                                                bool is_partitioned,
                                                bool is_same_party,
@@ -1671,7 +1760,7 @@ bool CanonicalCookie::IsCookiePartitionedValid(const GURL& url,
   if (partition_has_nonce)
     return true;
   bool result =
-      HasValidHostPrefixAttributes(url, secure, domain, path) && !is_same_party;
+      HasValidAttributesForPartitioned(url, secure, path, is_same_party);
   DLOG_IF(WARNING, !result)
       << "CanonicalCookie has invalid Partitioned attribute";
   return result;

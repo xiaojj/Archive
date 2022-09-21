@@ -30,6 +30,8 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/no_destructor.h"
+#include "base/strings/string_piece.h"
+#include "base/strings/string_split.h"
 #include "base/strings/stringprintf.h"
 #include "base/thread_annotations.h"
 #include "base/threading/platform_thread.h"
@@ -48,33 +50,33 @@ namespace {
 
 #if BUILDFLAG(ENABLE_BASE_TRACING)
 constexpr const char* ScannerIdToTracingString(
-    internal::StatsCollector::ScannerId id) {
+    partition_alloc::internal::StatsCollector::ScannerId id) {
   switch (id) {
-    case internal::StatsCollector::ScannerId::kClear:
+    case partition_alloc::internal::StatsCollector::ScannerId::kClear:
       return "PCScan.Scanner.Clear";
-    case internal::StatsCollector::ScannerId::kScan:
+    case partition_alloc::internal::StatsCollector::ScannerId::kScan:
       return "PCScan.Scanner.Scan";
-    case internal::StatsCollector::ScannerId::kSweep:
+    case partition_alloc::internal::StatsCollector::ScannerId::kSweep:
       return "PCScan.Scanner.Sweep";
-    case internal::StatsCollector::ScannerId::kOverall:
+    case partition_alloc::internal::StatsCollector::ScannerId::kOverall:
       return "PCScan.Scanner";
-    case internal::StatsCollector::ScannerId::kNumIds:
+    case partition_alloc::internal::StatsCollector::ScannerId::kNumIds:
       __builtin_unreachable();
   }
 }
 
 constexpr const char* MutatorIdToTracingString(
-    internal::StatsCollector::MutatorId id) {
+    partition_alloc::internal::StatsCollector::MutatorId id) {
   switch (id) {
-    case internal::StatsCollector::MutatorId::kClear:
+    case partition_alloc::internal::StatsCollector::MutatorId::kClear:
       return "PCScan.Mutator.Clear";
-    case internal::StatsCollector::MutatorId::kScanStack:
+    case partition_alloc::internal::StatsCollector::MutatorId::kScanStack:
       return "PCScan.Mutator.ScanStack";
-    case internal::StatsCollector::MutatorId::kScan:
+    case partition_alloc::internal::StatsCollector::MutatorId::kScan:
       return "PCScan.Mutator.Scan";
-    case internal::StatsCollector::MutatorId::kOverall:
+    case partition_alloc::internal::StatsCollector::MutatorId::kOverall:
       return "PCScan.Mutator";
-    case internal::StatsCollector::MutatorId::kNumIds:
+    case partition_alloc::internal::StatsCollector::MutatorId::kNumIds:
       __builtin_unreachable();
   }
 }
@@ -83,10 +85,11 @@ constexpr const char* MutatorIdToTracingString(
 // Inject TRACE_EVENT_BEGIN/END, TRACE_COUNTER1, and UmaHistogramTimes.
 class StatsReporterImpl final : public partition_alloc::StatsReporter {
  public:
-  void ReportTraceEvent(internal::StatsCollector::ScannerId id,
-                        [[maybe_unused]] const PlatformThreadId tid,
-                        int64_t start_time_ticks_internal_value,
-                        int64_t end_time_ticks_internal_value) override {
+  void ReportTraceEvent(
+      partition_alloc::internal::StatsCollector::ScannerId id,
+      [[maybe_unused]] partition_alloc::internal::base::PlatformThreadId tid,
+      int64_t start_time_ticks_internal_value,
+      int64_t end_time_ticks_internal_value) override {
 #if BUILDFLAG(ENABLE_BASE_TRACING)
     // TRACE_EVENT_* macros below drop most parameters when tracing is
     // disabled at compile time.
@@ -102,10 +105,11 @@ class StatsReporterImpl final : public partition_alloc::StatsReporter {
 #endif  // BUILDFLAG(ENABLE_BASE_TRACING)
   }
 
-  void ReportTraceEvent(internal::StatsCollector::MutatorId id,
-                        [[maybe_unused]] const PlatformThreadId tid,
-                        int64_t start_time_ticks_internal_value,
-                        int64_t end_time_ticks_internal_value) override {
+  void ReportTraceEvent(
+      partition_alloc::internal::StatsCollector::MutatorId id,
+      [[maybe_unused]] partition_alloc::internal::base::PlatformThreadId tid,
+      int64_t start_time_ticks_internal_value,
+      int64_t end_time_ticks_internal_value) override {
 #if BUILDFLAG(ENABLE_BASE_TRACING)
     // TRACE_EVENT_* macros below drop most parameters when tracing is
     // disabled at compile time.
@@ -154,7 +158,7 @@ void RegisterPCScanStatsReporter() {
 
   DCHECK(!registered);
 
-  internal::PCScan::RegisterStatsReporter(&s_reporter);
+  partition_alloc::internal::PCScan::RegisterStatsReporter(&s_reporter);
   registered = true;
 }
 #endif  // defined(PA_ALLOW_PCSCAN)
@@ -289,6 +293,13 @@ std::map<std::string, std::string> ProposeSyntheticFinchTrials() {
         brp_group_name = "EnabledBeforeAlloc";
 #endif
         break;
+      case features::BackupRefPtrMode::kEnabledWithoutZapping:
+#if BUILDFLAG(PUT_REF_COUNT_IN_PREVIOUS_SLOT)
+        brp_group_name = "EnabledPrevSlotWithoutZapping";
+#else
+        brp_group_name = "EnabledBeforeAllocWithoutZapping";
+#endif
+        break;
       case features::BackupRefPtrMode::kDisabledButSplitPartitions2Way:
         brp_group_name = "DisabledBut2WaySplit";
         break;
@@ -374,6 +385,7 @@ DanglingRawPtrBuffer g_stack_trace_buffer GUARDED_BY(g_stack_trace_buffer_lock);
 
 void DanglingRawPtrDetected(uintptr_t id) {
   // This is called from inside the allocator. No allocation is allowed.
+
   internal::PartitionAutoLock guard(g_stack_trace_buffer_lock);
 
 #if DCHECK_IS_ON()
@@ -392,37 +404,105 @@ void DanglingRawPtrDetected(uintptr_t id) {
   // enough.
 }
 
-void DanglingRawPtrReleased(uintptr_t id) {
+// From the StackTrace recorded in |DanglingRawPtrDetected|, extract the one
+// whose id match |id|. Return nullopt if not found.
+absl::optional<debug::StackTrace> TakeStackTrace(uintptr_t id) {
+  internal::PartitionAutoLock guard(g_stack_trace_buffer_lock);
+  for (absl::optional<StackTraceWithID>& entry : g_stack_trace_buffer) {
+    if (entry && entry->id == id) {
+      debug::StackTrace stack_trace = std::move(entry->stack_trace);
+      entry = absl::nullopt;
+      return stack_trace;
+    }
+  }
+  return absl::nullopt;
+}
+
+// Extract from the StackTrace output, the signature of the pertinent caller.
+// This function is meant to be used only by Chromium developers, to list what
+// are all the dangling raw_ptr occurrences in a table.
+std::string ExtractDanglingPtrSignature(std::string stacktrace) {
+  std::vector<StringPiece> lines = SplitStringPiece(
+      stacktrace, "\r\n", TRIM_WHITESPACE, SPLIT_WANT_NONEMPTY);
+
+  // We are looking for the callers of the function releasing the raw_ptr and
+  // freeing memory:
+  const StringPiece callees[] = {
+      "internal::BackupRefPtrImpl<>::ReleaseInternal()",
+      "internal::PartitionFree()",
+      "base::(anonymous namespace)::FreeFn()",
+  };
+  size_t caller_index = 0;
+  for (size_t i = 0; i < lines.size(); ++i) {
+    for (const auto& callee : callees) {
+      if (lines[i].find(callee) != StringPiece::npos) {
+        caller_index = i + 1;
+      }
+    }
+  }
+  if (caller_index >= lines.size()) {
+    return "undefined";
+  }
+  StringPiece caller = lines[caller_index];
+
+  // |callers| follows the following format:
+  //
+  //    #4 0x56051fe3404b content::GeneratedCodeCache::DidCreateBackend()
+  //    -- -------------- -----------------------------------------------
+  // Depth Address        Function
+
+  size_t address_start = caller.find(' ');
+  size_t function_start = caller.find(' ', address_start + 1);
+
+  if (address_start == caller.npos || function_start == caller.npos) {
+    return "undefined";
+  }
+
+  return std::string(caller.substr(function_start + 1));
+}
+
+void DanglingRawPtrReleasedLogSignature(uintptr_t id) {
   // This is called from raw_ptr<>'s release operation. Making allocations is
   // allowed. In particular, symbolizing and printing the StackTraces may
   // allocate memory.
 
-  internal::PartitionAutoLock guard(g_stack_trace_buffer_lock);
-
-  absl::optional<std::string> stack_trace_free;
-  std::string stack_trace_release = base::debug::StackTrace().ToString();
-  for (absl::optional<StackTraceWithID>& entry : g_stack_trace_buffer) {
-    if (entry && entry->id == id) {
-      stack_trace_free = entry->stack_trace.ToString();
-      entry = absl::nullopt;
-      break;
-    }
-  }
+  debug::StackTrace stack_trace_release;
+  absl::optional<debug::StackTrace> stack_trace_free = TakeStackTrace(id);
 
   if (stack_trace_free) {
-    LOG(ERROR) << base::StringPrintf(
+    LOG(ERROR) << StringPrintf(
+        "[DanglingSignature]\t%s\t%s",
+        ExtractDanglingPtrSignature(stack_trace_release.ToString()).c_str(),
+        ExtractDanglingPtrSignature(stack_trace_free->ToString()).c_str());
+  } else {
+    LOG(ERROR) << StringPrintf(
+        "[DanglingSignature]\t%s\tmissing-stacktrace",
+        ExtractDanglingPtrSignature(stack_trace_release.ToString()).c_str());
+  }
+}
+
+void DanglingRawPtrReleasedCrash(uintptr_t id) {
+  // This is called from raw_ptr<>'s release operation. Making allocations is
+  // allowed. In particular, symbolizing and printing the StackTraces may
+  // allocate memory.
+  debug::StackTrace stack_trace_release;
+  absl::optional<debug::StackTrace> stack_trace_free = TakeStackTrace(id);
+
+  if (stack_trace_free) {
+    LOG(ERROR) << StringPrintf(
         "Detected dangling raw_ptr with id=0x%016" PRIxPTR
         ":\n\n"
         "The memory was freed at:\n%s\n"
         "The dangling raw_ptr was released at:\n%s",
-        id, stack_trace_free->c_str(), stack_trace_release.c_str());
+        id, stack_trace_free->ToString().c_str(),
+        stack_trace_release.ToString().c_str());
   } else {
-    LOG(ERROR) << base::StringPrintf(
+    LOG(ERROR) << StringPrintf(
         "Detected dangling raw_ptr with id=0x%016" PRIxPTR
         ":\n\n"
         "It was not recorded where the memory was freed.\n\n"
         "The dangling raw_ptr was released at:\n%s",
-        id, stack_trace_release.c_str());
+        id, stack_trace_release.ToString().c_str());
   }
   IMMEDIATE_CRASH();
 }
@@ -439,8 +519,24 @@ void InstallDanglingRawPtrChecks() {
   // restarting the test executable.
   ClearDanglingRawPtrBuffer();
 
-  partition_alloc::SetDanglingRawPtrDetectedFn(DanglingRawPtrDetected);
-  partition_alloc::SetDanglingRawPtrReleasedFn(DanglingRawPtrReleased);
+  if (!FeatureList::IsEnabled(features::kPartitionAllocDanglingPtr)) {
+    partition_alloc::SetDanglingRawPtrDetectedFn([](uintptr_t) {});
+    partition_alloc::SetDanglingRawPtrReleasedFn([](uintptr_t) {});
+    return;
+  }
+
+  switch (features::kDanglingPtrModeParam.Get()) {
+    case features::DanglingPtrMode::kCrash:
+      partition_alloc::SetDanglingRawPtrDetectedFn(DanglingRawPtrDetected);
+      partition_alloc::SetDanglingRawPtrReleasedFn(DanglingRawPtrReleasedCrash);
+      break;
+
+    case features::DanglingPtrMode::kLogSignature:
+      partition_alloc::SetDanglingRawPtrDetectedFn(DanglingRawPtrDetected);
+      partition_alloc::SetDanglingRawPtrReleasedFn(
+          DanglingRawPtrReleasedLogSignature);
+      break;
+  }
 }
 
 // TODO(arthursonzogni): There might exist long lived dangling raw_ptr. If there

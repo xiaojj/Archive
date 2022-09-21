@@ -295,7 +295,9 @@ inline bool InitLogging(const LoggingSettings& settings) {
 // will be silently ignored. The log level defaults to 0 (everything is logged
 // up to level INFO) if this function is not called.
 // Note that log messages for VLOG(x) are logged at level -x, so setting
-// the min log level to negative values enables verbose logging.
+// the min log level to negative values enables verbose logging and conversely,
+// setting the VLOG default level will set this min level to a negative number,
+// effectively enabling all levels of logging.
 BASE_EXPORT void SetMinLogLevel(int level);
 
 // Gets the current log level.
@@ -476,7 +478,7 @@ BASE_EXPORT int GetDisableAllVLogLevel();
 
 #define VLOG_IS_ON(verboselevel) ((verboselevel) <= (ENABLED_VLOG_LEVEL))
 
-#else
+#else  // !BUILDFLAG(USE_RUNTIME_VLOG)
 
 // We don't do any caching tricks with VLOG_IS_ON() like the
 // google-glog version since it increases binary size.  This means
@@ -486,7 +488,7 @@ BASE_EXPORT int GetDisableAllVLogLevel();
 #define VLOG_IS_ON(verboselevel) \
   ((verboselevel) <= ::logging::GetVlogLevel(__FILE__))
 
-#endif
+#endif  // !BUILDFLAG(USE_RUNTIME_VLOG)
 
 // Helper macro which avoids evaluating the arguments to a stream if
 // the condition doesn't hold. Condition is evaluated once and only once.
@@ -644,8 +646,16 @@ class BASE_EXPORT LogMessage {
 
   std::ostream& stream() { return stream_; }
 
-  LogSeverity severity() { return severity_; }
-  std::string str() { return stream_.str(); }
+  LogSeverity severity() const { return severity_; }
+  std::string str() const { return stream_.str(); }
+  const char* file() const { return file_; }
+  int line() const { return line_; }
+
+  // Gets file:line: message in a format suitable for crash reporting.
+  std::string BuildCrashString() const;
+  static std::string BuildCrashString(const char* file,
+                                      int line,
+                                      const char* message_without_prefix);
 
  private:
   void Init(const char* file, int line);

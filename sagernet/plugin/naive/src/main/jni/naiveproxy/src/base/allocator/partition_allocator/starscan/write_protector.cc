@@ -11,8 +11,8 @@
 #include "base/allocator/partition_allocator/partition_address_space.h"
 #include "base/allocator/partition_allocator/partition_alloc_base/logging.h"
 #include "base/allocator/partition_allocator/partition_alloc_base/posix/eintr_wrapper.h"
+#include "base/allocator/partition_allocator/partition_alloc_base/threading/platform_thread.h"
 #include "base/allocator/partition_allocator/partition_alloc_check.h"
-#include "base/threading/platform_thread.h"
 #include "build/build_config.h"
 
 #if defined(PA_STARSCAN_UFFD_WRITE_PROTECTOR_SUPPORTED)
@@ -27,9 +27,8 @@
 
 namespace partition_alloc::internal {
 
-::base::internal::PCScan::ClearType NoWriteProtector::SupportedClearType()
-    const {
-  return ::base::internal::PCScan::ClearType::kLazy;
+PCScan::ClearType NoWriteProtector::SupportedClearType() const {
+  return PCScan::ClearType::kLazy;
 }
 
 #if defined(PA_STARSCAN_UFFD_WRITE_PROTECTOR_SUPPORTED)
@@ -38,7 +37,7 @@ void UserFaultFDThread(int uffd) {
   PA_DCHECK(-1 != uffd);
 
   static constexpr char kThreadName[] = "PCScanPFHandler";
-  ::base::PlatformThread::SetName(kThreadName);
+  internal::base::PlatformThread::SetName(kThreadName);
 
   while (true) {
     // Pool on the uffd descriptor for page fault events.
@@ -58,7 +57,7 @@ void UserFaultFDThread(int uffd) {
 
     // Enter the safepoint. Concurrent faulted writes will wait until safepoint
     // finishes.
-    ::base::internal::PCScan::JoinScanIfNeeded();
+    PCScan::JoinScanIfNeeded();
   }
 }
 }  // namespace
@@ -121,10 +120,8 @@ void UserFaultFDWriteProtector::UnprotectPages(uintptr_t begin, size_t length) {
     UserFaultFDWPSet(uffd_, begin, length, UserFaultFDWPMode::kUnprotect);
 }
 
-::base::internal::PCScan::ClearType
-UserFaultFDWriteProtector::SupportedClearType() const {
-  return IsSupported() ? ::base::internal::PCScan::ClearType::kEager
-                       : ::base::internal::PCScan::ClearType::kLazy;
+PCScan::ClearType UserFaultFDWriteProtector::SupportedClearType() const {
+  return IsSupported() ? PCScan::ClearType::kEager : PCScan::ClearType::kLazy;
 }
 
 bool UserFaultFDWriteProtector::IsSupported() const {

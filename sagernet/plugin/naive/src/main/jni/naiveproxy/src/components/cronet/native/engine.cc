@@ -103,22 +103,20 @@ Cronet_EngineImpl::~Cronet_EngineImpl() {
 
 Cronet_RESULT Cronet_EngineImpl::StartWithParams(
     Cronet_EngineParamsPtr params) {
-  absl::optional<base::Value::DictStorage> experimental_options =
+  absl::optional<base::Value::Dict> experimental_options =
       URLRequestContextConfig::ParseExperimentalOptions(
           params->experimental_options);
   if (experimental_options) {
-    const auto& iter = experimental_options->find("feature_list");
-    if (iter != experimental_options->end()) {
-      const base::Value& feature_list = iter->second;
-      if (feature_list.is_dict()) {
-        const std::string* enable_features =
-            feature_list.GetDict().FindString(switches::kEnableFeatures);
-        const std::string* disable_features =
-            feature_list.GetDict().FindString(switches::kDisableFeatures);
-        cronet::EnsureInitialized(
-            enable_features ? enable_features->c_str() : nullptr,
-            disable_features ? disable_features->c_str() : nullptr);
-      }
+    const base::Value* feature_list =
+        experimental_options->Find("feature_list");
+    if (feature_list != nullptr && feature_list->is_dict()) {
+      const std::string* enable_features =
+          feature_list->GetDict().FindString(switches::kEnableFeatures);
+      const std::string* disable_features =
+          feature_list->GetDict().FindString(switches::kDisableFeatures);
+      cronet::EnsureInitialized(
+          enable_features ? enable_features->c_str() : nullptr,
+          disable_features ? disable_features->c_str() : nullptr);
     }
   }
 

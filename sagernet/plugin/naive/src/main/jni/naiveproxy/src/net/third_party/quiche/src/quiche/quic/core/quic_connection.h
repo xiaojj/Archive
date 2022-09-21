@@ -137,10 +137,6 @@ class QUIC_EXPORT_PRIVATE QuicConnectionVisitorInterface {
   // Called when a blocked socket becomes writable.
   virtual void OnCanWrite() = 0;
 
-  // Called when the connection needs more data to probe for additional
-  // bandwidth.  Returns true if data was sent, false otherwise.
-  virtual bool SendProbingData() = 0;
-
   // Called when the connection experiences a change in congestion window.
   virtual void OnCongestionWindowChange(QuicTime now) = 0;
 
@@ -168,8 +164,9 @@ class QUIC_EXPORT_PRIVATE QuicConnectionVisitorInterface {
   // Called to send a RETIRE_CONNECTION_ID frame.
   virtual void SendRetireConnectionId(uint64_t sequence_number) = 0;
 
-  // Called when server starts to use a server issued connection ID.
-  virtual void OnServerConnectionIdIssued(
+  // Called when server starts to use a server issued connection ID. Returns
+  // true if this connection ID hasn't been used by another connection.
+  virtual bool MaybeReserveConnectionId(
       const QuicConnectionId& server_connection_id) = 0;
 
   // Called when server stops to use a server issued connection ID.
@@ -722,7 +719,7 @@ class QUIC_EXPORT_PRIVATE QuicConnection
   // QuicConnectionIdManagerVisitorInterface
   void OnPeerIssuedConnectionIdRetired() override;
   bool SendNewConnectionId(const QuicNewConnectionIdFrame& frame) override;
-  void OnNewConnectionIdIssued(const QuicConnectionId& connection_id) override;
+  bool MaybeReserveConnectionId(const QuicConnectionId& connection_id) override;
   void OnSelfIssuedConnectionIdRetired(
       const QuicConnectionId& connection_id) override;
 
@@ -1016,13 +1013,6 @@ class QUIC_EXPORT_PRIVATE QuicConnection
     return last_received_packet_info_.source_address;
   }
 
-  bool fill_up_link_during_probing() const {
-    return fill_up_link_during_probing_;
-  }
-  void set_fill_up_link_during_probing(bool new_value) {
-    fill_up_link_during_probing_ = new_value;
-  }
-
   // This setting may be changed during the crypto handshake in order to
   // enable/disable padding of different packets in the crypto handshake.
   //
@@ -1241,6 +1231,11 @@ class QUIC_EXPORT_PRIVATE QuicConnection
     return quic_bug_10511_43_error_detail_;
   }
 
+  // Ensures the network blackhole delay is longer than path degrading delay.
+  static QuicTime::Delta CalculateNetworkBlackholeDelay(
+      QuicTime::Delta blackhole_delay, QuicTime::Delta path_degrading_delay,
+      QuicTime::Delta pto_delay);
+
  protected:
   // Calls cancel() on all the alarms owned by this connection.
   void CancelAllAlarms();
@@ -1304,13 +1299,6 @@ class QUIC_EXPORT_PRIVATE QuicConnection
 
   // Returns true if the packet should be discarded and not sent.
   virtual bool ShouldDiscardPacket(EncryptionLevel encryption_level);
-
-  // Retransmits packets continuously until blocked by the congestion control.
-  // If there are no packets to retransmit, does not do anything.
-  void SendProbingRetransmissions();
-
-  // Decides whether to send probing retransmissions, and does so if required.
-  void MaybeSendProbingRetransmissions();
 
   // Notify various components(Session etc.) that this connection has been
   // migrated.
@@ -1721,7 +1709,9 @@ class QUIC_EXPORT_PRIVATE QuicConnection
   QuicPacketNumber GetLargestAckedPacket() const;
 
   // Whether connection is limited by amplification factor.
-  bool LimitedByAmplificationFactor() const;
+  // If enforce_strict_amplification_factor_ is true, this will return true if
+  // connection is amplification limited after sending |bytes|.
+  bool LimitedByAmplificationFactor(QuicByteCount bytes) const;
 
   // Called before sending a packet to get packet send time and to set the
   // release time delay in |per_packet_options_|. Return the time when the
@@ -1857,11 +1847,6 @@ class QUIC_EXPORT_PRIVATE QuicConnection
   // Called to patch missing client connection ID on default/alternative paths
   // when a new client connection ID is received.
   void OnClientConnectionIdAvailable();
-
-  // Returns true if connection needs to set retransmission alarm after a packet
-  // gets sent.
-  bool ShouldSetRetransmissionAlarmOnPacketSent(bool in_flight,
-                                                EncryptionLevel level) const;
 
   // Determines encryption level to send ping in `packet_number_space`.
   EncryptionLevel GetEncryptionLevelToSendPingForSpace(
@@ -2111,18 +2096,6 @@ class QUIC_EXPORT_PRIVATE QuicConnection
   // previously fired.
   bool bundle_retransmittable_with_pto_ack_;
 
-  // If true, the connection will fill up the pipe with extra data whenever the
-  // congestion controller needs it in order to make a bandwidth estimate.  This
-  // is useful if the application pesistently underutilizes the link, but still
-  // relies on having a reasonable bandwidth estimate from the connection, e.g.
-  // for real time applications.
-  bool fill_up_link_during_probing_;
-
-  // If true, the probing retransmission will not be started again.  This is
-  // used to safeguard against an accidental tail recursion in probing
-  // retransmission code.
-  bool probing_retransmission_pending_;
-
   // Id of latest sent control frame. 0 if no control frame has been sent.
   QuicControlFrameId last_control_frame_id_;
 
@@ -2250,9 +2223,6 @@ class QUIC_EXPORT_PRIVATE QuicConnection
   // Enable this via reloadable flag once this feature is complete.
   bool connection_migration_use_new_cid_ = false;
 
-  const bool flush_after_coalesce_higher_space_packets_ =
-      GetQuicReloadableFlag(quic_flush_after_coalesce_higher_space_packets);
-
   // If true, send connection close packet on INVALID_VERSION.
   bool send_connection_close_for_invalid_version_ = false;
 
@@ -2272,6 +2242,11 @@ class QUIC_EXPORT_PRIVATE QuicConnection
 
   bool only_send_probing_frames_on_alternative_path_ =
       GetQuicReloadableFlag(quic_not_bundle_ack_on_alternative_path);
+
+  // If true, throttle sending if next created packet will exceed amplification
+  // limit.
+  const bool enforce_strict_amplification_factor_ =
+      GetQuicFlag(FLAGS_quic_enforce_strict_amplification_factor);
 };
 
 }  // namespace quic

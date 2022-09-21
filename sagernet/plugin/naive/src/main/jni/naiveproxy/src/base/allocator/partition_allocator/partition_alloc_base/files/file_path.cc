@@ -10,13 +10,13 @@
 // on build time. Try not to raise this limit unless necessary. See
 // https://chromium.googlesource.com/chromium/src/+/HEAD/docs/wmax_tokens.md
 #ifndef NACL_TC_REV
-#pragma clang max_tokens_here 340000
+#pragma clang max_tokens_here 370000
 #endif
 
 #include <string.h>
 #include <algorithm>
 
-#include "base/check_op.h"
+#include "base/allocator/partition_allocator/partition_alloc_check.h"
 #include "build/build_config.h"
 
 #if BUILDFLAG(IS_WIN)
@@ -103,7 +103,7 @@ FilePath FilePath::Append(const StringType& component) const {
     appended = without_nuls;
   }
 
-  DCHECK(!IsPathAbsolute(appended));
+  PA_DCHECK(!IsPathAbsolute(appended));
 
   if (path_.compare(kCurrentDirectory) == 0 && !appended.empty()) {
     // Append normally doesn't do any normalization, but as a special case,

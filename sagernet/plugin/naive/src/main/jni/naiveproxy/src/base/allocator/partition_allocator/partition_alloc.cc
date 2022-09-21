@@ -9,10 +9,11 @@
 #include <cstdint>
 #include <memory>
 
-#include "base/allocator/buildflags.h"
 #include "base/allocator/partition_allocator/address_pool_manager.h"
 #include "base/allocator/partition_allocator/memory_reclaimer.h"
 #include "base/allocator/partition_allocator/partition_address_space.h"
+#include "base/allocator/partition_allocator/partition_alloc_base/debug/debugging_buildflags.h"
+#include "base/allocator/partition_allocator/partition_alloc_buildflags.h"
 #include "base/allocator/partition_allocator/partition_alloc_hooks.h"
 #include "base/allocator/partition_allocator/partition_direct_map_extent.h"
 #include "base/allocator/partition_allocator/partition_oom.h"
@@ -20,7 +21,6 @@
 #include "base/allocator/partition_allocator/partition_root.h"
 #include "base/allocator/partition_allocator/partition_stats.h"
 #include "base/allocator/partition_allocator/starscan/pcscan.h"
-#include "base/dcheck_is_on.h"
 
 namespace partition_alloc {
 
@@ -70,6 +70,29 @@ void PartitionAllocGlobalInit(OomFunction on_out_of_memory) {
       internal::MaxSystemPagesPerRegularSlotSpan() <= 16,
       "System pages per slot span must be no greater than 16.");
 
+#if BUILDFLAG(PUT_REF_COUNT_IN_PREVIOUS_SLOT)
+  STATIC_ASSERT_OR_PA_CHECK(
+      internal::GetPartitionRefCountIndexMultiplierShift() <
+          std::numeric_limits<size_t>::max() / 2,
+      "Calculation in GetPartitionRefCountIndexMultiplierShift() must not "
+      "underflow.");
+  // Check that the GetPartitionRefCountIndexMultiplierShift() calculation is
+  // correct.
+  STATIC_ASSERT_OR_PA_CHECK(
+      (1 << internal::GetPartitionRefCountIndexMultiplierShift()) ==
+          (internal::SystemPageSize() /
+           (sizeof(internal::PartitionRefCount) *
+            (internal::kSuperPageSize / internal::SystemPageSize()))),
+      "Bitshift must match the intended multiplication.");
+  STATIC_ASSERT_OR_PA_CHECK(
+      ((sizeof(internal::PartitionRefCount) *
+        (internal::kSuperPageSize / internal::SystemPageSize()))
+       << internal::GetPartitionRefCountIndexMultiplierShift()) <=
+          internal::SystemPageSize(),
+      "PartitionRefCount Bitmap size must be smaller than or equal to "
+      "<= SystemPageSize().");
+#endif  // BUILDFLAG(PUT_REF_COUNT_IN_PREVIOUS_SLOT)
+
   PA_DCHECK(on_out_of_memory);
   internal::g_oom_handling_function = on_out_of_memory;
 }
@@ -80,7 +103,7 @@ void PartitionAllocGlobalUninitForTesting() {
 #if defined(PA_HAS_64_BITS_POINTERS)
   internal::PartitionAddressSpace::UninitForTesting();
 #else
-  internal::AddressPoolManager::GetInstance()->ResetForTesting();
+  internal::AddressPoolManager::GetInstance().ResetForTesting();
 #endif  // defined(PA_HAS_64_BITS_POINTERS)
 #endif  // !BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
   internal::g_oom_handling_function = nullptr;
@@ -106,7 +129,8 @@ void PartitionAllocator<thread_safe>::init(PartitionOptions opts) {
 template PartitionAllocator<internal::ThreadSafe>::~PartitionAllocator();
 template void PartitionAllocator<internal::ThreadSafe>::init(PartitionOptions);
 
-#if (DCHECK_IS_ON() || BUILDFLAG(ENABLE_BACKUP_REF_PTR_SLOW_CHECKS)) && \
+#if (BUILDFLAG(PA_DCHECK_IS_ON) ||                    \
+     BUILDFLAG(ENABLE_BACKUP_REF_PTR_SLOW_CHECKS)) && \
     BUILDFLAG(USE_BACKUP_REF_PTR)
 void CheckThatSlotOffsetIsZero(uintptr_t address) {
   // Add kPartitionPastAllocationAdjustment, because

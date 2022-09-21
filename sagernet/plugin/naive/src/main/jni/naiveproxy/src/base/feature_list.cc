@@ -8,7 +8,7 @@
 // time. Try not to raise this limit unless necessary. See
 // https://chromium.googlesource.com/chromium/src/+/HEAD/docs/wmax_tokens.md
 #ifndef NACL_TC_REV
-#pragma clang max_tokens_here 545000
+#pragma clang max_tokens_here 600000
 #endif
 
 #include <string>
@@ -24,15 +24,18 @@
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial.h"
+#include "base/metrics/field_trial_param_associator.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/metrics/persistent_memory_allocator.h"
 #include "base/notreached.h"
 #include "base/path_service.h"
 #include "base/pickle.h"
+#include "base/rand_util.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
+#include "base/task/sequence_manager/work_queue.h"
 #include "build/build_config.h"
 
 namespace base {
@@ -67,17 +70,21 @@ void DCheckOverridesAllowed() {}
 // followed by a base::Pickle object that contains the feature and trial name.
 struct FeatureEntry {
   // SHA1(FeatureEntry): Increment this if structure changes!
-  static constexpr uint32_t kPersistentTypeId = 0x06567CA6 + 1;
+  static constexpr uint32_t kPersistentTypeId = 0x06567CA6 + 2;
 
   // Expected size for 32/64-bit check.
-  static constexpr size_t kExpectedInstanceSize = 8;
+  static constexpr size_t kExpectedInstanceSize = 16;
 
   // Specifies whether a feature override enables or disables the feature. Same
   // values as the OverrideState enum in feature_list.h
   uint32_t override_state;
 
+  // On e.g. x86, alignof(uint64_t) is 4.  Ensure consistent size and alignment
+  // of `pickle_size` across platforms.
+  uint32_t padding;
+
   // Size of the pickled structure, NOT the total size of this entry.
-  uint32_t pickle_size;
+  uint64_t pickle_size;
 
   // Reads the feature and trial name from the pickle. Calling this is only
   // valid on an initialized entry that's in shared memory.
@@ -86,7 +93,7 @@ struct FeatureEntry {
     const char* src =
         reinterpret_cast<const char*>(this) + sizeof(FeatureEntry);
 
-    Pickle pickle(src, pickle_size);
+    Pickle pickle(src, checked_cast<size_t>(pickle_size));
     PickleIterator pickle_iter(pickle);
 
     if (!pickle_iter.ReadStringPiece(feature_name))
@@ -473,6 +480,12 @@ void FeatureList::SetInstance(std::unique_ptr<FeatureList> instance) {
   // Note: Intentional leak of global singleton.
   g_feature_list_instance = instance.release();
 
+#if BUILDFLAG(IS_ANDROID)
+  ConfigureRandBytesFieldTrial();
+#endif
+
+  base::sequence_manager::internal::WorkQueue::ConfigureCapacityFieldTrial();
+
 #if defined(DCHECK_IS_CONFIGURABLE)
   // Update the behaviour of LOGGING_DCHECK to match the Feature configuration.
   // DCHECK is also forced to be FATAL if we are running a death-test.
@@ -748,6 +761,15 @@ FeatureList::Accessor::Accessor(FeatureList* feature_list)
 FeatureList::OverrideState FeatureList::Accessor::GetOverrideStateByFeatureName(
     StringPiece feature_name) {
   return feature_list_->GetOverrideStateByFeatureName(feature_name);
+}
+
+bool FeatureList::Accessor::GetParamsByFeatureName(
+    StringPiece feature_name,
+    std::map<std::string, std::string>* params) {
+  base::FieldTrial* trial =
+      feature_list_->GetAssociatedFieldTrialByFeatureName(feature_name);
+  return FieldTrialParamAssociator::GetInstance()->GetFieldTrialParams(trial,
+                                                                       params);
 }
 
 }  // namespace base

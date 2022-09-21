@@ -3,7 +3,8 @@
 *_unittest.mm
 *_unittest.nc
 *_perftest.cc
-*_test.cc
+*[!s]_test.cc
+*[a-hj-z]s_test.cc
 *fuzz*
 *org/chromium*
 *.golden

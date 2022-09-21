@@ -790,9 +790,6 @@ EVENT_TYPE(SOCKS_CONNECT_JOB_CONNECT)
 // The start/end of the HttpProxyConnectJob::Connect().
 EVENT_TYPE(HTTP_PROXY_CONNECT_JOB_CONNECT)
 
-// The start/end of the WebSocketConnectJob::Connect().
-EVENT_TYPE(WEB_SOCKET_TRANSPORT_CONNECT_JOB_CONNECT)
-
 // A TLS connection attempt failed because ECH was not negotiated. The
 // connection will be retried with a new ECHConfigList from the client-facing
 // server. If the new ECHConfigList is the empty string, the server has rolled
@@ -1126,8 +1123,11 @@ EVENT_TYPE(HTTP_STREAM_REQUEST)
 //      "original_url": <The URL to create a stream for>,
 //      "url": <The URL actually being used, possibly different from
 //              original_url if using an alternate service>,
-//      "alternate_service": <The alternate service being used>,
+//      "expect_spdy": <Boolean indicating whether the Job will use SPDY>,
+//      "using_quic": <Boolean indicating whether the Job will use QUIC>,
 //      "priority": <The priority of the Job>,
+//      "type": <The type of this Job ("main", "alternative", "dns_alpn_h3",
+//               "preconnect")>,
 //   }
 EVENT_TYPE(HTTP_STREAM_JOB)
 
@@ -2735,6 +2735,9 @@ EVENT_TYPE(AUTH_HANDLER_CREATE_RESULT)
 // The END phase has the following parameters:
 //  {
 //       "succeeded": <bool indicating whether the initialization succeeded>
+//       "allows_default_credentials": whether the default credentials may be
+//                                     used for the `origin` passed into
+//                                    `InitFromChallenge`.
 //  }
 EVENT_TYPE(AUTH_HANDLER_INIT)
 
@@ -3161,17 +3164,25 @@ EVENT_TYPE(CERT_VERIFY_PROC)
 EVENT_TYPE(CERT_VERIFY_PROC_TARGET_CERT)
 
 // This event is created for each additional certificate passed into
-// CertVerifyProcBulitin.
+// CertVerifyProcBuiltin.
 // The parameters are the same as for CERT_VERIFY_PROC_TARGET_CERT.
 EVENT_TYPE(CERT_VERIFY_PROC_INPUT_CERT)
 
+// This event is created to log the Chrome Root Store version used
+// by CertVerifyProcBuiltin.
+// The event parameters are:
+//   {
+//      "version_major": <The major version of the Chrome Root Store>
+//   }
+EVENT_TYPE(CERT_VERIFY_PROC_CHROME_ROOT_STORE_VERSION)
+
 // This event is created for each additional trust anchor passed into
-// CertVerifyProcBulitin.
+// CertVerifyProcBuiltin.
 // The parameters are the same as for CERT_VERIFY_PROC_TARGET_CERT.
 EVENT_TYPE(CERT_VERIFY_PROC_ADDITIONAL_TRUST_ANCHOR)
 
 // This event is created for each path building attempt performed by
-// CertVerifyProcBulitin.
+// CertVerifyProcBuiltin.
 // The BEGIN phase contains the following information:
 // {
 //      "digest_policy": <Specifies which digest methods are accepted in this
@@ -3515,6 +3526,28 @@ EVENT_TYPE(UPLOAD_DATA_STREAM_READ)
 //   "trigger": <Trigger for evaluation that caused request start>
 // }
 EVENT_TYPE(RESOURCE_SCHEDULER_REQUEST_STARTED)
+
+// -----------------------------------------------------------------------------
+// Auxiliary network service in-memory HTTP cache related events
+// -----------------------------------------------------------------------------
+
+// These event are emitted when HTTP response headers are served from the
+// in-memory cache.
+// The following parameters are attached:
+//   {
+//     "headers": <The list of header:value pairs>,
+//   }
+EVENT_TYPE(IN_MEMORY_CACHE_READ_REQUEST_HEADERS)
+EVENT_TYPE(IN_MEMORY_CACHE_READ_RESPONSE_HEADERS)
+
+// This event is emitted when response content are read from the in-memory
+// cache.
+// The following parameters are attached:
+//   {
+//     "byte_count": <Number of bytes that were just sent>,
+//     "bytes": <The exact bytes sent, Base64 encoded>,
+//   }
+EVENT_TYPE(IN_MEMORY_CACHE_BYTES_READ)
 
 // -----------------------------------------------------------------------------
 // Network Quality Estimator related events

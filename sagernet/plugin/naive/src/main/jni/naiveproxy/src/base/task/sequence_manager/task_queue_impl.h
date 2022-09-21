@@ -168,7 +168,7 @@ class BASE_EXPORT TaskQueueImpl {
   // Must only be called from the thread this task queue was created on.
   void ReloadEmptyImmediateWorkQueue();
 
-  Value AsValue(TimeTicks now, bool force_verbose) const;
+  Value::Dict AsValue(TimeTicks now, bool force_verbose) const;
 
   bool GetQuiescenceMonitored() const { return should_monitor_quiescence_; }
   bool GetShouldNotifyObservers() const { return should_notify_observers_; }
@@ -330,14 +330,15 @@ class BASE_EXPORT TaskQueueImpl {
 
     base::internal::OperationsController operations_controller_;
     // Pointer might be stale, access guarded by |operations_controller_|
-    const raw_ptr<TaskQueueImpl> outer_;
+    const raw_ptr<TaskQueueImpl, DanglingUntriaged> outer_;
   };
 
   class TaskRunner final : public SingleThreadTaskRunner {
    public:
-    explicit TaskRunner(scoped_refptr<GuardedTaskPoster> task_poster,
-                        scoped_refptr<AssociatedThreadId> associated_thread,
-                        TaskType task_type);
+    explicit TaskRunner(
+        scoped_refptr<GuardedTaskPoster> task_poster,
+        scoped_refptr<const AssociatedThreadId> associated_thread,
+        TaskType task_type);
 
     bool PostDelayedTask(const Location& location,
                          OnceClosure callback,
@@ -366,7 +367,7 @@ class BASE_EXPORT TaskQueueImpl {
     ~TaskRunner() final;
 
     const scoped_refptr<GuardedTaskPoster> task_poster_;
-    const scoped_refptr<AssociatedThreadId> associated_thread_;
+    const scoped_refptr<const AssociatedThreadId> associated_thread_;
     const TaskType task_type_;
   };
 
@@ -375,7 +376,7 @@ class BASE_EXPORT TaskQueueImpl {
    public:
     OnTaskPostedCallbackHandleImpl(
         TaskQueueImpl* task_queue_impl,
-        scoped_refptr<AssociatedThreadId> associated_thread_);
+        scoped_refptr<const AssociatedThreadId> associated_thread_);
     ~OnTaskPostedCallbackHandleImpl() override;
 
     // Callback handles can outlive the associated TaskQueueImpl, so the
@@ -384,7 +385,7 @@ class BASE_EXPORT TaskQueueImpl {
 
    private:
     raw_ptr<TaskQueueImpl> task_queue_impl_;
-    scoped_refptr<AssociatedThreadId> associated_thread_;
+    const scoped_refptr<const AssociatedThreadId> associated_thread_;
   };
 
   // A queue for holding delayed tasks before their delay has expired.
@@ -410,7 +411,7 @@ class BASE_EXPORT TaskQueueImpl {
     // TODO(crbug.com/1155905): we pass SequenceManager to be able to record
     // crash keys. Remove this parameter after chasing down this crash.
     void SweepCancelledTasks(SequenceManagerImpl* sequence_manager);
-    Value AsValue(TimeTicks now) const;
+    Value::List AsValue(TimeTicks now) const;
 
    private:
     struct Compare {
@@ -512,8 +513,8 @@ class BASE_EXPORT TaskQueueImpl {
   void TakeImmediateIncomingQueueTasks(TaskDeque* queue);
 
   void TraceQueueSize() const;
-  static Value QueueAsValue(const TaskDeque& queue, TimeTicks now);
-  static Value TaskAsValue(const Task& task, TimeTicks now);
+  static Value::List QueueAsValue(const TaskDeque& queue, TimeTicks now);
+  static Value::Dict TaskAsValue(const Task& task, TimeTicks now);
 
   // Returns a Task representation for `delayed_task`.
   Task MakeDelayedTask(PostedTask delayed_task, LazyNow* lazy_now) const;
@@ -557,7 +558,7 @@ class BASE_EXPORT TaskQueueImpl {
   const char* name_;
   const raw_ptr<SequenceManagerImpl> sequence_manager_;
 
-  scoped_refptr<AssociatedThreadId> associated_thread_;
+  const scoped_refptr<const AssociatedThreadId> associated_thread_;
 
   const scoped_refptr<GuardedTaskPoster> task_poster_;
 
@@ -594,7 +595,7 @@ class BASE_EXPORT TaskQueueImpl {
     // to index into
     // SequenceManager::Settings::per_priority_cross_thread_task_delay to apply
     // a priority specific delay for debugging purposes.
-    int queue_set_index = 0;
+    size_t queue_set_index = 0;
 #endif
 
     TracingOnly tracing_only;

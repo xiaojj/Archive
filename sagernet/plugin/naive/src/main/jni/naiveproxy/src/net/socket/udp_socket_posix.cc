@@ -130,31 +130,17 @@ UDPSocketPosix::UDPSocketPosix(DatagramSocket::BindType bind_type,
                                net::NetLog* net_log,
                                const net::NetLogSource& source)
     : write_async_watcher_(std::make_unique<WriteAsyncWatcher>(this)),
-      sender_(new UDPSocketPosixSender()),
+      sender_(base::MakeRefCounted<UDPSocketPosixSender>()),
       socket_(kInvalidSocket),
-      socket_hash_(0),
-      addr_family_(0),
-      is_connected_(false),
-      socket_options_(SOCKET_OPTION_MULTICAST_LOOP),
-      sendto_flags_(0),
-      multicast_interface_(0),
-      multicast_time_to_live_(1),
       bind_type_(bind_type),
       read_socket_watcher_(FROM_HERE),
       write_socket_watcher_(FROM_HERE),
       read_watcher_(this),
       write_watcher_(this),
-      last_async_result_(0),
-      write_async_timer_running_(false),
-      write_async_outstanding_(0),
-      read_buf_len_(0),
-      recv_from_address_(nullptr),
-      write_buf_len_(0),
       net_log_(NetLogWithSource::Make(net_log, NetLogSourceType::UDP_SOCKET)),
       bound_network_(NetworkChangeNotifier::kInvalidNetworkHandle),
       always_update_bytes_received_(base::FeatureList::IsEnabled(
-          features::kUdpSocketPosixAlwaysUpdateBytesReceived)),
-      experimental_recv_optimization_enabled_(false) {
+          features::kUdpSocketPosixAlwaysUpdateBytesReceived)) {
   net_log_.BeginEventReferencingSource(NetLogEventType::SOCKET_ALIVE, source);
 }
 
@@ -271,19 +257,20 @@ void UDPSocketPosix::Close() {
   // https://crbug.com/1194888.
 
   // Attempt to clear errors on the socket so that they are not returned by
-  // close(). See https://crbug.com/1151048.
+  // close(). This seems to be effective at clearing some, but not all,
+  // EPROTOTYPE errors. See https://crbug.com/1151048.
   int value = 0;
   socklen_t value_len = sizeof(value);
   HANDLE_EINTR(getsockopt(socket_, SOL_SOCKET, SO_ERROR, &value, &value_len));
 
   if (IGNORE_EINTR(guarded_close_np(socket_, &kSocketFdGuard)) != 0) {
-    // There is a bug in the Mac OS kernel that it can return an
-    // ENOTCONN error. In this case we don't know whether the file
-    // descriptor is still allocated or not. We cannot safely close the
-    // file descriptor because it may have been reused by another
-    // thread in the meantime. We may leak file handles here and cause
-    // a crash indirectly later. See https://crbug.com/1151048.
-    PCHECK(errno == ENOTCONN);
+    // There is a bug in the Mac OS kernel that it can return an ENOTCONN or
+    // EPROTOTYPE error. In this case we don't know whether the file descriptor
+    // is still allocated or not. We cannot safely close the file descriptor
+    // because it may have been reused by another thread in the meantime. We may
+    // leak file handles here and cause a crash indirectly later. See
+    // https://crbug.com/1151048.
+    PCHECK(errno == ENOTCONN || errno == EPROTOTYPE);
   }
 #else
   PCHECK(IGNORE_EINTR(close(socket_)) == 0);
@@ -308,7 +295,7 @@ int UDPSocketPosix::GetPeerAddress(IPEndPoint* address) const {
     SockaddrStorage storage;
     if (getpeername(socket_, storage.addr, &storage.addr_len))
       return MapSystemError(errno);
-    std::unique_ptr<IPEndPoint> address(new IPEndPoint());
+    auto address = std::make_unique<IPEndPoint>();
     if (!address->FromSockAddr(storage.addr, storage.addr_len))
       return ERR_ADDRESS_INVALID;
     remote_address_ = std::move(address);
@@ -328,7 +315,7 @@ int UDPSocketPosix::GetLocalAddress(IPEndPoint* address) const {
     SockaddrStorage storage;
     if (getsockname(socket_, storage.addr, &storage.addr_len))
       return MapSystemError(errno);
-    std::unique_ptr<IPEndPoint> address(new IPEndPoint());
+    auto address = std::make_unique<IPEndPoint>();
     if (!address->FromSockAddr(storage.addr, storage.addr_len))
       return ERR_ADDRESS_INVALID;
     local_address_ = std::move(address);
@@ -1072,11 +1059,11 @@ void UDPSocketPosix::ApplySocketTag(const SocketTag& tag) {
   tag_ = tag;
 }
 
-UDPSocketPosixSender::UDPSocketPosixSender() : sendmmsg_enabled_(false) {}
-UDPSocketPosixSender::~UDPSocketPosixSender() {}
+UDPSocketPosixSender::UDPSocketPosixSender() = default;
+UDPSocketPosixSender::~UDPSocketPosixSender() = default;
 
 SendResult::SendResult() : rv(0), write_count(0) {}
-SendResult::~SendResult() {}
+SendResult::~SendResult() = default;
 SendResult::SendResult(int _rv, int _write_count, DatagramBuffers _buffers)
     : rv(_rv), write_count(_write_count), buffers(std::move(_buffers)) {}
 SendResult::SendResult(SendResult&& other) = default;

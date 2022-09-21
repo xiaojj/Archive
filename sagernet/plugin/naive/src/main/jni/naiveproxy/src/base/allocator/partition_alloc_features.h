@@ -17,6 +17,28 @@ struct Feature;
 
 namespace features {
 
+// See /docs/dangling_ptr.md
+//
+// Usage:
+// --enable-features=PartitionAllocDanglingPtr:mode/crash
+// --enable-features=PartitionAllocDanglingPtr:mode/log_signature
+extern const BASE_EXPORT Feature kPartitionAllocDanglingPtr;
+enum class DanglingPtrMode {
+  // Crash immediately after detecting a dangling raw_ptr.
+  kCrash,  // (default)
+
+  // Log the signature of every occurrences without crashing. It is used by
+  // bots.
+  // Format "[DanglingSignature]\t<1>\t<2>"
+  // 1. The function who freed the memory while it was still referenced.
+  // 2. The function who released the raw_ptr reference.
+  kLogSignature,
+
+  // Note: This will be extended with a single shot DumpWithoutCrashing.
+};
+extern const BASE_EXPORT base::FeatureParam<DanglingPtrMode>
+    kDanglingPtrModeParam;
+
 #if defined(PA_ALLOW_PCSCAN)
 extern const BASE_EXPORT Feature kPartitionAllocPCScan;
 #endif  // defined(PA_ALLOW_PCSCAN)
@@ -26,6 +48,7 @@ extern const BASE_EXPORT Feature kPartitionAllocPCScanRendererOnly;
 extern const BASE_EXPORT Feature kPartitionAllocBackupRefPtrControl;
 extern const BASE_EXPORT Feature kPartitionAllocLargeThreadCacheSize;
 extern const BASE_EXPORT Feature kPartitionAllocLargeEmptySlotSpanRing;
+#endif  // BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
 
 enum class BackupRefPtrEnabledProcesses {
   // BRP enabled only in the browser process.
@@ -48,6 +71,9 @@ enum class BackupRefPtrMode {
   // This entails splitting the main partition.
   kEnabled,
 
+  // Same as kEnabled but without zapping quarantined objects.
+  kEnabledWithoutZapping,
+
   // BRP is disabled, but the main partition is split out, as if BRP was enabled
   // in the "previous slot" mode.
   kDisabledButSplitPartitions2Way,
@@ -62,7 +88,12 @@ extern const BASE_EXPORT base::FeatureParam<BackupRefPtrEnabledProcesses>
     kBackupRefPtrEnabledProcessesParam;
 extern const BASE_EXPORT base::FeatureParam<BackupRefPtrMode>
     kBackupRefPtrModeParam;
-#endif  // BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
+extern const BASE_EXPORT base::FeatureParam<bool>
+    kBackupRefPtrAsanEnableDereferenceCheckParam;
+extern const BASE_EXPORT base::FeatureParam<bool>
+    kBackupRefPtrAsanEnableExtractionCheckParam;
+extern const BASE_EXPORT base::FeatureParam<bool>
+    kBackupRefPtrAsanEnableInstantiationCheckParam;
 
 extern const BASE_EXPORT Feature kPartitionAllocPCScanMUAwareScheduler;
 extern const BASE_EXPORT Feature kPartitionAllocPCScanStackScanning;
@@ -70,6 +101,7 @@ extern const BASE_EXPORT Feature kPartitionAllocDCScan;
 extern const BASE_EXPORT Feature kPartitionAllocPCScanImmediateFreeing;
 extern const BASE_EXPORT Feature kPartitionAllocPCScanEagerClearing;
 extern const BASE_EXPORT Feature kPartitionAllocUseAlternateDistribution;
+extern const BASE_EXPORT Feature kPartitionAllocSortActiveSlotSpans;
 
 }  // namespace features
 }  // namespace base

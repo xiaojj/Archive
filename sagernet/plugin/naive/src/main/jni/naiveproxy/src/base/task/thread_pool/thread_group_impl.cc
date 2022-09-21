@@ -183,7 +183,8 @@ class ThreadGroupImpl::ScopedCommandsExecutor
     // enters its main function, is descheduled because it wasn't woken up yet,
     // and is woken up immediately after.
     workers_to_start_.ForEachWorker([&](WorkerThread* worker) {
-      worker->Start(outer_->after_start().worker_thread_observer);
+      worker->Start(outer_->after_start().service_thread_task_runner,
+                    outer_->after_start().worker_thread_observer);
       if (outer_->worker_started_for_testing_)
         outer_->worker_started_for_testing_->Wait();
     });
@@ -360,12 +361,12 @@ class ThreadGroupImpl::WorkerThreadDelegateImpl : public WorkerThread::Delegate,
 
 ThreadGroupImpl::ThreadGroupImpl(StringPiece histogram_label,
                                  StringPiece thread_group_label,
-                                 ThreadPriority priority_hint,
+                                 ThreadType thread_type_hint,
                                  TrackedRef<TaskTracker> task_tracker,
                                  TrackedRef<Delegate> delegate)
     : ThreadGroup(std::move(task_tracker), std::move(delegate)),
       thread_group_label_(thread_group_label),
-      priority_hint_(priority_hint),
+      thread_type_hint_(thread_type_hint),
       idle_workers_stack_cv_for_testing_(lock_.CreateConditionVariable()),
       // Mimics the UMA_HISTOGRAM_COUNTS_1000 macro. When a worker runs more
       // than 1000 tasks before detaching, there is no need to know the exact
@@ -386,10 +387,10 @@ ThreadGroupImpl::ThreadGroupImpl(StringPiece histogram_label,
 }
 
 void ThreadGroupImpl::Start(
-    int max_tasks,
-    int max_best_effort_tasks,
+    size_t max_tasks,
+    size_t max_best_effort_tasks,
     TimeDelta suggested_reclaim_time,
-    scoped_refptr<SequencedTaskRunner> service_thread_task_runner,
+    scoped_refptr<SingleThreadTaskRunner> service_thread_task_runner,
     WorkerThreadObserver* worker_thread_observer,
     WorkerEnvironment worker_environment,
     bool synchronous_thread_start_for_testing,
@@ -404,12 +405,12 @@ void ThreadGroupImpl::Start(
       FeatureList::IsEnabled(kMayBlockWithoutDelay);
   in_start().may_block_threshold =
       may_block_threshold ? may_block_threshold.value()
-                          : (priority_hint_ == ThreadPriority::NORMAL
+                          : (thread_type_hint_ == ThreadType::kDefault
                                  ? kForegroundMayBlockThreshold
                                  : kBackgroundMayBlockThreshold);
   in_start().blocked_workers_poll_period =
-      priority_hint_ == ThreadPriority::NORMAL ? kForegroundBlockedWorkersPoll
-                                               : kBackgroundBlockedWorkersPoll;
+      thread_type_hint_ == ThreadType::kDefault ? kForegroundBlockedWorkersPoll
+                                                : kBackgroundBlockedWorkersPoll;
 
   ScopedCommandsExecutor executor(this);
   CheckedAutoLock auto_lock(lock_);
@@ -762,7 +763,8 @@ void ThreadGroupImpl::WorkerThreadDelegateImpl::CleanupLockRequired(
   if (outer_->num_tasks_before_detach_histogram_) {
     executor->ScheduleAddHistogramSample(
         outer_->num_tasks_before_detach_histogram_,
-        worker_only().num_tasks_since_last_detach);
+        saturated_cast<HistogramBase::Sample>(
+            worker_only().num_tasks_since_last_detach));
   }
   worker->Cleanup();
   outer_->idle_workers_stack_.Remove(worker);
@@ -828,7 +830,7 @@ void ThreadGroupImpl::WorkerThreadDelegateImpl::BlockingStarted(
   DCHECK(read_worker().current_task_priority);
   DCHECK(worker_only().worker_thread_);
 
-  worker_only().worker_thread_->MaybeUpdateThreadPriority();
+  worker_only().worker_thread_->MaybeUpdateThreadType();
 
   // MayBlock with no delay reuses WillBlock implementation.
   // WillBlock is always used when time overrides is active. crbug.com/1038867
@@ -1028,7 +1030,7 @@ ThreadGroupImpl::CreateAndRegisterWorkerLockRequired(
   // because in WakeUpOneWorker, |lock_| is first acquired and then
   // the thread lock is acquired when WakeUp is called on the worker.
   scoped_refptr<WorkerThread> worker =
-      MakeRefCounted<WorkerThread>(priority_hint_,
+      MakeRefCounted<WorkerThread>(thread_type_hint_,
                                    std::make_unique<WorkerThreadDelegateImpl>(
                                        tracked_ref_factory_.GetTrackedRef()),
                                    task_tracker_, &lock_);

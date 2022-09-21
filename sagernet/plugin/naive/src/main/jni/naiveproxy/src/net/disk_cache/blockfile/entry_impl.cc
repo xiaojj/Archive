@@ -104,8 +104,7 @@ namespace disk_cache {
 // total memory used under control.
 class EntryImpl::UserBuffer {
  public:
-  explicit UserBuffer(BackendImpl* backend)
-      : backend_(backend->GetWeakPtr()), offset_(0), grow_allowed_(true) {
+  explicit UserBuffer(BackendImpl* backend) : backend_(backend->GetWeakPtr()) {
     buffer_.reserve(kMaxBlockSize);
   }
 
@@ -148,9 +147,9 @@ class EntryImpl::UserBuffer {
   bool GrowBuffer(int required, int limit);
 
   base::WeakPtr<BackendImpl> backend_;
-  int offset_;
+  int offset_ = 0;
   std::vector<char> buffer_;
-  bool grow_allowed_;
+  bool grow_allowed_ = true;
 };
 
 bool EntryImpl::UserBuffer::PreWrite(int offset, int len) {
@@ -318,13 +317,8 @@ EntryImpl::EntryImpl(BackendImpl* backend, Addr address, bool read_only)
     : entry_(nullptr, Addr(0)),
       node_(nullptr, Addr(0)),
       backend_(backend->GetWeakPtr()),
-      doomed_(false),
-      read_only_(read_only),
-      dirty_(false) {
+      read_only_(read_only) {
   entry_.LazyInit(backend->File(address), address);
-  for (int i = 0; i < kNumStreams; i++) {
-    unreported_size_[i] = 0;
-  }
 }
 
 void EntryImpl::DoomImpl() {
@@ -1310,7 +1304,7 @@ File* EntryImpl::GetExternalFile(Addr address, int index) {
   DCHECK(index >= 0 && index <= kKeyFileIndex);
   if (!files_[index].get()) {
     // For a key file, use mixed mode IO.
-    scoped_refptr<File> file(new File(kKeyFileIndex == index));
+    auto file = base::MakeRefCounted<File>(kKeyFileIndex == index);
     if (file->Init(backend_->GetFileName(address)))
       files_[index].swap(file);
   }
@@ -1566,7 +1560,7 @@ int EntryImpl::InitSparseData() {
     return net::OK;
 
   // Use a local variable so that sparse_ never goes from 'valid' to NULL.
-  std::unique_ptr<SparseControl> sparse(new SparseControl(this));
+  auto sparse = std::make_unique<SparseControl>(this);
   int result = sparse->Init();
   if (net::OK == result)
     sparse_.swap(sparse);
@@ -1583,7 +1577,9 @@ uint32_t EntryImpl::GetEntryFlags() {
   return entry_.Data()->flags;
 }
 
-void EntryImpl::GetData(int index, char** buffer, Addr* address) {
+void EntryImpl::GetData(int index,
+                        std::unique_ptr<char[]>* buffer,
+                        Addr* address) {
   DCHECK(backend_.get());
   if (user_buffers_[index].get() && user_buffers_[index]->Size() &&
       !user_buffers_[index]->Start()) {
@@ -1591,8 +1587,8 @@ void EntryImpl::GetData(int index, char** buffer, Addr* address) {
     int data_len = entry_.Data()->data_size[index];
     if (data_len <= user_buffers_[index]->Size()) {
       DCHECK(!user_buffers_[index]->Start());
-      *buffer = new char[data_len];
-      memcpy(*buffer, user_buffers_[index]->Data(), data_len);
+      *buffer = std::make_unique<char[]>(data_len);
+      memcpy(buffer->get(), user_buffers_[index]->Data(), data_len);
       return;
     }
   }

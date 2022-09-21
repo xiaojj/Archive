@@ -16,6 +16,7 @@
 #include "quiche/quic/platform/api/quic_flag_utils.h"
 #include "quiche/quic/platform/api/quic_flags.h"
 #include "quiche/quic/platform/api/quic_logging.h"
+#include "quiche/common/platform/api/quiche_logging.h"
 #include "quiche/common/print_elements.h"
 
 namespace quic {
@@ -126,6 +127,13 @@ void Bbr2Sender::ApplyConnectionOptions(
     QUIC_RELOADABLE_FLAG_COUNT_N(quic_bbr2_extra_acked_window, 2, 2);
     model_.SetMaxAckHeightTrackerWindowLength(40);
   }
+  if (GetQuicReloadableFlag(quic_bbr2_support_new_startup_pacing_gain) &&
+      ContainsQuicTag(connection_options, kBBQ1)) {
+    QUIC_RELOADABLE_FLAG_COUNT_N(quic_bbr2_support_new_startup_pacing_gain, 2,
+                                 2);
+    params_.startup_pacing_gain = 2.773;
+    params_.drain_pacing_gain = 1.0 / params_.drain_cwnd_gain;
+  }
   if (ContainsQuicTag(connection_options, kBBQ2)) {
     params_.startup_cwnd_gain = 2.885;
     params_.drain_cwnd_gain = 2.885;
@@ -197,9 +205,7 @@ void Bbr2Sender::ApplyConnectionOptions(
   if (ContainsQuicTag(connection_options, kBBRB)) {
     model_.SetLimitMaxAckHeightTrackerBySendRate(true);
   }
-  if (GetQuicReloadableFlag(
-          quic_bbr2_add_bytes_acked_after_inflight_hi_limited) &&
-      ContainsQuicTag(connection_options, kBBQ0)) {
+  if (ContainsQuicTag(connection_options, kBBQ0)) {
     params_.probe_up_includes_acks_after_cwnd_limited = true;
   }
 
@@ -221,7 +227,7 @@ Limits<QuicByteCount> Bbr2Sender::GetCwndLimitsByMode() const {
     case Bbr2Mode::PROBE_RTT:
       return probe_rtt_.GetCwndLimits();
     default:
-      QUIC_NOTREACHED();
+      QUICHE_NOTREACHED();
       return Unlimited<QuicByteCount>();
   }
 }
@@ -502,11 +508,6 @@ void Bbr2Sender::OnExitQuiescence(QuicTime now) {
     }
     last_quiescence_start_ = QuicTime::Zero();
   }
-}
-
-bool Bbr2Sender::ShouldSendProbingPacket() const {
-  // TODO(wub): Implement ShouldSendProbingPacket properly.
-  return BBR2_MODE_DISPATCH(IsProbingForBandwidth());
 }
 
 std::string Bbr2Sender::GetDebugState() const {

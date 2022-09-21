@@ -11,6 +11,19 @@
 namespace base {
 namespace features {
 
+const BASE_EXPORT Feature kPartitionAllocDanglingPtr{
+    "PartitionAllocDanglingPtr", FEATURE_DISABLED_BY_DEFAULT};
+constexpr FeatureParam<DanglingPtrMode>::Option kDanglingPtrModeOption[] = {
+    {DanglingPtrMode::kCrash, "crash"},
+    {DanglingPtrMode::kLogSignature, "log_signature"},
+};
+const base::FeatureParam<DanglingPtrMode> kDanglingPtrModeParam{
+    &kPartitionAllocDanglingPtr,
+    "mode",
+    DanglingPtrMode::kCrash,
+    &kDanglingPtrModeOption,
+};
+
 #if defined(PA_ALLOW_PCSCAN)
 // If enabled, PCScan is turned on by default for all partitions that don't
 // disable it explicitly.
@@ -46,9 +59,17 @@ const Feature kPartitionAllocLargeThreadCacheSize{
 
 const BASE_EXPORT Feature kPartitionAllocLargeEmptySlotSpanRing{
     "PartitionAllocLargeEmptySlotSpanRing", FEATURE_DISABLED_BY_DEFAULT};
+#endif  // BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
 
-const Feature kPartitionAllocBackupRefPtr{"PartitionAllocBackupRefPtr",
-                                          FEATURE_DISABLED_BY_DEFAULT};
+const Feature kPartitionAllocBackupRefPtr {
+  "PartitionAllocBackupRefPtr",
+#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_WIN) || \
+    (BUILDFLAG(USE_ASAN_BACKUP_REF_PTR) && BUILDFLAG(IS_LINUX))
+      FEATURE_ENABLED_BY_DEFAULT
+#else
+      FEATURE_DISABLED_BY_DEFAULT
+#endif
+};
 
 constexpr FeatureParam<BackupRefPtrEnabledProcesses>::Option
     kBackupRefPtrEnabledProcessesOptions[] = {
@@ -67,6 +88,7 @@ const base::FeatureParam<BackupRefPtrEnabledProcesses>
 constexpr FeatureParam<BackupRefPtrMode>::Option kBackupRefPtrModeOptions[] = {
     {BackupRefPtrMode::kDisabled, "disabled"},
     {BackupRefPtrMode::kEnabled, "enabled"},
+    {BackupRefPtrMode::kEnabledWithoutZapping, "enabled-without-zapping"},
     {BackupRefPtrMode::kDisabledButSplitPartitions2Way,
      "disabled-but-2-way-split"},
     {BackupRefPtrMode::kDisabledButSplitPartitions3Way,
@@ -77,7 +99,13 @@ const base::FeatureParam<BackupRefPtrMode> kBackupRefPtrModeParam{
     &kPartitionAllocBackupRefPtr, "brp-mode", BackupRefPtrMode::kEnabled,
     &kBackupRefPtrModeOptions};
 
-#endif  // BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
+const base::FeatureParam<bool> kBackupRefPtrAsanEnableDereferenceCheckParam{
+    &kPartitionAllocBackupRefPtr, "asan-enable-dereference-check", true};
+const base::FeatureParam<bool> kBackupRefPtrAsanEnableExtractionCheckParam{
+    &kPartitionAllocBackupRefPtr, "asan-enable-extraction-check",
+    false};  // Not much noise at the moment to enable by default.
+const base::FeatureParam<bool> kBackupRefPtrAsanEnableInstantiationCheckParam{
+    &kPartitionAllocBackupRefPtr, "asan-enable-instantiation-check", true};
 
 // If enabled, switches the bucket distribution to an alternate one. The
 // alternate distribution must have buckets that are a subset of the default
@@ -111,6 +139,10 @@ const Feature kPartitionAllocPCScanStackScanning {
 
 const Feature kPartitionAllocDCScan{"PartitionAllocDCScan",
                                     FEATURE_DISABLED_BY_DEFAULT};
+
+// Whether to sort the active slot spans in PurgeMemory().
+extern const Feature kPartitionAllocSortActiveSlotSpans{
+    "PartitionAllocSortActiveSlotSpans", FEATURE_DISABLED_BY_DEFAULT};
 
 }  // namespace features
 }  // namespace base

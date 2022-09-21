@@ -4,6 +4,8 @@
 
 #include "base/system/sys_info.h"
 
+#include <fuchsia/buildinfo/cpp/fidl.h>
+#include <fuchsia/hwinfo/cpp/fidl.h>
 #include <sys/statvfs.h>
 #include <zircon/syscalls.h>
 
@@ -11,8 +13,8 @@
 
 #include "base/containers/flat_map.h"
 #include "base/files/file_util.h"
-#include "base/fuchsia/build_info.h"
 #include "base/fuchsia/fuchsia_logging.h"
+#include "base/fuchsia/system_info.h"
 #include "base/logging.h"
 #include "base/no_destructor.h"
 #include "base/numerics/clamped_math.h"
@@ -89,12 +91,12 @@ int64_t GetAmountOfTotalDiskSpaceAndVolumePath(const FilePath& path,
 }  // namespace
 
 // static
-int64_t SysInfo::AmountOfPhysicalMemoryImpl() {
+uint64_t SysInfo::AmountOfPhysicalMemoryImpl() {
   return zx_system_get_physmem();
 }
 
 // static
-int64_t SysInfo::AmountOfAvailablePhysicalMemoryImpl() {
+uint64_t SysInfo::AmountOfAvailablePhysicalMemoryImpl() {
   // TODO(https://crbug.com/986608): Implement this.
   NOTIMPLEMENTED_LOG_ONCE();
   return 0;
@@ -102,11 +104,11 @@ int64_t SysInfo::AmountOfAvailablePhysicalMemoryImpl() {
 
 // static
 int SysInfo::NumberOfProcessors() {
-  return zx_system_get_num_cpus();
+  return static_cast<int>(zx_system_get_num_cpus());
 }
 
 // static
-int64_t SysInfo::AmountOfVirtualMemory() {
+uint64_t SysInfo::AmountOfVirtualMemory() {
   return 0;
 }
 
@@ -169,7 +171,8 @@ void SysInfo::SetAmountOfTotalDiskSpace(const FilePath& path, int64_t bytes) {
 
 // static
 std::string SysInfo::OperatingSystemVersion() {
-  return std::string(GetBuildInfoVersion());
+  return GetCachedBuildInfo().has_version() ? GetCachedBuildInfo().version()
+                                            : "";
 }
 
 // static
@@ -201,7 +204,17 @@ std::string SysInfo::CPUModelName() {
 
 // static
 size_t SysInfo::VMAllocationGranularity() {
-  return getpagesize();
+  return static_cast<size_t>(getpagesize());
+}
+
+SysInfo::HardwareInfo SysInfo::GetHardwareInfoSync() {
+  const auto product_info = GetProductInfo();
+
+  return {
+      .manufacturer =
+          product_info.has_manufacturer() ? product_info.manufacturer() : "",
+      .model = product_info.has_model() ? product_info.model() : "",
+  };
 }
 
 }  // namespace base

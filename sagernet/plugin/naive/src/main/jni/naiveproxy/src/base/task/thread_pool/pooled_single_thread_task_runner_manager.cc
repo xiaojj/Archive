@@ -60,7 +60,7 @@ size_t GetEnvironmentIndexForTraits(const TaskTraits& traits) {
   const bool is_background =
       traits.priority() == TaskPriority::BEST_EFFORT &&
       traits.thread_policy() == ThreadPolicy::PREFER_BACKGROUND &&
-      CanUseBackgroundPriorityForWorkerThread();
+      CanUseBackgroundThreadTypeForWorkerThread();
   if (traits.may_block() || traits.with_base_sync_primitives())
     return is_background ? BACKGROUND_BLOCKING : FOREGROUND_BLOCKING;
   return is_background ? BACKGROUND : FOREGROUND;
@@ -527,9 +527,14 @@ PooledSingleThreadTaskRunnerManager::~PooledSingleThreadTaskRunnerManager() {
 }
 
 void PooledSingleThreadTaskRunnerManager::Start(
+    scoped_refptr<SingleThreadTaskRunner> io_thread_task_runner,
     WorkerThreadObserver* worker_thread_observer) {
   DCHECK(!worker_thread_observer_);
   worker_thread_observer_ = worker_thread_observer;
+#if BUILDFLAG(IS_POSIX) && !BUILDFLAG(IS_NACL)
+  DCHECK(io_thread_task_runner);
+  io_thread_task_runner_ = std::move(io_thread_task_runner);
+#endif
 
   decltype(workers_) workers_to_start;
   {
@@ -544,7 +549,7 @@ void PooledSingleThreadTaskRunnerManager::Start(
   // unnecessary to call WakeUp() for each worker (in fact, an extraneous
   // WakeUp() would be racy and wrong - see https://crbug.com/862582).
   for (scoped_refptr<WorkerThread> worker : workers_to_start) {
-    worker->Start(worker_thread_observer_);
+    worker->Start(io_thread_task_runner_, worker_thread_observer_);
   }
 }
 
@@ -625,16 +630,16 @@ PooledSingleThreadTaskRunnerManager::CreateTaskRunnerImpl(
       worker_name += environment_params.name_suffix;
       worker = CreateAndRegisterWorkerThread<DelegateType>(
           worker_name, thread_mode,
-          CanUseBackgroundPriorityForWorkerThread()
-              ? environment_params.priority_hint
-              : ThreadPriority::NORMAL);
+          CanUseBackgroundThreadTypeForWorkerThread()
+              ? environment_params.thread_type_hint
+              : ThreadType::kDefault);
       new_worker = true;
     }
     started = started_;
   }
 
   if (new_worker && started)
-    worker->Start(worker_thread_observer_);
+    worker->Start(io_thread_task_runner_, worker_thread_observer_);
 
   return MakeRefCounted<PooledSingleThreadTaskRunner>(this, traits, worker,
                                                       thread_mode);
@@ -701,13 +706,13 @@ WorkerThread*
 PooledSingleThreadTaskRunnerManager::CreateAndRegisterWorkerThread(
     const std::string& name,
     SingleThreadTaskRunnerThreadMode thread_mode,
-    ThreadPriority priority_hint) {
+    ThreadType thread_type_hint) {
   int id = next_worker_id_++;
   std::unique_ptr<WorkerThreadDelegate> delegate =
       CreateWorkerThreadDelegate<DelegateType>(name, id, thread_mode);
   WorkerThreadDelegate* delegate_raw = delegate.get();
   scoped_refptr<WorkerThread> worker = MakeRefCounted<WorkerThread>(
-      priority_hint, std::move(delegate), task_tracker_);
+      thread_type_hint, std::move(delegate), task_tracker_);
   delegate_raw->set_worker(worker.get());
   workers_.emplace_back(std::move(worker));
   return workers_.back().get();

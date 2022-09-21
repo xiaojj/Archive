@@ -34,7 +34,7 @@
 #include "net/base/ip_endpoint.h"
 #include "net/base/net_errors.h"
 #include "net/base/port_util.h"
-#include "net/cert/internal/extended_key_usage.h"
+#include "net/cert/pki/extended_key_usage.h"
 #include "net/cert/test_root_certs.h"
 #include "net/log/net_log_source.h"
 #include "net/socket/next_proto.h"
@@ -277,11 +277,7 @@ EmbeddedTestServer::EmbeddedTestServer() : EmbeddedTestServer(TYPE_HTTP) {}
 
 EmbeddedTestServer::EmbeddedTestServer(Type type,
                                        HttpConnection::Protocol protocol)
-    : is_using_ssl_(type == TYPE_HTTPS),
-      protocol_(protocol),
-      connection_listener_(nullptr),
-      port_(0),
-      cert_(CERT_OK) {
+    : is_using_ssl_(type == TYPE_HTTPS), protocol_(protocol) {
   DCHECK(thread_checker_.CalledOnValidThread());
   // HTTP/2 is only valid by negotiation via TLS ALPN
   DCHECK(protocol_ != HttpConnection::Protocol::kHttp2 || type == TYPE_HTTPS);

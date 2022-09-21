@@ -10,15 +10,16 @@
 #include <atomic>
 #include <cstdint>
 
+#include "base/allocator/partition_allocator/partition_alloc-inl.h"
+#include "base/allocator/partition_allocator/partition_alloc_base/component_export.h"
 #include "base/allocator/partition_allocator/partition_alloc_base/cxx17_backports.h"
+#include "base/allocator/partition_allocator/partition_alloc_base/debug/debugging_buildflags.h"
+#include "base/allocator/partition_allocator/partition_alloc_base/immediate_crash.h"
+#include "base/allocator/partition_allocator/partition_alloc_buildflags.h"
 #include "base/allocator/partition_allocator/partition_alloc_check.h"
 #include "base/allocator/partition_allocator/partition_alloc_config.h"
 #include "base/allocator/partition_allocator/partition_alloc_constants.h"
 #include "base/allocator/partition_allocator/partition_root.h"
-#include "base/base_export.h"
-#include "base/callback.h"
-#include "base/compiler_specific.h"
-#include "base/dcheck_is_on.h"
 #include "build/build_config.h"
 
 namespace partition_alloc {
@@ -40,9 +41,9 @@ uintptr_t kThreadCacheNeedleArray[kThreadCacheNeedleArraySize] = {
 
 namespace internal {
 
-BASE_EXPORT PartitionTlsKey g_thread_cache_key;
+PA_COMPONENT_EXPORT(PARTITION_ALLOC) PartitionTlsKey g_thread_cache_key;
 #if defined(PA_THREAD_CACHE_FAST_TLS)
-BASE_EXPORT
+PA_COMPONENT_EXPORT(PARTITION_ALLOC)
 thread_local ThreadCache* g_thread_cache;
 #endif
 
@@ -61,7 +62,7 @@ void OnDllProcessDetach() {
   // mitigated inside the thread cache (since getting to it requires querying
   // TLS), but the PartitionRoot associated wih the thread cache can be made to
   // not use the thread cache anymore.
-  g_thread_cache_root.load(std::memory_order_relaxed)->with_thread_cache =
+  g_thread_cache_root.load(std::memory_order_relaxed)->flags.with_thread_cache =
       false;
 }
 #endif
@@ -69,9 +70,9 @@ void OnDllProcessDetach() {
 static bool g_thread_cache_key_created = false;
 }  // namespace
 
-constexpr base::TimeDelta ThreadCacheRegistry::kMinPurgeInterval;
-constexpr base::TimeDelta ThreadCacheRegistry::kMaxPurgeInterval;
-constexpr base::TimeDelta ThreadCacheRegistry::kDefaultPurgeInterval;
+constexpr internal::base::TimeDelta ThreadCacheRegistry::kMinPurgeInterval;
+constexpr internal::base::TimeDelta ThreadCacheRegistry::kMaxPurgeInterval;
+constexpr internal::base::TimeDelta ThreadCacheRegistry::kDefaultPurgeInterval;
 constexpr size_t ThreadCacheRegistry::kMinCachedMemoryForPurging;
 uint8_t ThreadCache::global_limits_[ThreadCache::kBucketCount];
 
@@ -168,7 +169,7 @@ void ThreadCacheRegistry::ForcePurgeAllThreadAfterForkUnsafe() {
   internal::ScopedGuard scoped_locker(GetLock());
   ThreadCache* tcache = list_head_;
   while (tcache) {
-#if DCHECK_IS_ON()
+#if BUILDFLAG(PA_DCHECK_IS_ON)
     // Before fork(), locks are acquired in the parent process. This means that
     // a concurrent allocation in the parent which must be filled by the central
     // allocator (i.e. the thread cache bucket is empty) will block inside the
@@ -354,7 +355,7 @@ void ThreadCache::RemoveTombstoneForTesting() {
 // static
 void ThreadCache::Init(PartitionRoot<>* root) {
 #if BUILDFLAG(IS_NACL)
-  IMMEDIATE_CRASH();
+  PA_IMMEDIATE_CRASH();
 #endif
   PA_CHECK(root->buckets[kBucketCount - 1].slot_size ==
            ThreadCache::kLargeSizeThreshold);
@@ -446,13 +447,14 @@ ThreadCache* ThreadCache::Create(PartitionRoot<internal::ThreadSafe>* root) {
   size_t usable_size;
   bool already_zeroed;
 
-  auto* bucket =
-      root->buckets + PartitionRoot<internal::ThreadSafe>::SizeToBucketIndex(
-                          raw_size, root->with_denser_bucket_distribution);
+  auto* bucket = root->buckets +
+                 PartitionRoot<internal::ThreadSafe>::SizeToBucketIndex(
+                     raw_size, root->flags.with_denser_bucket_distribution);
   uintptr_t buffer = root->RawAlloc(bucket, AllocFlags::kZeroFill, raw_size,
                                     internal::PartitionPageSize(), &usable_size,
                                     &already_zeroed);
-  ThreadCache* tcache = new (reinterpret_cast<void*>(buffer)) ThreadCache(root);
+  ThreadCache* tcache =
+      new (internal::SlotStartAddr2Ptr(buffer)) ThreadCache(root);
 
   // This may allocate.
   internal::PartitionTlsSet(internal::g_thread_cache_key, tcache);
@@ -475,7 +477,7 @@ ThreadCache* ThreadCache::Create(PartitionRoot<internal::ThreadSafe>* root) {
 ThreadCache::ThreadCache(PartitionRoot<>* root)
     : should_purge_(false),
       root_(root),
-      thread_id_(base::PlatformThread::CurrentId()),
+      thread_id_(internal::base::PlatformThread::CurrentId()),
       next_(nullptr),
       prev_(nullptr) {
   ThreadCacheRegistry::Instance().RegisterThreadCache(this);
@@ -519,11 +521,15 @@ void ThreadCache::Delete(void* tcache_ptr) {
 
   auto* root = tcache->root_;
   tcache->~ThreadCache();
-  root->RawFree(reinterpret_cast<uintptr_t>(tcache_ptr));
+  // TreadCache was allocated using RawAlloc() and SlotStartAddr2Ptr(), so it
+  // shifted by extras, but is MTE-tagged.
+  root->RawFree(internal::SlotStartPtr2Addr(tcache_ptr));
 
 #if BUILDFLAG(IS_WIN)
   // On Windows, allocations do occur during thread/process teardown, make sure
   // they don't resurrect the thread cache.
+  //
+  // Don't MTE-tag, as it'd mess with the sentinel value.
   //
   // TODO(lizeb): Investigate whether this is needed on POSIX as well.
   internal::PartitionTlsSet(internal::g_thread_cache_key,
@@ -679,7 +685,7 @@ void ThreadCache::FreeAfter(internal::PartitionFreelistEntry* head,
   // acquisitions can be expensive.
   internal::ScopedGuard guard(root_->lock_);
   while (head) {
-    uintptr_t slot_start = reinterpret_cast<uintptr_t>(head);
+    uintptr_t slot_start = internal::SlotStartPtr2Addr(head);
     head = head->GetNextForThreadCache<crash_on_corruption>(slot_size);
     root_->RawFreeLocked(slot_start);
   }

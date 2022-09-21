@@ -262,8 +262,7 @@ class QUIC_EXPORT_PRIVATE QuicSpdyStream
     virtual ~Http3DatagramVisitor() {}
 
     // Called when an HTTP/3 datagram is received. |payload| does not contain
-    // the stream ID. Note that this contains the stream ID even if flow IDs
-    // from draft-ietf-masque-h3-datagram-00 are in use.
+    // the stream ID.
     virtual void OnHttp3Datagram(QuicStreamId stream_id,
                                  absl::string_view payload) = 0;
   };
@@ -284,10 +283,6 @@ class QUIC_EXPORT_PRIVATE QuicSpdyStream
   void SetMaxDatagramTimeInQueue(QuicTime::Delta max_time_in_queue);
 
   void OnDatagramReceived(QuicDataReader* reader);
-
-  // Registers a datagram flow ID, only meant to be used when in legacy mode for
-  // draft-ietf-masque-h3-datagram-00.
-  void RegisterHttp3DatagramFlowId(QuicDatagramStreamId flow_id);
 
   QuicByteCount GetMaxDatagramSize() const;
 
@@ -339,20 +334,6 @@ class QUIC_EXPORT_PRIVATE QuicSpdyStream
 
     WebTransportSessionId session_id;
     WebTransportStreamAdapter adapter;
-  };
-
-  // Reason codes for `qpack_decoded_headers_accumulator_` being nullptr.
-  enum class QpackDecodedHeadersAccumulatorResetReason {
-    // `qpack_decoded_headers_accumulator_` was default constructed to nullptr.
-    kUnSet = 0,
-    // `qpack_decoded_headers_accumulator_` was reset in the corresponding
-    // method.
-    kResetInOnHeadersDecoded = 1,
-    kResetInOnHeaderDecodingError = 2,
-    kResetInOnStreamReset1 = 3,
-    kResetInOnStreamReset2 = 4,
-    kResetInResetWithError = 5,
-    kResetInOnClose = 6,
   };
 
   // Called by HttpDecoderVisitor.
@@ -422,9 +403,6 @@ class QUIC_EXPORT_PRIVATE QuicSpdyStream
   // Headers accumulator for decoding HEADERS frame payload.
   std::unique_ptr<QpackDecodedHeadersAccumulator>
       qpack_decoded_headers_accumulator_;
-  // Reason for `qpack_decoded_headers_accumulator_` being nullptr.
-  QpackDecodedHeadersAccumulatorResetReason
-      qpack_decoded_headers_accumulator_reset_reason_;
   // Visitor of the HttpDecoder.
   std::unique_ptr<HttpDecoderVisitor> http_decoder_visitor_;
   // HttpDecoder for processing raw incoming stream frames.
@@ -467,9 +445,6 @@ class QUIC_EXPORT_PRIVATE QuicSpdyStream
 
   // HTTP/3 Datagram support.
   Http3DatagramVisitor* datagram_visitor_ = nullptr;
-  // Flow ID is only used when in legacy mode for
-  // draft-ietf-masque-h3-datagram-00.
-  absl::optional<QuicDatagramStreamId> datagram_flow_id_;
 };
 
 }  // namespace quic

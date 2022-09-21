@@ -21,28 +21,42 @@ namespace base {
 
 namespace internal {
 
-// - BACKGROUND corresponds to Android's PRIORITY_BACKGROUND = 10 value and can
+// - kRealtimeAudio corresponds to Android's PRIORITY_AUDIO = -16 value.
+// - kDisplay corresponds to Android's PRIORITY_DISPLAY = -4 value.
+// - kBackground corresponds to Android's PRIORITY_BACKGROUND = 10 value and can
 // result in heavy throttling and force the thread onto a little core on
 // big.LITTLE devices.
-// - DISPLAY corresponds to Android's PRIORITY_DISPLAY = -4 value.
-// - REALTIME_AUDIO corresponds to Android's PRIORITY_AUDIO = -16 value.
-const ThreadPriorityToNiceValuePair kThreadPriorityToNiceValueMap[4] = {
-    {ThreadPriority::BACKGROUND, 10},
-    {ThreadPriority::NORMAL, 0},
-    {ThreadPriority::DISPLAY, -4},
-    {ThreadPriority::REALTIME_AUDIO, -16},
+const ThreadPriorityToNiceValuePairForTest
+    kThreadPriorityToNiceValueMapForTest[4] = {
+        {ThreadPriorityForTest::kRealtimeAudio, -16},
+        {ThreadPriorityForTest::kDisplay, -4},
+        {ThreadPriorityForTest::kNormal, 0},
+        {ThreadPriorityForTest::kBackground, 10},
 };
 
-absl::optional<bool> CanIncreaseCurrentThreadPriorityForPlatform(
-    ThreadPriority priority) {
-  return absl::nullopt;
-}
+// - kBackground corresponds to Android's PRIORITY_BACKGROUND = 10 value and can
+// result in heavy throttling and force the thread onto a little core on
+// big.LITTLE devices.
+// - kCompositing and kDisplayCritical corresponds to Android's PRIORITY_DISPLAY
+// = -4 value.
+// - kRealtimeAudio corresponds to Android's PRIORITY_AUDIO = -16 value.
+const ThreadTypeToNiceValuePair kThreadTypeToNiceValueMap[5] = {
+    {ThreadType::kBackground, 10},     {ThreadType::kDefault, 0},
+    {ThreadType::kCompositing, -4},    {ThreadType::kDisplayCritical, -4},
+    {ThreadType::kRealtimeAudio, -16},
+};
 
-bool SetCurrentThreadPriorityForPlatform(ThreadPriority priority) {
+bool CanSetThreadTypeToRealtimeAudio() {
   return false;
 }
 
-absl::optional<ThreadPriority> GetCurrentThreadPriorityForPlatform() {
+bool SetCurrentThreadTypeForPlatform(ThreadType thread_type,
+                                     MessagePumpType pump_type_hint) {
+  return false;
+}
+
+absl::optional<ThreadPriorityForTest>
+GetCurrentThreadPriorityForPlatformForTest() {
   return absl::nullopt;
 }
 

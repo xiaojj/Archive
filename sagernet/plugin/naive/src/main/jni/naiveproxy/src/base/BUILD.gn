@@ -75,7 +75,7 @@ declare_args() {
 # Chromecast builds have full control over the platform and ensure that
 # the kernel and glibc versions used have patched the vulnerabilities,
 # so it is safe to use mutex priority inheritance on Chromecast platform.
-assert(!enable_mutex_priority_inheritance || is_chromecast,
+assert(!enable_mutex_priority_inheritance || is_castos || is_cast_android,
        "Do not enable PI mutexes without consulting the security team")
 
 assert(!is_nacl || is_nacl_saigo,
@@ -112,11 +112,6 @@ config("todo_buildflag_build_rust_json_parser") {
     "--cfg",
     "buildflag__build_rust_json_parser",
   ]
-}
-
-config("base_implementation") {
-  defines = [ "BASE_IMPLEMENTATION" ]
-  configs = [ "//build/config/compiler:wexit_time_destructors" ]
 }
 
 if (is_win) {
@@ -164,6 +159,13 @@ buildflag_header("ios_cronet_buildflags") {
   flags = [ "CRONET_BUILD=$is_cronet_build" ]
 }
 
+enable_message_pump_epoll = is_linux || is_chromeos || is_android
+buildflag_header("message_pump_buildflags") {
+  header = "message_pump_buildflags.h"
+  header_dir = "base/message_loop"
+  flags = [ "ENABLE_MESSAGE_PUMP_EPOLL=$enable_message_pump_epoll" ]
+}
+
 # Base and everything it depends on should be a static library rather than
 # a source set. Base is more of a "library" in the classic sense in that many
 # small parts of it are used in many different contexts. This combined with a
@@ -185,6 +187,10 @@ mixed_component("base") {
     "allocator/allocator_check.h",
     "allocator/allocator_extension.cc",
     "allocator/allocator_extension.h",
+    "allocator/dispatcher/dispatcher.cc",
+    "allocator/dispatcher/dispatcher.h",
+    "allocator/dispatcher/reentry_guard.cc",
+    "allocator/dispatcher/reentry_guard.h",
     "as_const.h",
     "at_exit.cc",
     "at_exit.h",
@@ -222,6 +228,8 @@ mixed_component("base") {
     "cancelable_callback.h",
     "check.cc",
     "check.h",
+    "check_is_test.cc",
+    "check_is_test.h",
     "check_op.cc",
     "check_op.h",
     "command_line.cc",
@@ -402,7 +410,10 @@ mixed_component("base") {
     "memory/ptr_util.h",
     "memory/raw_ptr.cc",
     "memory/raw_ptr.h",
+    "memory/raw_ptr_asan_service.cc",
+    "memory/raw_ptr_asan_service.h",
     "memory/raw_ptr_exclusion.h",
+    "memory/raw_ref.h",
     "memory/raw_scoped_refptr_mismatch_checker.h",
     "memory/read_only_shared_memory_region.cc",
     "memory/read_only_shared_memory_region.h",
@@ -501,7 +512,6 @@ mixed_component("base") {
     "native_library.cc",
     "native_library.h",
     "no_destructor.h",
-    "notreached.cc",
     "notreached.h",
     "observer_list.h",
     "observer_list_internal.cc",
@@ -555,7 +565,6 @@ mixed_component("base") {
     "profiler/metadata_recorder.h",
     "profiler/module_cache.cc",
     "profiler/module_cache.h",
-    "profiler/native_unwinder.h",
     "profiler/profile_builder.h",
     "profiler/register_context.h",
     "profiler/sample_metadata.cc",
@@ -592,6 +601,8 @@ mixed_component("base") {
     "sampling_heap_profiler/poisson_allocation_sampler.h",
     "sampling_heap_profiler/sampling_heap_profiler.cc",
     "sampling_heap_profiler/sampling_heap_profiler.h",
+    "scoped_add_feature_flags.cc",
+    "scoped_add_feature_flags.h",
     "scoped_clear_last_error.h",
     "scoped_environment_variable_override.cc",
     "scoped_environment_variable_override.h",
@@ -646,8 +657,8 @@ mixed_component("base") {
     "strings/utf_string_conversion_utils.h",
     "strings/utf_string_conversions.cc",
     "strings/utf_string_conversions.h",
-    "substring_set_matcher/string_pattern.cc",
-    "substring_set_matcher/string_pattern.h",
+    "substring_set_matcher/matcher_string_pattern.cc",
+    "substring_set_matcher/matcher_string_pattern.h",
     "substring_set_matcher/substring_set_matcher.cc",
     "substring_set_matcher/substring_set_matcher.h",
     "supports_user_data.cc",
@@ -915,6 +926,7 @@ mixed_component("base") {
     "trace_event/trace_id_helper.h",
     "traits_bag.h",
     "tuple.h",
+    "types/always_false.h",
     "types/expected.h",
     "types/expected_internal.h",
     "types/id_type.h",
@@ -992,8 +1004,6 @@ mixed_component("base") {
       "synchronization/waitable_event_posix.cc",
       "synchronization/waitable_event_watcher_posix.cc",
       "system/sys_info_posix.cc",
-      "task/thread_pool/task_tracker_posix.cc",
-      "task/thread_pool/task_tracker_posix.h",
       "threading/platform_thread_internal_posix.cc",
       "threading/platform_thread_internal_posix.h",
       "threading/platform_thread_posix.cc",
@@ -1003,8 +1013,6 @@ mixed_component("base") {
 
     if (!is_nacl && !is_apple) {
       sources += [
-        "cpu_affinity_posix.cc",
-        "cpu_affinity_posix.h",
         "profiler/stack_copier_signal.cc",
         "profiler/stack_copier_signal.h",
         "profiler/stack_sampler_posix.cc",
@@ -1016,11 +1024,11 @@ mixed_component("base") {
 
   if (is_win) {
     sources += [
-      "debug/close_handle_hook_win.cc",
-      "debug/close_handle_hook_win.h",
       "debug/debugger_win.cc",
       "debug/gdi_debug_util_win.cc",
       "debug/gdi_debug_util_win.h",
+      "debug/handle_hooks_win.cc",
+      "debug/handle_hooks_win.h",
       "debug/invalid_access_win.cc",
       "debug/invalid_access_win.h",
       "debug/stack_trace_win.cc",
@@ -1168,6 +1176,7 @@ mixed_component("base") {
       "win/variant_vector.h",
       "win/vector.cc",
       "win/vector.h",
+      "win/win_handle_types.h",
       "win/win_handle_types_list.inc",
       "win/win_util.cc",
       "win/win_util.h",
@@ -1270,9 +1279,9 @@ mixed_component("base") {
       "process/process_iterator_mac.cc",
       "process/process_mac.cc",
       "process/process_metrics_mac.cc",
+      "profiler/frame_pointer_unwinder.cc",
+      "profiler/frame_pointer_unwinder.h",
       "profiler/module_cache_mac.cc",
-      "profiler/native_unwinder_apple.cc",
-      "profiler/native_unwinder_apple.h",
       "profiler/stack_sampler_mac.cc",
       "profiler/suspendable_thread_delegate_mac.cc",
       "profiler/suspendable_thread_delegate_mac.h",
@@ -1318,8 +1327,8 @@ mixed_component("base") {
 
     if (ios_stack_profiler_enabled) {
       sources += [
-        "profiler/native_unwinder_apple.cc",
-        "profiler/native_unwinder_apple.h",
+        "profiler/frame_pointer_unwinder.cc",
+        "profiler/frame_pointer_unwinder.h",
         "profiler/suspendable_thread_delegate_mac.cc",
         "profiler/suspendable_thread_delegate_mac.h",
       ]
@@ -1411,25 +1420,25 @@ mixed_component("base") {
   }
 
   all_dependent_configs = []
-  defines = []
+  defines = [ "BASE_IMPLEMENTATION" ]
   data = []
   data_deps = []
   libs = []
   frameworks = []
 
   configs += [
-    ":base_implementation",
     "//build/config:precompiled_headers",
+    "//build/config/compiler:prevent_unsafe_narrowing",
+    "//build/config/compiler:wexit_time_destructors",
     "//build/config/compiler:wglobal_constructors",
   ]
 
   deps = [
+    ":message_pump_buildflags",
     "//base/allocator:buildflags",
     "//base/third_party/double_conversion",
     "//base/third_party/dynamic_annotations",
     "//build:branding_buildflags",
-    "//build:chromecast_buildflags",
-    "//build:chromeos_buildflags",
     "//build/config/compiler:compiler_buildflags",
     "//third_party/modp_b64",
   ]
@@ -1485,15 +1494,17 @@ mixed_component("base") {
     ":sanitizer_buildflags",
     ":synchronization_buildflags",
     ":tracing_buildflags",
+    "//base/allocator/partition_allocator:buildflags",
     "//base/numerics:base_numerics",
+    "//build:chromecast_buildflags",
+    "//build:chromeos_buildflags",
     "//third_party/abseil-cpp:absl",
   ]
 
   # Needed for <atomic> if using newer C++ library than sysroot, except if
   # building inside the cros_sdk environment - use host_toolchain as a
   # more robust check for this.
-  if (!use_sysroot &&
-      (is_linux || is_chromeos) && !is_chromecast &&
+  if (!use_sysroot && (is_chromeos || (is_linux && !is_castos)) &&
       host_toolchain != "//build/toolchain/cros:host") {
     libs += [ "atomic" ]
   }
@@ -1581,7 +1592,7 @@ mixed_component("base") {
 
   # Allow more direct string conversions on platforms with native utf8
   # strings
-  if (is_apple || is_chromeos || is_chromecast || is_fuchsia) {
+  if (is_apple || is_chromeos || is_castos || is_cast_android || is_fuchsia) {
     defines += [ "SYSTEM_NATIVE_UTF8" ]
   }
 
@@ -1676,8 +1687,14 @@ mixed_component("base") {
       "logging_chromeos.cc",
       "system/sys_info_chromeos.cc",
     ]
-    if (is_chromeos_ash) {
-      sources += [ "power_monitor/power_monitor_device_source_chromeos.cc" ]
+
+    sources += [ "power_monitor/power_monitor_device_source_chromeos.cc" ]
+
+    if (current_cpu == "x64") {
+      sources += [
+        "profiler/frame_pointer_unwinder.cc",
+        "profiler/frame_pointer_unwinder.h",
+      ]
     }
   }
 
@@ -1699,8 +1716,6 @@ mixed_component("base") {
       "files/file_util_fuchsia.cc",
       "files/file_util_posix.cc",
       "files/memory_mapped_file_posix.cc",
-      "fuchsia/build_info.cc",
-      "fuchsia/build_info.h",
       "fuchsia/default_job.cc",
       "fuchsia/default_job.h",
       "fuchsia/file_utils.cc",
@@ -1728,6 +1743,8 @@ mixed_component("base") {
       "fuchsia/service_provider_impl.h",
       "fuchsia/startup_context.cc",
       "fuchsia/startup_context.h",
+      "fuchsia/system_info.cc",
+      "fuchsia/system_info.h",
       "memory/page_size_posix.cc",
       "memory/platform_shared_memory_mapper_fuchsia.cc",
       "memory/platform_shared_memory_region_fuchsia.cc",
@@ -1762,8 +1779,6 @@ mixed_component("base") {
       "synchronization/waitable_event_posix.cc",
       "synchronization/waitable_event_watcher_posix.cc",
       "system/sys_info_fuchsia.cc",
-      "task/thread_pool/task_tracker_posix.cc",
-      "task/thread_pool/task_tracker_posix.h",
       "threading/platform_thread_fuchsia.cc",
       "threading/platform_thread_posix.cc",
       "threading/thread_local_storage_posix.cc",
@@ -1794,6 +1809,7 @@ mixed_component("base") {
 
     deps += [
       "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.buildinfo",
+      "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.hwinfo",
       "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.media",
       "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.sys",
       "//third_party/fuchsia-sdk/sdk/pkg/async-default",
@@ -1909,8 +1925,6 @@ mixed_component("base") {
       "system/sys_info_posix.cc",
       "task/thread_pool/initialization_util.cc",
       "task/thread_pool/initialization_util.h",
-      "task/thread_pool/task_tracker_posix.cc",
-      "task/thread_pool/task_tracker_posix.h",
     ]
   } else {
     # Remove NaCl stuff.
@@ -1936,9 +1950,15 @@ mixed_component("base") {
     # partition_alloc code if use_partition_alloc = false because no code uses
     # partition_alloc.
     public_deps += [ "allocator/partition_allocator:partition_alloc" ]
-    if (current_os == "openwrt") {
-      public_deps -= [ "allocator/partition_allocator:partition_alloc" ]
-    }
+
+    # PartitionAlloc is not yet built as a standalone component, and
+    # "external" usage of some exported functions causes Win32 component
+    # builds to break (LNK4217). This statement properly belongs _only_
+    # in PA's BUILD.gn, but we need it here to ensure the rest of
+    # `//base` is also considered "inside" the PA implementation.
+    #
+    # TODO(crbug.com/1151236): Remove this when possible.
+    defines += [ "IS_PARTITION_ALLOC_IMPL" ]
   }
 
   # Windows.
@@ -2133,6 +2153,8 @@ mixed_component("base") {
       "mac/scoped_objc_class_swizzler.h",
       "mac/scoped_objc_class_swizzler.mm",
       "mac/scoped_typeref.h",
+      "memory/platform_shared_memory_mapper_mac.cc",
+      "memory/platform_shared_memory_region_mac.cc",
       "message_loop/message_pump_mac.h",
       "message_loop/message_pump_mac.mm",
       "power_monitor/power_monitor_device_source_ios.mm",
@@ -2174,7 +2196,7 @@ mixed_component("base") {
   }
 
   if (dep_libevent) {
-    deps += [ "//base/third_party/libevent" ]
+    deps += [ "//third_party/libevent" ]
   }
 
   if (use_libevent) {
@@ -2184,9 +2206,16 @@ mixed_component("base") {
     ]
   }
 
+  if (enable_message_pump_epoll) {
+    sources += [
+      "message_loop/message_pump_epoll.cc",
+      "message_loop/message_pump_epoll.h",
+    ]
+  }
+
   # Android and MacOS have their own custom shared memory handle
   # implementations. e.g. due to supporting both POSIX and native handles.
-  if (is_posix && !is_android && !is_mac) {
+  if (is_posix && !is_android && !is_apple) {
     sources += [
       "memory/platform_shared_memory_mapper_posix.cc",
       "memory/platform_shared_memory_region_posix.cc",
@@ -2225,8 +2254,7 @@ mixed_component("base") {
     ]
   }
 
-  if ((is_posix && !is_apple && !is_android && !is_chromeos_ash) ||
-      is_fuchsia) {
+  if ((is_posix && !is_apple && !is_android && !is_chromeos) || is_fuchsia) {
     sources += [ "power_monitor/power_monitor_device_source_stub.cc" ]
   }
 
@@ -2283,8 +2311,6 @@ mixed_component("base") {
       "trace_event/process_memory_dump.cc",
       "trace_event/process_memory_dump.h",
       "trace_event/task_execution_macros.h",
-      "trace_event/thread_instruction_count.cc",
-      "trace_event/thread_instruction_count.h",
       "trace_event/trace_arguments.cc",
       "trace_event/trace_arguments.h",
       "trace_event/trace_buffer.cc",
@@ -2379,7 +2405,6 @@ mixed_component("base") {
         [ "//build/config/clang:llvm-symbolizer_data($host_toolchain)" ]
   }
 
-  configs += [ "//build/config/compiler:wexit_time_destructors" ]
   if (!is_debug) {
     configs -= [ "//build/config/compiler:default_optimization" ]
     configs += [ "//build/config/compiler:optimize_max" ]

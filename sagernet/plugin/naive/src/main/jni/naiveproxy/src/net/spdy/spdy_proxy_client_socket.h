@@ -51,7 +51,7 @@ class NET_EXPORT_PRIVATE SpdyProxyClientSocket : public ProxyClientSocket,
                         const std::string& user_agent,
                         const HostPortPair& endpoint,
                         const NetLogWithSource& source_net_log,
-                        HttpAuthController* auth_controller,
+                        scoped_refptr<HttpAuthController> auth_controller,
                         ProxyDelegate* proxy_delegate);
 
   SpdyProxyClientSocket(const SpdyProxyClientSocket&) = delete;
@@ -173,16 +173,16 @@ class NET_EXPORT_PRIVATE SpdyProxyClientSocket : public ProxyClientSocket,
 
   // User provided buffer for the Read() response.
   scoped_refptr<IOBuffer> user_buffer_;
-  size_t user_buffer_len_;
+  size_t user_buffer_len_ = 0;
 
   // User specified number of bytes to be written.
-  int write_buffer_len_;
+  int write_buffer_len_ = 0;
 
   // True if the transport socket has ever sent data.
-  bool was_ever_used_;
+  bool was_ever_used_ = false;
 
-  bool use_fastopen_;
-  bool read_headers_pending_;
+  bool use_fastopen_ = false;
+  bool read_headers_pending_ = false;
 
   const NetLogWithSource net_log_;
   const NetLogSource source_dependency_;

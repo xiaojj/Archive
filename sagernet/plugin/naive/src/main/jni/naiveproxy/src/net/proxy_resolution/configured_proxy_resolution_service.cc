@@ -45,18 +45,11 @@
 #include "net/url_request/url_request_context.h"
 
 #if BUILDFLAG(IS_WIN)
-#include "net/proxy_resolution/win/proxy_config_service_win.h"
 #include "net/proxy_resolution/win/proxy_resolver_winhttp.h"
 #elif BUILDFLAG(IS_IOS)
-#include "net/proxy_resolution/proxy_config_service_ios.h"
 #include "net/proxy_resolution/proxy_resolver_mac.h"
 #elif BUILDFLAG(IS_MAC)
-#include "net/proxy_resolution/proxy_config_service_mac.h"
 #include "net/proxy_resolution/proxy_resolver_mac.h"
-#elif BUILDFLAG(IS_LINUX)
-#include "net/proxy_resolution/proxy_config_service_linux.h"
-#elif BUILDFLAG(IS_ANDROID)
-#include "net/proxy_resolution/proxy_config_service_android.h"
 #endif
 
 using base::TimeTicks;
@@ -64,35 +57,6 @@ using base::TimeTicks;
 namespace net {
 
 namespace {
-
-#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_APPLE) || BUILDFLAG(IS_LINUX)
-constexpr net::NetworkTrafficAnnotationTag kSystemProxyConfigTrafficAnnotation =
-    net::DefineNetworkTrafficAnnotation("proxy_config_system", R"(
-      semantics {
-        sender: "Proxy Config"
-        description:
-          "Establishing a connection through a proxy server using system proxy "
-          "settings."
-        trigger:
-          "Whenever a network request is made when the system proxy settings "
-          "are used, and they indicate to use a proxy server."
-        data:
-          "Proxy configuration."
-        destination: OTHER
-        destination_other:
-          "The proxy server specified in the configuration."
-      }
-      policy {
-        cookies_allowed: NO
-        setting:
-          "User cannot override system proxy settings, but can change them "
-          "through 'Advanced/System/Open proxy settings'."
-        policy_exception_justification:
-          "Using either of 'ProxyMode', 'ProxyServer', or 'ProxyPacUrl' "
-          "policies can set Chrome to use a specific proxy settings and avoid "
-          "system proxy."
-      })");
-#endif
 
 const size_t kDefaultNumPacThreads = 4;
 
@@ -354,21 +318,6 @@ base::Value NetLogFinishedResolvingProxyParams(const ProxyInfo* result) {
   return dict;
 }
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-class UnsetProxyConfigService : public ProxyConfigService {
- public:
-  UnsetProxyConfigService() = default;
-  ~UnsetProxyConfigService() override = default;
-
-  void AddObserver(Observer* observer) override {}
-  void RemoveObserver(Observer* observer) override {}
-  ConfigAvailability GetLatestProxyConfig(
-      ProxyConfigWithAnnotation* config) override {
-    return CONFIG_UNSET;
-  }
-};
-#endif
-
 // Returns a sanitized copy of |url| which is safe to pass on to a PAC script.
 //
 // PAC scripts are modelled as being controllable by a network-present
@@ -418,11 +367,7 @@ GURL SanitizeUrl(const GURL& url) {
 
 class ConfiguredProxyResolutionService::InitProxyResolver {
  public:
-  InitProxyResolver()
-      : proxy_resolver_factory_(nullptr),
-        proxy_resolver_(nullptr),
-        next_state_(State::kNone),
-        quick_check_enabled_(true) {}
+  InitProxyResolver() = default;
 
   InitProxyResolver(const InitProxyResolver&) = delete;
   InitProxyResolver& operator=(const InitProxyResolver&) = delete;
@@ -603,12 +548,12 @@ class ConfiguredProxyResolutionService::InitProxyResolver {
   PacFileDataWithSource script_data_;
   base::TimeDelta wait_delay_;
   std::unique_ptr<PacFileDecider> decider_;
-  raw_ptr<ProxyResolverFactory> proxy_resolver_factory_;
+  raw_ptr<ProxyResolverFactory> proxy_resolver_factory_ = nullptr;
   std::unique_ptr<ProxyResolverFactory::Request> create_resolver_request_;
-  raw_ptr<std::unique_ptr<ProxyResolver>> proxy_resolver_;
+  raw_ptr<std::unique_ptr<ProxyResolver>> proxy_resolver_ = nullptr;
   CompletionOnceCallback callback_;
-  State next_state_;
-  bool quick_check_enabled_;
+  State next_state_ = State::kNone;
+  bool quick_check_enabled_ = true;
 };
 
 // ConfiguredProxyResolutionService::PacFileDeciderPoller
@@ -837,8 +782,6 @@ ConfiguredProxyResolutionService::ConfiguredProxyResolutionService(
     bool quick_check_enabled)
     : config_service_(std::move(config_service)),
       resolver_factory_(std::move(resolver_factory)),
-      current_state_(STATE_NONE),
-      permanent_error_(OK),
       net_log_(net_log),
       stall_proxy_auto_config_delay_(
           base::Milliseconds(kDelayAfterNetworkChangesMs)),
@@ -883,7 +826,7 @@ ConfiguredProxyResolutionService::CreateWithoutProxyResolver(
 
 // static
 std::unique_ptr<ConfiguredProxyResolutionService>
-ConfiguredProxyResolutionService::CreateFixed(
+ConfiguredProxyResolutionService::CreateFixedForTest(
     const ProxyConfigWithAnnotation& pc) {
   // TODO(eroman): This isn't quite right, won't work if |pc| specifies
   //               a PAC script.
@@ -894,13 +837,13 @@ ConfiguredProxyResolutionService::CreateFixed(
 
 // static
 std::unique_ptr<ConfiguredProxyResolutionService>
-ConfiguredProxyResolutionService::CreateFixed(
+ConfiguredProxyResolutionService::CreateFixedForTest(
     const std::string& proxy,
     const NetworkTrafficAnnotationTag& traffic_annotation) {
   ProxyConfig proxy_config;
   proxy_config.proxy_rules().ParseFromString(proxy);
   ProxyConfigWithAnnotation annotated_config(proxy_config, traffic_annotation);
-  return ConfiguredProxyResolutionService::CreateFixed(annotated_config);
+  return ConfiguredProxyResolutionService::CreateFixedForTest(annotated_config);
 }
 
 // static
@@ -915,16 +858,15 @@ ConfiguredProxyResolutionService::CreateDirect() {
 
 // static
 std::unique_ptr<ConfiguredProxyResolutionService>
-ConfiguredProxyResolutionService::CreateFixedFromPacResult(
+ConfiguredProxyResolutionService::CreateFixedFromPacResultForTest(
     const std::string& pac_string,
     const NetworkTrafficAnnotationTag& traffic_annotation) {
   // We need the settings to contain an "automatic" setting, otherwise the
   // ProxyResolver dependency we give it will never be used.
-  std::unique_ptr<ProxyConfigService> proxy_config_service(
-      new ProxyConfigServiceFixed(ProxyConfigWithAnnotation(
-          ProxyConfig::CreateFromCustomPacURL(
-              GURL("https://my-pac-script.invalid/wpad.dat")),
-          traffic_annotation)));
+  auto proxy_config_service = std::make_unique<ProxyConfigServiceFixed>(
+      ProxyConfigWithAnnotation(ProxyConfig::CreateFromCustomPacURL(GURL(
+                                    "https://my-pac-script.invalid/wpad.dat")),
+                                traffic_annotation));
 
   return std::make_unique<ConfiguredProxyResolutionService>(
       std::move(proxy_config_service),
@@ -934,12 +876,12 @@ ConfiguredProxyResolutionService::CreateFixedFromPacResult(
 
 // static
 std::unique_ptr<ConfiguredProxyResolutionService>
-ConfiguredProxyResolutionService::CreateFixedFromAutoDetectedPacResult(
+ConfiguredProxyResolutionService::CreateFixedFromAutoDetectedPacResultForTest(
     const std::string& pac_string,
     const NetworkTrafficAnnotationTag& traffic_annotation) {
-  std::unique_ptr<ProxyConfigService> proxy_config_service(
-      new ProxyConfigServiceFixed(ProxyConfigWithAnnotation(
-          ProxyConfig::CreateAutoDetect(), traffic_annotation)));
+  auto proxy_config_service =
+      std::make_unique<ProxyConfigServiceFixed>(ProxyConfigWithAnnotation(
+          ProxyConfig::CreateAutoDetect(), traffic_annotation));
 
   return std::make_unique<ConfiguredProxyResolutionService>(
       std::move(proxy_config_service),
@@ -1363,18 +1305,18 @@ void ConfiguredProxyResolutionService::ForceReloadProxyConfig() {
   ApplyProxyConfigIfAvailable();
 }
 
-base::Value ConfiguredProxyResolutionService::GetProxyNetLogValues() {
-  base::Value net_info_dict(base::Value::Type::DICTIONARY);
+base::Value::Dict ConfiguredProxyResolutionService::GetProxyNetLogValues() {
+  base::Value::Dict net_info_dict;
 
   // Log Proxy Settings.
   {
-    base::Value dict(base::Value::Type::DICTIONARY);
+    base::Value::Dict dict;
     if (fetched_config_)
-      dict.SetKey("original", fetched_config_->value().ToValue());
+      dict.Set("original", fetched_config_->value().ToValue());
     if (config_)
-      dict.SetKey("effective", config_->value().ToValue());
+      dict.Set("effective", config_->value().ToValue());
 
-    net_info_dict.SetKey(kNetInfoProxySettings, std::move(dict));
+    net_info_dict.Set(kNetInfoProxySettings, std::move(dict));
   }
 
   // Log Bad Proxies.
@@ -1393,7 +1335,7 @@ base::Value ConfiguredProxyResolutionService::GetProxyNetLogValues() {
       list.Append(std::move(dict));
     }
 
-    net_info_dict.SetKey(kNetInfoBadProxies, std::move(list));
+    net_info_dict.Set(kNetInfoBadProxies, std::move(list));
   }
 
   return net_info_dict;
@@ -1403,56 +1345,6 @@ bool ConfiguredProxyResolutionService::CastToConfiguredProxyResolutionService(
     ConfiguredProxyResolutionService** configured_proxy_resolution_service) {
   *configured_proxy_resolution_service = this;
   return true;
-}
-
-// static
-std::unique_ptr<ProxyConfigService>
-ConfiguredProxyResolutionService::CreateSystemProxyConfigService(
-    const scoped_refptr<base::SequencedTaskRunner>& main_task_runner) {
-#if BUILDFLAG(IS_WIN)
-  return std::make_unique<ProxyConfigServiceWin>(
-      kSystemProxyConfigTrafficAnnotation);
-#elif BUILDFLAG(IS_IOS)
-  return std::make_unique<ProxyConfigServiceIOS>(
-      kSystemProxyConfigTrafficAnnotation);
-#elif BUILDFLAG(IS_MAC)
-  return std::make_unique<ProxyConfigServiceMac>(
-      main_task_runner, kSystemProxyConfigTrafficAnnotation);
-#elif BUILDFLAG(IS_CHROMEOS_ASH)
-  LOG(ERROR) << "ProxyConfigService for ChromeOS should be created in "
-             << "profile_io_data.cc::CreateProxyConfigService and this should "
-             << "be used only for examples.";
-  return std::make_unique<UnsetProxyConfigService>();
-#elif BUILDFLAG(IS_LINUX)
-  std::unique_ptr<ProxyConfigServiceLinux> linux_config_service(
-      new ProxyConfigServiceLinux());
-
-  // Assume we got called on the thread that runs the default glib
-  // main loop, so the current thread is where we should be running
-  // gsettings calls from.
-  scoped_refptr<base::SingleThreadTaskRunner> glib_thread_task_runner =
-      base::ThreadTaskRunnerHandle::Get();
-
-  // Synchronously fetch the current proxy config (since we are running on
-  // glib_default_loop). Additionally register for notifications (delivered in
-  // either |glib_default_loop| or an internal sequenced task runner) to
-  // keep us updated when the proxy config changes.
-  linux_config_service->SetupAndFetchInitialConfig(
-      glib_thread_task_runner, main_task_runner,
-      kSystemProxyConfigTrafficAnnotation);
-
-  return std::move(linux_config_service);
-#elif BUILDFLAG(IS_ANDROID)
-  return std::make_unique<ProxyConfigServiceAndroid>(
-      main_task_runner, base::ThreadTaskRunnerHandle::Get());
-#elif BUILDFLAG(IS_FUCHSIA)
-  // TODO(crbug.com/889195): Implement a system proxy service for Fuchsia.
-  return std::make_unique<ProxyConfigServiceDirect>();
-#else
-  LOG(WARNING) << "Failed to choose a system proxy settings fetcher "
-                  "for this platform.";
-  return std::make_unique<ProxyConfigServiceDirect>();
-#endif
 }
 
 // static

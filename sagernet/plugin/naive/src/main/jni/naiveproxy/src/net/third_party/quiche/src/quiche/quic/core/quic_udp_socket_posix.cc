@@ -9,8 +9,11 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 
+#include "absl/base/optimization.h"
+#include "quiche/quic/core/io/socket.h"
 #include "quiche/quic/core/quic_udp_socket.h"
 #include "quiche/quic/platform/api/quic_bug_tracker.h"
+#include "quiche/quic/platform/api/quic_ip_address_family.h"
 #include "quiche/quic/platform/api/quic_udp_socket_platform_api.h"
 
 #if defined(__APPLE__) && !defined(__APPLE_USE_RFC_3542)
@@ -56,49 +59,6 @@ const size_t kMinCmsgSpaceForRead =
     + CMSG_SPACE(sizeof(in6_pktinfo))  // V6 Self IP
     + kCmsgSpaceForRecvTimestamp + CMSG_SPACE(sizeof(int))  // TTL
     + kCmsgSpaceForGooglePacketHeader;
-
-QuicUdpSocketFd CreateNonblockingSocket(int address_family) {
-#if defined(__linux__) && defined(SOCK_NONBLOCK)
-
-  // Create a nonblocking socket directly.
-  int fd = socket(address_family, SOCK_DGRAM | SOCK_NONBLOCK, IPPROTO_UDP);
-  if (fd < 0) {
-    QUIC_LOG_FIRST_N(ERROR, 100)
-        << "socket() failed with address_family=" << address_family << ": "
-        << strerror(errno);
-    return kQuicInvalidSocketFd;
-  }
-#else
-  // Create a socket and use fcntl to set it to nonblocking.
-  // This implementation is used when building for iOS, OSX and old versions of
-  // Linux (< 2.6.27) and old versions of Android (< API 21).
-  int fd = socket(address_family, SOCK_DGRAM, IPPROTO_UDP);
-  if (fd < 0) {
-    QUIC_LOG_FIRST_N(ERROR, 100)
-        << "socket() failed with address_family=" << address_family << ": "
-        << strerror(errno);
-    return kQuicInvalidSocketFd;
-  }
-  int current_flags = fcntl(fd, F_GETFL, 0);
-  if (current_flags == -1) {
-    QUIC_LOG_FIRST_N(ERROR, 100)
-        << "failed to get current socket flags: " << strerror(errno);
-    close(fd);
-    return kQuicInvalidSocketFd;
-  }
-
-  int rc = fcntl(fd, F_SETFL, current_flags | O_NONBLOCK);
-  if (rc == -1) {
-    QUIC_LOG_FIRST_N(ERROR, 100)
-        << "failed to set socket to non-blocking: " << strerror(errno);
-    close(fd);
-    return kQuicInvalidSocketFd;
-  }
-#endif
-
-  SetGoogleSocketOptions(fd);
-  return fd;
-}  // End CreateNonblockingSocket
 
 void SetV4SelfIpInControlMessage(const QuicIpAddress& self_address,
                                  cmsghdr* cmsg) {
@@ -236,19 +196,28 @@ QuicUdpSocketFd QuicUdpSocketApi::Create(int address_family,
   // debug mode. This should have been a static_assert, however it can't be done
   // on ios/osx because CMSG_SPACE isn't a constant expression there.
   QUICHE_DCHECK_GE(kDefaultUdpPacketControlBufferSize, kMinCmsgSpaceForRead);
-  QuicUdpSocketFd fd = CreateNonblockingSocket(address_family);
 
-  if (fd == kQuicInvalidSocketFd) {
+  absl::StatusOr<SocketFd> socket =
+      socket_api::CreateSocket(FromPlatformAddressFamily(address_family),
+                               socket_api::SocketProtocol::kUdp,
+                               /*blocking=*/false);
+
+  if (!socket.ok()) {
+    QUIC_LOG_FIRST_N(ERROR, 100)
+        << "UDP non-blocking socket creation for address_family="
+        << address_family << " failed: " << socket.status();
     return kQuicInvalidSocketFd;
   }
 
-  if (!SetupSocket(fd, address_family, receive_buffer_size, send_buffer_size,
-                   ipv6_only)) {
-    Destroy(fd);
+  SetGoogleSocketOptions(socket.value());
+
+  if (!SetupSocket(socket.value(), address_family, receive_buffer_size,
+                   send_buffer_size, ipv6_only)) {
+    Destroy(socket.value());
     return kQuicInvalidSocketFd;
   }
 
-  return fd;
+  return socket.value();
 }
 
 bool QuicUdpSocketApi::SetupSocket(QuicUdpSocketFd fd, int address_family,
@@ -289,7 +258,11 @@ bool QuicUdpSocketApi::SetupSocket(QuicUdpSocketFd fd, int address_family,
 
 void QuicUdpSocketApi::Destroy(QuicUdpSocketFd fd) {
   if (fd != kQuicInvalidSocketFd) {
-    close(fd);
+    absl::Status result = socket_api::Close(fd);
+    if (!result.ok()) {
+      QUIC_LOG_FIRST_N(WARNING, 100)
+          << "Failed to close UDP socket with error " << result;
+    }
   }
 }
 
@@ -413,13 +386,13 @@ void QuicUdpSocketApi::ReadPacket(QuicUdpSocketFd fd,
     return;
   }
 
-  if (QUIC_PREDICT_FALSE(hdr.msg_flags & MSG_CTRUNC)) {
+  if (ABSL_PREDICT_FALSE(hdr.msg_flags & MSG_CTRUNC)) {
     QUIC_BUG(quic_bug_10751_3)
         << "Control buffer too small. size:" << control_buffer.buffer_len;
     return;
   }
 
-  if (QUIC_PREDICT_FALSE(hdr.msg_flags & MSG_TRUNC) ||
+  if (ABSL_PREDICT_FALSE(hdr.msg_flags & MSG_TRUNC) ||
       // Normally "bytes_read > packet_buffer.buffer_len" implies the MSG_TRUNC
       // bit is set, but it is not the case if tested with config=android_arm64.
       static_cast<size_t>(bytes_read) > packet_buffer.buffer_len) {
@@ -502,14 +475,14 @@ size_t QuicUdpSocketApi::ReadMultiplePackets(QuicUdpSocketFd fd,
     }
 
     msghdr& hdr = hdrs[i].msg_hdr;
-    if (QUIC_PREDICT_FALSE(hdr.msg_flags & MSG_CTRUNC)) {
+    if (ABSL_PREDICT_FALSE(hdr.msg_flags & MSG_CTRUNC)) {
       QUIC_BUG(quic_bug_10751_4) << "Control buffer too small. size:"
                                  << (*results)[i].control_buffer.buffer_len
                                  << ", need:" << hdr.msg_controllen;
       continue;
     }
 
-    if (QUIC_PREDICT_FALSE(hdr.msg_flags & MSG_TRUNC)) {
+    if (ABSL_PREDICT_FALSE(hdr.msg_flags & MSG_TRUNC)) {
       QUIC_LOG_FIRST_N(WARNING, 100)
           << "Received truncated QUIC packet: buffer size:"
           << (*results)[i].packet_buffer.buffer_len

@@ -26,6 +26,7 @@
 #include "quiche/quic/core/quic_types.h"
 #include "quiche/quic/core/quic_unacked_packet_map.h"
 #include "quiche/quic/platform/api/quic_export.h"
+#include "quiche/quic/platform/api/quic_flags.h"
 #include "quiche/common/quiche_circular_deque.h"
 
 namespace quic {
@@ -464,10 +465,9 @@ class QUIC_EXPORT_PRIVATE QuicSentPacketManager {
   // kMinUntrustedInitialRoundTripTimeUs if not |trusted|.
   void SetInitialRtt(QuicTime::Delta rtt, bool trusted);
 
-  bool use_lower_min_irtt() const { return use_lower_min_irtt_; }
-
-  bool simplify_set_retransmission_alarm() const {
-    return simplify_set_retransmission_alarm_;
+  // Latched value of --quic_remove_blackhole_detection_experiments.
+  bool remove_blackhole_detection_experiments() const {
+    return remove_blackhole_detection_experiments_;
   }
 
  private:
@@ -675,12 +675,8 @@ class QUIC_EXPORT_PRIVATE QuicSentPacketManager {
   // Whether to ignore the ack_delay in received ACKs.
   bool ignore_ack_delay_;
 
-  // Latched value of --quic_use_lower_min_for_trusted_irtt.
-  bool use_lower_min_irtt_ =
-      GetQuicReloadableFlag(quic_use_lower_min_for_trusted_irtt);
-
-  const bool simplify_set_retransmission_alarm_ =
-      GetQuicReloadableFlag(quic_simplify_set_retransmission_alarm);
+  const bool remove_blackhole_detection_experiments_ =
+      GetQuicReloadableFlag(quic_remove_blackhole_detection_experiments);
 };
 
 }  // namespace quic

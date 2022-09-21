@@ -559,6 +559,11 @@ PacketSavingConnection::PacketSavingConnection(
 
 PacketSavingConnection::~PacketSavingConnection() {}
 
+SerializedPacketFate PacketSavingConnection::GetSerializedPacketFate(
+    bool /*is_mtu_discovery*/, EncryptionLevel /*encryption_level*/) {
+  return SEND_TO_WRITER;
+}
+
 void PacketSavingConnection::SendOrQueuePacket(SerializedPacket packet) {
   encrypted_packets_.push_back(std::make_unique<QuicEncryptedPacket>(
       CopyBuffer(packet), packet.encrypted_length, true));
@@ -657,9 +662,10 @@ MockQuicSpdySession::MockQuicSpdySession(QuicConnection* connection,
         return QuicSpdySession::SendWindowUpdate(id, byte_offset);
       });
 
-  ON_CALL(*this, SendBlocked(_)).WillByDefault([this](QuicStreamId id) {
-    return QuicSpdySession::SendBlocked(id);
-  });
+  ON_CALL(*this, SendBlocked(_, _))
+      .WillByDefault([this](QuicStreamId id, QuicStreamOffset byte_offset) {
+        return QuicSpdySession::SendBlocked(id, byte_offset);
+      });
 
   ON_CALL(*this, OnCongestionWindowChange(_)).WillByDefault(testing::Return());
 }
@@ -1362,6 +1368,7 @@ WriteResult TestPacketWriter::WritePacket(const char* buffer, size_t buf_len,
   }
 
   last_packet_size_ = packet.length();
+  total_bytes_written_ += packet.length();
   last_packet_header_ = framer_.header();
   if (!framer_.connection_close_frames().empty()) {
     ++connection_close_packets_;

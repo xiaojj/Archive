@@ -53,7 +53,8 @@ class NET_EXPORT_PRIVATE URLRequestThrottlerManager
   // Registers a new entry in this service and overrides the existing entry (if
   // any) for the URL. The service will hold a reference to the entry.
   // It is only used by unit tests.
-  void OverrideEntryForTests(const GURL& url, URLRequestThrottlerEntry* entry);
+  void OverrideEntryForTests(const GURL& url,
+                             scoped_refptr<URLRequestThrottlerEntry> entry);
 
   // Explicitly erases an entry.
   // This is useful to remove those entries which have got infinite lifetime and
@@ -120,7 +121,7 @@ class NET_EXPORT_PRIVATE URLRequestThrottlerManager
 
   // This keeps track of how many requests have been made. Used with
   // GarbageCollectEntries.
-  unsigned int requests_since_last_gc_;
+  unsigned int requests_since_last_gc_ = 0;
 
   // Valid after construction.
   GURL::Replacements url_id_replacements_;
@@ -135,13 +136,13 @@ class NET_EXPORT_PRIVATE URLRequestThrottlerManager
 
   // Initially false, switches to true once we have logged because of back-off
   // being disabled for localhost.
-  bool logged_for_localhost_disabled_;
+  bool logged_for_localhost_disabled_ = false;
 
   // NetLog to use, if configured.
   NetLogWithSource net_log_;
 
   // Valid once we've registered for network notifications.
-  base::PlatformThreadId registered_from_thread_;
+  base::PlatformThreadId registered_from_thread_ = base::kInvalidThreadId;
 
   THREAD_CHECKER(thread_checker_);
 };

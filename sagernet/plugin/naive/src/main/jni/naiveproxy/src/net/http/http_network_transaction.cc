@@ -113,32 +113,10 @@ const int HttpNetworkTransaction::kDrainBodyBufferSize;
 
 HttpNetworkTransaction::HttpNetworkTransaction(RequestPriority priority,
                                                HttpNetworkSession* session)
-    : pending_auth_target_(HttpAuth::AUTH_NONE),
-      io_callback_(base::BindRepeating(&HttpNetworkTransaction::OnIOComplete,
+    : io_callback_(base::BindRepeating(&HttpNetworkTransaction::OnIOComplete,
                                        base::Unretained(this))),
       session_(session),
-      request_(nullptr),
-      priority_(priority),
-      headers_valid_(false),
-      can_send_early_data_(false),
-      configured_client_cert_for_server_(false),
-      request_headers_(),
-#if BUILDFLAG(ENABLE_REPORTING)
-      network_error_logging_report_generated_(false),
-      request_reporting_upload_depth_(0),
-#endif  // BUILDFLAG(ENABLE_REPORTING)
-      read_buf_len_(0),
-      total_received_bytes_(0),
-      total_sent_bytes_(0),
-      next_state_(STATE_NONE),
-      establishing_tunnel_(false),
-      enable_ip_based_pooling_(true),
-      enable_alternative_services_(true),
-      websocket_handshake_stream_base_create_helper_(nullptr),
-      net_error_details_(),
-      retry_attempts_(0),
-      num_restarts_(0) {
-}
+      priority_(priority) {}
 
 HttpNetworkTransaction::~HttpNetworkTransaction() {
 #if BUILDFLAG(ENABLE_REPORTING)
@@ -360,7 +338,7 @@ void HttpNetworkTransaction::DidDrainBodyForAuthRestart(bool keep_alive) {
   if (stream_.get()) {
     total_received_bytes_ += stream_->GetTotalReceivedBytes();
     total_sent_bytes_ += stream_->GetTotalSentBytes();
-    HttpStream* new_stream = nullptr;
+    std::unique_ptr<HttpStream> new_stream;
     if (keep_alive && stream_->CanReuseConnection()) {
       // We should call connection_->set_idle_time(), but this doesn't occur
       // often enough to be worth the trouble.
@@ -380,7 +358,7 @@ void HttpNetworkTransaction::DidDrainBodyForAuthRestart(bool keep_alive) {
       DCHECK_EQ(0, new_stream->GetTotalSentBytes());
       next_state_ = STATE_CONNECTED_CALLBACK;
     }
-    stream_.reset(new_stream);
+    stream_ = std::move(new_stream);
   }
 
   // Reset the other member variables.
@@ -1225,13 +1203,18 @@ int HttpNetworkTransaction::DoReadHeadersComplete(int result) {
   // Unless this is a WebSocket request, in which case we pass it on up.
   if (response_.headers->response_code() / 100 == 1 &&
       !ForWebSocketHandshake()) {
-    response_.headers = new HttpResponseHeaders(std::string());
+    response_.headers =
+        base::MakeRefCounted<HttpResponseHeaders>(std::string());
     next_state_ = STATE_READ_HEADERS;
     return OK;
   }
 
+  const bool has_body_with_null_source =
+      request_->upload_data_stream &&
+      request_->upload_data_stream->has_null_source();
   if (response_.headers->response_code() == 421 &&
-      (enable_ip_based_pooling_ || enable_alternative_services_)) {
+      (enable_ip_based_pooling_ || enable_alternative_services_) &&
+      !has_body_with_null_source) {
 #if BUILDFLAG(ENABLE_REPORTING)
     GenerateNetworkErrorLoggingReport(OK);
 #endif  // BUILDFLAG(ENABLE_REPORTING)
@@ -1303,7 +1286,9 @@ int HttpNetworkTransaction::DoReadHeadersComplete(int result) {
 
 int HttpNetworkTransaction::DoReadBody() {
   DCHECK(read_buf_.get());
-  DCHECK_GT(read_buf_len_, 0);
+  // TODO(https://crbug.com/1335423): Change to DCHECK_GT() or remove after bug
+  // is fixed.
+  CHECK_GT(read_buf_len_, 0);
   DCHECK(stream_ != nullptr);
 
   next_state_ = STATE_READ_BODY_COMPLETE;

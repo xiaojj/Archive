@@ -30,7 +30,10 @@ import("//third_party/protobuf/proto_library.gni")
 config("quiche_internal_config") {
   cflags = []
   if (is_clang) {
-    cflags += [ "-Wno-unused-private-field" ]
+    cflags += [
+      "-Wno-unused-private-field",
+      "-Wno-sign-compare",
+    ]
   }
 }
 
@@ -66,15 +69,18 @@ component("quiche") {
     "overrides/quiche_platform_impl/quiche_url_utils_impl.cc",
     "overrides/quiche_platform_impl/quiche_url_utils_impl.h",
     "src/quiche/common/platform/api/quiche_bug_tracker.h",
+    "src/quiche/common/platform/api/quiche_client_stats.h",
     "src/quiche/common/platform/api/quiche_containers.h",
     "src/quiche/common/platform/api/quiche_export.h",
     "src/quiche/common/platform/api/quiche_export.h",
     "src/quiche/common/platform/api/quiche_flag_utils.h",
     "src/quiche/common/platform/api/quiche_flags.h",
+    "src/quiche/common/platform/api/quiche_header_policy.h",
     "src/quiche/common/platform/api/quiche_hostname_utils.cc",
     "src/quiche/common/platform/api/quiche_hostname_utils.h",
     "src/quiche/common/platform/api/quiche_iovec.h",
     "src/quiche/common/platform/api/quiche_logging.h",
+    "src/quiche/common/platform/api/quiche_lower_case_string.h",
     "src/quiche/common/platform/api/quiche_mem_slice.h",
     "src/quiche/common/platform/api/quiche_mutex.cc",
     "src/quiche/common/platform/api/quiche_mutex.h",
@@ -278,6 +284,8 @@ component("quiche") {
     "src/quiche/quic/core/crypto/boring_utils.h",
     "src/quiche/quic/core/crypto/cert_compressor.cc",
     "src/quiche/quic/core/crypto/cert_compressor.h",
+    "src/quiche/quic/core/crypto/certificate_util.cc",
+    "src/quiche/quic/core/crypto/certificate_util.h",
     "src/quiche/quic/core/crypto/certificate_view.cc",
     "src/quiche/quic/core/crypto/certificate_view.h",
     "src/quiche/quic/core/crypto/chacha20_poly1305_decrypter.cc",
@@ -628,6 +636,7 @@ component("quiche") {
     "src/quiche/quic/core/uber_quic_stream_id_manager.h",
     "src/quiche/quic/core/uber_received_packet_manager.cc",
     "src/quiche/quic/core/uber_received_packet_manager.h",
+    "src/quiche/quic/core/web_transport_interface.h",
     "src/quiche/quic/platform/api/quic_bug_tracker.h",
     "src/quiche/quic/platform/api/quic_client_stats.h",
     "src/quiche/quic/platform/api/quic_export.h",
@@ -637,6 +646,7 @@ component("quiche") {
     "src/quiche/quic/platform/api/quic_hostname_utils.h",
     "src/quiche/quic/platform/api/quic_ip_address.cc",
     "src/quiche/quic/platform/api/quic_ip_address.h",
+    "src/quiche/quic/platform/api/quic_ip_address_family.cc",
     "src/quiche/quic/platform/api/quic_ip_address_family.h",
     "src/quiche/quic/platform/api/quic_logging.h",
     "src/quiche/quic/platform/api/quic_mutex.h",
@@ -644,7 +654,10 @@ component("quiche") {
     "src/quiche/quic/platform/api/quic_socket_address.cc",
     "src/quiche/quic/platform/api/quic_socket_address.h",
     "src/quiche/quic/platform/api/quic_stack_trace.h",
+    "src/quiche/quic/platform/api/quic_testvalue.h",
     "src/quiche/quic/platform/api/quic_thread.h",
+    "src/quiche/spdy/core/array_output_buffer.cc",
+    "src/quiche/spdy/core/array_output_buffer.h",
     "src/quiche/spdy/core/hpack/hpack_constants.cc",
     "src/quiche/spdy/core/hpack/hpack_constants.h",
     "src/quiche/spdy/core/hpack/hpack_decoder_adapter.cc",

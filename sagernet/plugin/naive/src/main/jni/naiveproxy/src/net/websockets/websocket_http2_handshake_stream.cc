@@ -46,17 +46,11 @@ WebSocketHttp2HandshakeStream::WebSocketHttp2HandshakeStream(
     std::vector<std::string> requested_extensions,
     WebSocketStreamRequestAPI* request,
     std::set<std::string> dns_aliases)
-    : result_(HandshakeResult::HTTP2_INCOMPLETE),
-      session_(session),
+    : session_(session),
       connect_delegate_(connect_delegate),
-      http_response_info_(nullptr),
       requested_sub_protocols_(requested_sub_protocols),
       requested_extensions_(requested_extensions),
       stream_request_(request),
-      request_info_(nullptr),
-      stream_closed_(false),
-      stream_error_(OK),
-      response_headers_complete_(false),
       dns_aliases_(std::move(dns_aliases)) {
   DCHECK(connect_delegate);
   DCHECK(request);
@@ -241,7 +235,8 @@ void WebSocketHttp2HandshakeStream::SetPriority(RequestPriority priority) {
     stream_->SetPriority(priority_);
 }
 
-HttpStream* WebSocketHttp2HandshakeStream::RenewStreamForAuth() {
+std::unique_ptr<HttpStream>
+WebSocketHttp2HandshakeStream::RenewStreamForAuth() {
   // Renewing the stream is not supported.
   return nullptr;
 }
@@ -302,8 +297,6 @@ void WebSocketHttp2HandshakeStream::OnHeadersReceived(
   http_response_info_->alpn_negotiated_protocol =
       HttpResponseInfo::ConnectionInfoToString(
           http_response_info_->connection_info);
-  http_response_info_->vary_data.Init(*request_info_,
-                                      *http_response_info_->headers.get());
 
   if (callback_)
     std::move(callback_).Run(ValidateResponse());

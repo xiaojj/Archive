@@ -188,9 +188,6 @@ HttpProxyConnectJob::HttpProxyConnectJob(
                  NetLogSourceType::HTTP_PROXY_CONNECT_JOB,
                  NetLogEventType::HTTP_PROXY_CONNECT_JOB_CONNECT),
       params_(std::move(params)),
-      next_state_(STATE_NONE),
-      has_restarted_(false),
-      has_established_connection_(false),
       http_auth_controller_(
           params_->tunnel()
               ? base::MakeRefCounted<HttpAuthController>(
@@ -203,7 +200,7 @@ HttpProxyConnectJob::HttpProxyConnectJob(
                     host_resolver())
               : nullptr) {}
 
-HttpProxyConnectJob::~HttpProxyConnectJob() {}
+HttpProxyConnectJob::~HttpProxyConnectJob() = default;
 
 const RequestPriority HttpProxyConnectJob::kH2QuicTunnelPriority =
     DEFAULT_PRIORITY;
@@ -441,9 +438,9 @@ int HttpProxyConnectJob::DoBeginConnect() {
 int HttpProxyConnectJob::DoTransportConnect() {
   ProxyServer::Scheme scheme = GetProxyServerScheme();
   if (scheme == ProxyServer::SCHEME_HTTP) {
-    nested_connect_job_ = TransportConnectJob::CreateTransportConnectJob(
-        params_->transport_params(), priority(), socket_tag(),
-        common_connect_job_params(), this, &net_log());
+    nested_connect_job_ = std::make_unique<TransportConnectJob>(
+        priority(), socket_tag(), common_connect_job_params(),
+        params_->transport_params(), this, &net_log());
   } else {
     DCHECK_EQ(scheme, ProxyServer::SCHEME_HTTPS);
     DCHECK(params_->ssl_params());
@@ -535,7 +532,7 @@ int HttpProxyConnectJob::DoHttpProxyConnect() {
   transport_socket_ = std::make_unique<HttpProxyClientSocket>(
       nested_connect_job_->PassSocket(), GetUserAgent(), params_->endpoint(),
       ProxyServer(GetProxyServerScheme(), GetDestination()),
-      http_auth_controller_.get(), common_connect_job_params()->proxy_delegate,
+      http_auth_controller_, common_connect_job_params()->proxy_delegate,
       params_->traffic_annotation());
   nested_connect_job_.reset();
   return transport_socket_->Connect(base::BindOnce(
@@ -627,8 +624,8 @@ int HttpProxyConnectJob::DoSpdyProxyCreateStreamComplete(int result) {
   // |transport_socket_| will set itself as |stream|'s delegate.
   transport_socket_ = std::make_unique<SpdyProxyClientSocket>(
       stream, ProxyServer(GetProxyServerScheme(), GetDestination()),
-      GetUserAgent(), params_->endpoint(), net_log(),
-      http_auth_controller_.get(), common_connect_job_params()->proxy_delegate);
+      GetUserAgent(), params_->endpoint(), net_log(), http_auth_controller_,
+      common_connect_job_params()->proxy_delegate);
   return transport_socket_->Connect(base::BindOnce(
       &HttpProxyConnectJob::OnIOComplete, base::Unretained(this)));
 }
@@ -702,7 +699,7 @@ int HttpProxyConnectJob::DoQuicProxyCreateStreamComplete(int result) {
   transport_socket_ = std::make_unique<QuicProxyClientSocket>(
       std::move(quic_stream), std::move(quic_session_),
       ProxyServer(GetProxyServerScheme(), GetDestination()), GetUserAgent(),
-      params_->endpoint(), net_log(), http_auth_controller_.get(),
+      params_->endpoint(), net_log(), http_auth_controller_,
       common_connect_job_params()->proxy_delegate);
   return transport_socket_->Connect(base::BindOnce(
       &HttpProxyConnectJob::OnIOComplete, base::Unretained(this)));

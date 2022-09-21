@@ -364,17 +364,14 @@ CronetContext::NetworkTasks::BuildDefaultURLRequestContext(
   DCHECK(!network_quality_estimator_);
   DCHECK(!cronet_prefs_manager_);
   net::URLRequestContextBuilder context_builder;
+  context_config_->ConfigureURLRequestContextBuilder(&context_builder);
   SetSharedURLRequestContextBuilderConfig(&context_builder);
 
-  const auto proxy_server_it =
-      context_config_->effective_experimental_options.find("proxy_server");
+  const base::Value* proxy_server =
+      context_config_->effective_experimental_options.Find("proxy_server");
   std::string proxy_server_str = "direct://";
-  if (proxy_server_it !=
-      context_config_->effective_experimental_options.end()) {
-    const base::Value& value = proxy_server_it->second;
-    if (value.is_string()) {
-      proxy_server_str = value.GetString();
-    }
+  if (proxy_server != nullptr && proxy_server->is_string()) {
+    proxy_server_str = proxy_server->GetString();
   }
   net::ProxyConfig proxy_config;
   proxy_config.proxy_rules().ParseFromString(proxy_server_str);
@@ -454,19 +451,9 @@ std::unique_ptr<net::URLRequestContext>
 CronetContext::NetworkTasks::BuildNetworkBoundURLRequestContext(
     net::NetworkChangeNotifier::NetworkHandle network) {
   net::URLRequestContextBuilder context_builder;
+  context_config_->ConfigureURLRequestContextBuilder(&context_builder, network);
   SetSharedURLRequestContextBuilderConfig(&context_builder);
 
-  // URLRequestContexts that are bound to a network cannot specify a
-  // HostResolver in any way (URLRequestContextBuilder will internally pick
-  // one that support per-network lookups). Hence, if options for this are
-  // specified in Cronet's configuration, they should apply only to the default
-  // context.
-  context_builder.set_host_resolver(nullptr);
-  context_builder.set_host_mapping_rules(std::string());
-  context_builder.set_host_resolver_manager(nullptr);
-  context_builder.set_host_resolver_factory(nullptr);
-
-  context_builder.BindToNetwork(network);
   // On Android, Cronet doesn't handle PAC URL processing, instead it defers
   // that to the OS (which sets up a local proxy configured correctly w.r.t.
   // Android settings). See crbug.com/432539.
@@ -488,7 +475,6 @@ void CronetContext::NetworkTasks::SetSharedURLRequestContextBuilderConfig(
   context_builder->set_network_delegate(
       std::make_unique<BasicNetworkDelegate>());
   context_builder->set_net_log(g_net_log.Get().net_log());
-  context_config_->ConfigureURLRequestContextBuilder(context_builder);
 
   // Explicitly disable the persister for Cronet to avoid persistence of dynamic
   // HPKP. This is a safety measure ensuring that nobody enables the persistence
@@ -556,7 +542,7 @@ void CronetContext::NetworkTasks::Initialize(
         context_config_->network_thread_priority.value());
   base::DisallowBlocking();
   effective_experimental_options_ =
-      base::Value(context_config_->effective_experimental_options);
+      context_config_->effective_experimental_options.Clone();
 
   const net::NetworkChangeNotifier::NetworkHandle default_network =
       net::NetworkChangeNotifier::kInvalidNetworkHandle;
@@ -897,15 +883,15 @@ void CronetContext::NetworkTasks::StopNetLogCompleted() {
 }
 
 base::Value CronetContext::NetworkTasks::GetNetLogInfo() const {
-  base::Value net_info(base::Value::Type::DICTIONARY);
+  base::Value::Dict net_info;
   for (auto& iter : contexts_)
-    net_info.SetKey(base::NumberToString(iter.first),
-                    net::GetNetInfo(iter.second.get()));
-  if (!effective_experimental_options_.DictEmpty()) {
-    net_info.SetKey("cronetExperimentalParams",
-                    effective_experimental_options_.Clone());
+    net_info.Set(base::NumberToString(iter.first),
+                 net::GetNetInfo(iter.second.get()));
+  if (!effective_experimental_options_.empty()) {
+    net_info.Set("cronetExperimentalParams",
+                 effective_experimental_options_.Clone());
   }
-  return net_info;
+  return base::Value(std::move(net_info));
 }
 
 }  // namespace cronet

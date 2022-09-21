@@ -156,9 +156,9 @@ int SOCKSConnectJob::DoTransportConnect() {
   DCHECK(!transport_connect_job_);
 
   next_state_ = STATE_TRANSPORT_CONNECT_COMPLETE;
-  transport_connect_job_ = TransportConnectJob::CreateTransportConnectJob(
-      socks_params_->transport_params(), priority(), socket_tag(),
-      common_connect_job_params(), this, &net_log());
+  transport_connect_job_ = std::make_unique<TransportConnectJob>(
+      priority(), socket_tag(), common_connect_job_params(),
+      socks_params_->transport_params(), this, &net_log());
   return transport_connect_job_->Connect();
 }
 
@@ -182,12 +182,13 @@ int SOCKSConnectJob::DoSOCKSConnect() {
         transport_connect_job_->PassSocket(), socks_params_->destination(),
         socks_params_->traffic_annotation());
   } else {
-    socks_socket_ptr_ = new SOCKSClientSocket(
+    auto socks_socket = std::make_unique<SOCKSClientSocket>(
         transport_connect_job_->PassSocket(), socks_params_->destination(),
         socks_params_->network_isolation_key(), priority(), host_resolver(),
         socks_params_->transport_params()->secure_dns_policy(),
         socks_params_->traffic_annotation());
-    socket_.reset(socks_socket_ptr_);
+    socks_socket_ptr_ = socks_socket.get();
+    socket_ = std::move(socks_socket);
   }
   transport_connect_job_.reset();
   return socket_->Connect(

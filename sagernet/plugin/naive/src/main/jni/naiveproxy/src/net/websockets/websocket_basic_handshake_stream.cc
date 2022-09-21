@@ -117,7 +117,8 @@ bool ValidateUpgrade(const HttpResponseHeaders* headers,
     return false;
   }
 
-  if (!base::LowerCaseEqualsASCII(value, websockets::kWebSocketLowercase)) {
+  if (!base::EqualsCaseInsensitiveASCII(value,
+                                        websockets::kWebSocketLowercase)) {
     *failure_message =
         "'Upgrade' header value is not 'WebSocket': " + value;
     return false;
@@ -176,10 +177,8 @@ WebSocketBasicHandshakeStream::WebSocketBasicHandshakeStream(
     std::vector<std::string> requested_extensions,
     WebSocketStreamRequestAPI* request,
     WebSocketEndpointLockManager* websocket_endpoint_lock_manager)
-    : result_(HandshakeResult::INCOMPLETE),
-      state_(std::move(connection), using_proxy),
+    : state_(std::move(connection), using_proxy),
       connect_delegate_(connect_delegate),
-      http_response_info_(nullptr),
       requested_sub_protocols_(std::move(requested_sub_protocols)),
       requested_extensions_(std::move(requested_extensions)),
       stream_request_(request),
@@ -386,7 +385,8 @@ void WebSocketBasicHandshakeStream::SetPriority(RequestPriority priority) {
   // gone, then copy whatever has happened there over here.
 }
 
-HttpStream* WebSocketBasicHandshakeStream::RenewStreamForAuth() {
+std::unique_ptr<HttpStream>
+WebSocketBasicHandshakeStream::RenewStreamForAuth() {
   DCHECK(IsResponseBodyComplete());
   DCHECK(!parser()->IsMoreDataBuffered());
   // The HttpStreamParser object still has a pointer to the connection. Just to
@@ -401,7 +401,7 @@ HttpStream* WebSocketBasicHandshakeStream::RenewStreamForAuth() {
 
   stream_request_->OnBasicHandshakeStreamCreated(handshake_stream.get());
 
-  return handshake_stream.release();
+  return handshake_stream;
 }
 
 const std::set<std::string>& WebSocketBasicHandshakeStream::GetDnsAliases()

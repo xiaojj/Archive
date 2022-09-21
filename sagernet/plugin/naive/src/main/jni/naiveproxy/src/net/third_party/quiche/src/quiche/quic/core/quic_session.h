@@ -89,8 +89,8 @@ class QUIC_EXPORT_PRIVATE QuicSession
     // peer.
     virtual void OnStopSendingReceived(const QuicStopSendingFrame& frame) = 0;
 
-    // Called when a NewConnectionId frame has been sent.
-    virtual void OnNewConnectionIdSent(
+    // Called when on whether a NewConnectionId frame can been sent.
+    virtual bool TryAddNewConnectionId(
         const QuicConnectionId& server_connection_id,
         const QuicConnectionId& new_connection_id) = 0;
 
@@ -138,7 +138,6 @@ class QUIC_EXPORT_PRIVATE QuicSession
                         const QuicSocketAddress& peer_address,
                         bool is_connectivity_probe) override;
   void OnCanWrite() override;
-  bool SendProbingData() override;
   void OnCongestionWindowChange(QuicTime /*now*/) override {}
   void OnConnectionMigration(AddressChangeType /*type*/) override {}
   // Adds a connection level WINDOW_UPDATE frame.
@@ -146,7 +145,12 @@ class QUIC_EXPORT_PRIVATE QuicSession
   void SendAckFrequency(const QuicAckFrequencyFrame& frame) override;
   void SendNewConnectionId(const QuicNewConnectionIdFrame& frame) override;
   void SendRetireConnectionId(uint64_t sequence_number) override;
-  void OnServerConnectionIdIssued(
+  // Returns true if server_connection_id can be issued. If returns true,
+  // |visitor_| may establish a mapping from |server_connection_id| to this
+  // session, if that's not desired,
+  // OnServerConnectionIdRetired(server_connection_id) can be used to remove the
+  // mapping.
+  bool MaybeReserveConnectionId(
       const QuicConnectionId& server_connection_id) override;
   void OnServerConnectionIdRetired(
       const QuicConnectionId& server_connection_id) override;
@@ -266,7 +270,7 @@ class QUIC_EXPORT_PRIVATE QuicSession
   virtual void SendGoAway(QuicErrorCode error_code, const std::string& reason);
 
   // Sends a BLOCKED frame.
-  virtual void SendBlocked(QuicStreamId id);
+  virtual void SendBlocked(QuicStreamId id, QuicStreamOffset byte_offset);
 
   // Sends a WINDOW_UPDATE frame.
   virtual void SendWindowUpdate(QuicStreamId id, QuicStreamOffset byte_offset);

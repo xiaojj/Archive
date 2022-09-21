@@ -153,6 +153,9 @@ class QUICHE_EXPORT_PRIVATE OgHttp2Session
             !goaway_rejected_streams_.empty());
   }
   int GetRemoteWindowSize() const override { return connection_send_window_; }
+  bool peer_enables_connect_protocol() {
+    return peer_enables_connect_protocol_;
+  }
 
   // From SpdyFramerVisitorInterface
   void OnError(http2::Http2DecoderAdapter::SpdyFramerError error,
@@ -180,14 +183,16 @@ class QUICHE_EXPORT_PRIVATE OgHttp2Session
   void OnGoAway(spdy::SpdyStreamId last_accepted_stream_id,
                 spdy::SpdyErrorCode error_code) override;
   bool OnGoAwayFrameData(const char* goaway_data, size_t len) override;
-  void OnHeaders(spdy::SpdyStreamId stream_id, bool has_priority, int weight,
+  void OnHeaders(spdy::SpdyStreamId stream_id, size_t payload_length,
+                 bool has_priority, int weight,
                  spdy::SpdyStreamId parent_stream_id, bool exclusive, bool fin,
                  bool end) override;
   void OnWindowUpdate(spdy::SpdyStreamId stream_id,
                       int delta_window_size) override;
   void OnPushPromise(spdy::SpdyStreamId stream_id,
                      spdy::SpdyStreamId promised_stream_id, bool end) override;
-  void OnContinuation(spdy::SpdyStreamId stream_id, bool end) override;
+  void OnContinuation(spdy::SpdyStreamId stream_id, size_t payload_length,
+                      bool end) override;
   void OnAltSvc(spdy::SpdyStreamId /*stream_id*/, absl::string_view /*origin*/,
                 const spdy::SpdyAltSvcWireFormat::
                     AlternativeServiceVector& /*altsvc_vector*/) override;
@@ -269,7 +274,7 @@ class QUICHE_EXPORT_PRIVATE OgHttp2Session
     absl::optional<size_t> content_length() const {
       return validator_->content_length();
     }
-    void AllowConnect() { validator_->AllowConnect(); }
+    void SetAllowExtendedConnect() { validator_->SetAllowExtendedConnect(); }
     void SetMaxFieldSize(uint32_t field_size) {
       validator_->SetMaxFieldSize(field_size);
     }
@@ -506,7 +511,7 @@ class QUICHE_EXPORT_PRIVATE OgHttp2Session
   int32_t initial_stream_receive_window_ = kInitialFlowControlWindowSize;
   // The initial flow control send window size for any newly created streams.
   int32_t initial_stream_send_window_ = kInitialFlowControlWindowSize;
-  uint32_t max_frame_payload_ = 16384u;
+  uint32_t max_frame_payload_ = kDefaultFramePayloadSizeLimit;
   // The maximum number of concurrent streams that this connection can open to
   // its peer and allow from its peer, respectively. Although the initial value
   // is unlimited, the spec encourages a value of at least 100. We limit
@@ -534,6 +539,8 @@ class QUICHE_EXPORT_PRIVATE OgHttp2Session
   bool processing_bytes_ = false;
   // Recursion guard for Send().
   bool sending_ = false;
+
+  bool peer_enables_connect_protocol_ = false;
 
   // Replace this with a stream ID, for multiple GOAWAY support.
   bool queued_goaway_ = false;

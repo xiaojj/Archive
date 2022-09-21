@@ -13,6 +13,7 @@
 #include "base/time/time.h"
 #include "base/values.h"
 #include "net/base/hash_value.h"
+#include "net/base/network_change_notifier.h"
 #include "net/cert/cert_verifier.h"
 #include "net/nqe/effective_connection_type.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -103,7 +104,9 @@ struct URLRequestContextConfig {
 
   // Configures |context_builder| based on |this|.
   void ConfigureURLRequestContextBuilder(
-      net::URLRequestContextBuilder* context_builder);
+      net::URLRequestContextBuilder* context_builder,
+      net::NetworkChangeNotifier::NetworkHandle bound_network =
+          net::NetworkChangeNotifier::kInvalidNetworkHandle);
 
   // Enable QUIC.
   const bool enable_quic;
@@ -150,8 +153,8 @@ struct URLRequestContextConfig {
   int host_cache_persistence_delay_ms = 60000;
 
   // Experimental options that are recognized by the config parser.
-  base::Value::DictStorage effective_experimental_options;
-  base::Value::DictStorage experimental_options;
+  base::Value::Dict effective_experimental_options;
+  base::Value::Dict experimental_options;
 
   // If set, forces NQE to return the set value as the effective connection
   // type.
@@ -216,12 +219,6 @@ struct URLRequestContextConfig {
       // not specify for other targets.
       absl::optional<double> network_thread_priority);
 
-  // Parses experimental options from their JSON format to the format used
-  // internally.
-  // Returns an empty optional if the operation was unsuccessful.
-  static absl::optional<base::Value::DictStorage> ParseExperimentalOptions(
-      std::string unparsed_experimental_options);
-
  private:
   URLRequestContextConfig(
       // Enable QUIC.
@@ -246,7 +243,7 @@ struct URLRequestContextConfig {
       // User-Agent request header field.
       const std::string& user_agent,
       // Parsed experimental options.
-      base::Value::DictStorage experimental_options,
+      base::Value::Dict experimental_options,
       // MockCertVerifier to use for testing purposes.
       std::unique_ptr<net::CertVerifier> mock_cert_verifier,
       // Enable network quality estimator.
@@ -259,6 +256,14 @@ struct URLRequestContextConfig {
       // not specify for other targets.
       absl::optional<double> network_thread_priority);
 
+ public:
+  // Parses experimental options from their JSON format to the format used
+  // internally.
+  // Returns an empty optional if the operation was unsuccessful.
+  static absl::optional<base::Value::Dict> ParseExperimentalOptions(
+      std::string unparsed_experimental_options);
+
+ private:
   // Makes appropriate changes to settings in |this|.
   void SetContextConfigExperimentalOptions();
 
@@ -266,7 +271,8 @@ struct URLRequestContextConfig {
   void SetContextBuilderExperimentalOptions(
       net::URLRequestContextBuilder* context_builder,
       net::HttpNetworkSessionParams* session_params,
-      net::QuicParams* quic_params);
+      net::QuicParams* quic_params,
+      net::NetworkChangeNotifier::NetworkHandle bound_network);
 };
 
 // Stores intermediate state for URLRequestContextConfig.  Initializes with

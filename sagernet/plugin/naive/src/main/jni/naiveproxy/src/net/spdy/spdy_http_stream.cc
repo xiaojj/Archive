@@ -110,19 +110,6 @@ SpdyHttpStream::SpdyHttpStream(const base::WeakPtr<SpdySession>& spdy_session,
       pushed_stream_id_(pushed_stream_id),
       is_reused_(spdy_session_->IsReused()),
       source_dependency_(source_dependency),
-      stream_(nullptr),
-      stream_closed_(false),
-      closed_stream_status_(ERR_FAILED),
-      closed_stream_id_(0),
-      closed_stream_received_bytes_(0),
-      closed_stream_sent_bytes_(0),
-      request_info_(nullptr),
-      response_info_(nullptr),
-      response_headers_complete_(false),
-      upload_stream_in_progress_(false),
-      user_buffer_len_(0),
-      request_body_buf_size_(0),
-      was_alpn_negotiated_(false),
       dns_aliases_(std::move(dns_aliases)) {
   DCHECK(spdy_session_.get());
 }
@@ -448,8 +435,6 @@ void SpdyHttpStream::OnHeadersReceived(
   response_info_->connection_info = HttpResponseInfo::CONNECTION_INFO_HTTP2;
   response_info_->alpn_negotiated_protocol =
       HttpResponseInfo::ConnectionInfoToString(response_info_->connection_info);
-  response_info_->vary_data
-      .Init(*request_info_, *response_info_->headers.get());
 
   // Invalidate HttpRequestInfo pointer. This is to allow |this| to be
   // shared across multiple consumers at the cache layer which might require

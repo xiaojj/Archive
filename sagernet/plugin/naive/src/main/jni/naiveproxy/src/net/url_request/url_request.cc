@@ -577,35 +577,13 @@ URLRequest::URLRequest(const GURL& url,
     : context_(context),
       net_log_(CreateNetLogWithSource(context->net_log(), net_log_source)),
       url_chain_(1, url),
-      force_ignore_site_for_cookies_(false),
-      force_ignore_top_frame_party_for_cookies_(false),
-      force_main_frame_for_same_site_cookies_(false),
       method_("GET"),
-      referrer_policy_(
-          ReferrerPolicy::CLEAR_ON_TRANSITION_FROM_SECURE_TO_INSECURE),
-      first_party_url_policy_(
-          RedirectInfo::FirstPartyURLPolicy::NEVER_CHANGE_URL),
-      load_flags_(LOAD_NORMAL),
-      allow_credentials_(true),
-      secure_dns_policy_(SecureDnsPolicy::kAllow),
-#if BUILDFLAG(ENABLE_REPORTING)
-      reporting_upload_depth_(0),
-#endif
       delegate_(delegate),
       is_for_websockets_(is_for_websockets),
-      status_(OK),
-      is_pending_(false),
-      is_redirecting_(false),
       redirect_limit_(kMaxRedirects),
       priority_(priority),
-      delegate_event_type_(NetLogEventType::FAILED),
-      calling_delegate_(false),
-      use_blocked_by_as_load_param_(false),
-      has_notified_completion_(false),
-      received_response_content_length_(0),
       creation_time_(base::TimeTicks::Now()),
-      traffic_annotation_(traffic_annotation),
-      upgrade_if_insecure_(false) {
+      traffic_annotation_(traffic_annotation) {
   // Sanity check out environment.
   DCHECK(base::ThreadTaskRunnerHandle::IsSet());
 
@@ -830,6 +808,7 @@ int URLRequest::NotifyConnected(const TransportInfo& info,
 
 void URLRequest::NotifyReceivedRedirect(const RedirectInfo& redirect_info,
                                         bool* defer_redirect) {
+  DCHECK_EQ(OK, status_);
   is_redirecting_ = true;
   OnCallToDelegate(NetLogEventType::URL_REQUEST_DELEGATE_RECEIVED_REDIRECT);
   delegate_->OnReceivedRedirect(this, redirect_info, defer_redirect);
@@ -1041,6 +1020,7 @@ void URLRequest::SetPriority(RequestPriority priority) {
 
 void URLRequest::NotifyAuthRequired(
     std::unique_ptr<AuthChallengeInfo> auth_info) {
+  DCHECK_EQ(OK, status_);
   DCHECK(auth_info);
   // Check that there are no callbacks to already failed or cancelled requests.
   DCHECK(!failed());
@@ -1102,6 +1082,10 @@ void URLRequest::NotifyReadCompleted(int bytes_read) {
 }
 
 void URLRequest::OnHeadersComplete() {
+  // The URLRequest status should still be IO_PENDING, which it was set to
+  // before the URLRequestJob was started.  On error or cancellation, this
+  // method should not be called.
+  DCHECK_EQ(ERR_IO_PENDING, status_);
   set_status(OK);
   // Cache load timing information now, as information will be lost once the
   // socket is closed and the ClientSocketHandle is Reset, which will happen

@@ -41,15 +41,7 @@ void PrintTo(const HttpAuthHandlerMock::State& state, ::std::ostream* os) {
   }
 }
 
-HttpAuthHandlerMock::HttpAuthHandlerMock()
-    : state_(State::WAIT_FOR_INIT),
-      generate_async_(false),
-      generate_rv_(OK),
-      auth_token_(nullptr),
-      first_round_(true),
-      connection_based_(false),
-      allows_default_credentials_(false),
-      allows_explicit_credentials_(true) {}
+HttpAuthHandlerMock::HttpAuthHandlerMock() = default;
 
 HttpAuthHandlerMock::~HttpAuthHandlerMock() = default;
 
@@ -147,16 +139,16 @@ void HttpAuthHandlerMock::OnGenerateAuthToken() {
   std::move(callback_).Run(generate_rv_);
 }
 
-HttpAuthHandlerMock::Factory::Factory()
-    : do_init_from_challenge_(false) {
+HttpAuthHandlerMock::Factory::Factory() {
   // TODO(cbentzel): Default do_init_from_challenge_ to true.
 }
 
 HttpAuthHandlerMock::Factory::~Factory() = default;
 
 void HttpAuthHandlerMock::Factory::AddMockHandler(
-    HttpAuthHandler* handler, HttpAuth::Target target) {
-  handlers_[target].push_back(base::WrapUnique(handler));
+    std::unique_ptr<HttpAuthHandler> handler,
+    HttpAuth::Target target) {
+  handlers_[target].push_back(std::move(handler));
 }
 
 int HttpAuthHandlerMock::Factory::CreateAuthHandler(

@@ -60,8 +60,6 @@ QuicSimpleServer::QuicSimpleServer(
                      quic::QuicRandom::GetInstance(),
                      std::move(proof_source),
                      quic::KeyExchangeSource::Default()),
-      read_pending_(false),
-      synchronous_read_count_(0),
       read_buffer_(base::MakeRefCounted<IOBufferWithSize>(kReadBufferSize)),
       quic_simple_server_backend_(quic_simple_server_backend) {
   DCHECK(quic_simple_server_backend);
@@ -113,8 +111,8 @@ bool QuicSimpleServer::Listen(const IPEndPoint& address) {
   dispatcher_ = std::make_unique<quic::QuicSimpleDispatcher>(
       &config_, &crypto_config_, &version_manager_,
       std::unique_ptr<quic::QuicConnectionHelperInterface>(helper_),
-      std::unique_ptr<quic::QuicCryptoServerStreamBase::Helper>(
-          new QuicSimpleServerSessionHelper(quic::QuicRandom::GetInstance())),
+      std::make_unique<QuicSimpleServerSessionHelper>(
+          quic::QuicRandom::GetInstance()),
       std::unique_ptr<quic::QuicAlarmFactory>(alarm_factory_),
       quic_simple_server_backend_, quic::kQuicDefaultConnectionIdLength);
   QuicSimpleServerPacketWriter* writer =

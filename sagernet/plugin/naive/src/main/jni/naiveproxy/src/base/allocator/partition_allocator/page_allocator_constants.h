@@ -7,7 +7,7 @@
 
 #include <stddef.h>
 
-#include "base/compiler_specific.h"
+#include "base/allocator/partition_allocator/partition_alloc_base/compiler_specific.h"
 #include "build/build_config.h"
 
 #if BUILDFLAG(IS_APPLE) && defined(ARCH_CPU_64_BITS)
@@ -42,8 +42,8 @@ namespace partition_alloc::internal {
 // Use PageAllocationGranularity(), PageAllocationGranularityShift()
 // to initialize and retrieve these values safely.
 struct PageCharacteristics {
-  std::atomic<int> size;
-  std::atomic<int> shift;
+  std::atomic<size_t> size;
+  std::atomic<size_t> shift;
 };
 extern PageCharacteristics page_characteristics;
 
@@ -64,10 +64,10 @@ extern PageCharacteristics page_characteristics;
 namespace partition_alloc::internal {
 
 // Forward declaration, implementation below
-PAGE_ALLOCATOR_CONSTANTS_DECLARE_CONSTEXPR ALWAYS_INLINE size_t
+PAGE_ALLOCATOR_CONSTANTS_DECLARE_CONSTEXPR PA_ALWAYS_INLINE size_t
 PageAllocationGranularity();
 
-PAGE_ALLOCATOR_CONSTANTS_DECLARE_CONSTEXPR ALWAYS_INLINE size_t
+PAGE_ALLOCATOR_CONSTANTS_DECLARE_CONSTEXPR PA_ALWAYS_INLINE size_t
 PageAllocationGranularityShift() {
 #if BUILDFLAG(IS_WIN) || defined(ARCH_CPU_PPC64)
   // Modern ppc64 systems support 4kB (shift = 12) and 64kB (shift = 16) page
@@ -78,13 +78,14 @@ PageAllocationGranularityShift() {
 #elif defined(_MIPS_ARCH_LOONGSON)
   return 14;  // 16kB
 #elif BUILDFLAG(IS_APPLE) && defined(ARCH_CPU_64_BITS)
-  return vm_page_shift;
+  return static_cast<size_t>(vm_page_shift);
 #elif BUILDFLAG(IS_LINUX) && defined(ARCH_CPU_ARM64)
   // arm64 supports 4kb (shift = 12), 16kb (shift = 14), and 64kb (shift = 16)
   // page sizes. Retrieve from or initialize cache.
-  int shift = page_characteristics.shift.load(std::memory_order_relaxed);
-  if (UNLIKELY(shift == 0)) {
-    shift = __builtin_ctz((int)PageAllocationGranularity());
+  size_t shift = page_characteristics.shift.load(std::memory_order_relaxed);
+  if (PA_UNLIKELY(shift == 0)) {
+    shift = static_cast<size_t>(
+        __builtin_ctz((unsigned int)PageAllocationGranularity()));
     page_characteristics.shift.store(shift, std::memory_order_relaxed);
   }
   return shift;
@@ -93,7 +94,7 @@ PageAllocationGranularityShift() {
 #endif
 }
 
-PAGE_ALLOCATOR_CONSTANTS_DECLARE_CONSTEXPR ALWAYS_INLINE size_t
+PAGE_ALLOCATOR_CONSTANTS_DECLARE_CONSTEXPR PA_ALWAYS_INLINE size_t
 PageAllocationGranularity() {
 #if BUILDFLAG(IS_APPLE) && defined(ARCH_CPU_64_BITS)
   // This is literally equivalent to |1 << PageAllocationGranularityShift()|
@@ -102,9 +103,9 @@ PageAllocationGranularity() {
 #elif BUILDFLAG(IS_LINUX) && defined(ARCH_CPU_ARM64)
   // arm64 supports 4kb, 16kb, and 64kb page sizes. Retrieve from or
   // initialize cache.
-  int size = page_characteristics.size.load(std::memory_order_relaxed);
-  if (UNLIKELY(size == 0)) {
-    size = getpagesize();
+  size_t size = page_characteristics.size.load(std::memory_order_relaxed);
+  if (PA_UNLIKELY(size == 0)) {
+    size = static_cast<size_t>(getpagesize());
     page_characteristics.size.store(size, std::memory_order_relaxed);
   }
   return size;
@@ -113,17 +114,17 @@ PageAllocationGranularity() {
 #endif
 }
 
-PAGE_ALLOCATOR_CONSTANTS_DECLARE_CONSTEXPR ALWAYS_INLINE size_t
+PAGE_ALLOCATOR_CONSTANTS_DECLARE_CONSTEXPR PA_ALWAYS_INLINE size_t
 PageAllocationGranularityOffsetMask() {
   return PageAllocationGranularity() - 1;
 }
 
-PAGE_ALLOCATOR_CONSTANTS_DECLARE_CONSTEXPR ALWAYS_INLINE size_t
+PAGE_ALLOCATOR_CONSTANTS_DECLARE_CONSTEXPR PA_ALWAYS_INLINE size_t
 PageAllocationGranularityBaseMask() {
   return ~PageAllocationGranularityOffsetMask();
 }
 
-PAGE_ALLOCATOR_CONSTANTS_DECLARE_CONSTEXPR ALWAYS_INLINE size_t
+PAGE_ALLOCATOR_CONSTANTS_DECLARE_CONSTEXPR PA_ALWAYS_INLINE size_t
 SystemPageShift() {
   // On Windows allocation granularity is higher than the page size. This comes
   // into play when reserving address space range (allocation granularity),
@@ -135,7 +136,7 @@ SystemPageShift() {
 #endif
 }
 
-PAGE_ALLOCATOR_CONSTANTS_DECLARE_CONSTEXPR ALWAYS_INLINE size_t
+PAGE_ALLOCATOR_CONSTANTS_DECLARE_CONSTEXPR PA_ALWAYS_INLINE size_t
 SystemPageSize() {
 #if (BUILDFLAG(IS_APPLE) && defined(ARCH_CPU_64_BITS)) || \
     (BUILDFLAG(IS_LINUX) && defined(ARCH_CPU_ARM64))
@@ -148,12 +149,12 @@ SystemPageSize() {
 #endif
 }
 
-PAGE_ALLOCATOR_CONSTANTS_DECLARE_CONSTEXPR ALWAYS_INLINE size_t
+PAGE_ALLOCATOR_CONSTANTS_DECLARE_CONSTEXPR PA_ALWAYS_INLINE size_t
 SystemPageOffsetMask() {
   return SystemPageSize() - 1;
 }
 
-PAGE_ALLOCATOR_CONSTANTS_DECLARE_CONSTEXPR ALWAYS_INLINE size_t
+PAGE_ALLOCATOR_CONSTANTS_DECLARE_CONSTEXPR PA_ALWAYS_INLINE size_t
 SystemPageBaseMask() {
   return ~SystemPageOffsetMask();
 }

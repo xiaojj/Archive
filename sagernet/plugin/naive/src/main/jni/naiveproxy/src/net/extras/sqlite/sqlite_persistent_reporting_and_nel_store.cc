@@ -144,8 +144,7 @@ class SQLitePersistentReportingAndNelStore::Backend
             kCurrentVersionNumber,
             kCompatibleVersionNumber,
             background_task_runner,
-            client_task_runner),
-        num_pending_(0) {}
+            client_task_runner) {}
 
   Backend(const Backend&) = delete;
   Backend& operator=(const Backend&) = delete;
@@ -302,7 +301,7 @@ class SQLitePersistentReportingAndNelStore::Backend
 
   // Total number of pending operations (may not match the sum of the number of
   // elements in the pending operations queues, due to operation coalescing).
-  size_t num_pending_ GUARDED_BY(lock_);
+  size_t num_pending_ GUARDED_BY(lock_) = 0;
 
   // Queue of pending operations pertaining to NEL policies, keyed on origin.
   QueueType<NetworkErrorLoggingService::NelPolicyKey, NelPolicyInfo>
@@ -1561,7 +1560,9 @@ SQLitePersistentReportingAndNelStore::SQLitePersistentReportingAndNelStore(
     const base::FilePath& path,
     const scoped_refptr<base::SequencedTaskRunner>& client_task_runner,
     const scoped_refptr<base::SequencedTaskRunner>& background_task_runner)
-    : backend_(new Backend(path, client_task_runner, background_task_runner)) {}
+    : backend_(base::MakeRefCounted<Backend>(path,
+                                             client_task_runner,
+                                             background_task_runner)) {}
 
 SQLitePersistentReportingAndNelStore::~SQLitePersistentReportingAndNelStore() {
   backend_->Close();

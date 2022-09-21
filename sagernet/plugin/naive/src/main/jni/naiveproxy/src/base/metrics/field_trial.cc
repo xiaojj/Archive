@@ -15,6 +15,7 @@
 #include "base/metrics/field_trial_param_associator.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/notreached.h"
+#include "base/numerics/safe_conversions.h"
 #include "base/process/memory.h"
 #include "base/process/process_handle.h"
 #include "base/process/process_info.h"
@@ -257,7 +258,7 @@ PickleIterator FieldTrial::FieldTrialEntry::GetPickleIterator() const {
   const char* src =
       reinterpret_cast<const char*>(this) + sizeof(FieldTrialEntry);
 
-  Pickle pickle(src, pickle_size);
+  Pickle pickle(src, checked_cast<size_t>(pickle_size));
   return PickleIterator(pickle);
 }
 
@@ -763,7 +764,7 @@ bool FieldTrialList::CreateTrialsFromString(const std::string& trials_string) {
 
 // static
 void FieldTrialList::CreateTrialsFromCommandLine(const CommandLine& cmd_line,
-                                                 int fd_key) {
+                                                 uint32_t fd_key) {
   global_->create_trials_from_command_line_called_ = true;
 
 #if !BUILDFLAG(IS_NACL) && !BUILDFLAG(IS_IOS)
@@ -846,7 +847,7 @@ void FieldTrialList::PopulateLaunchOptionsWithFieldTrialState(
 }
 #endif  // !BUILDFLAG(IS_IOS)
 
-#if BUILDFLAG(IS_POSIX) && !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_NACL)
+#if BUILDFLAG(IS_POSIX) && !BUILDFLAG(IS_APPLE) && !BUILDFLAG(IS_NACL)
 // static
 int FieldTrialList::GetFieldTrialDescriptor() {
   InstantiateFieldTrialAllocatorIfNeeded();
@@ -859,7 +860,7 @@ int FieldTrialList::GetFieldTrialDescriptor() {
   return global_->readonly_allocator_region_.GetPlatformHandle().fd;
 #endif
 }
-#endif  // BUILDFLAG(IS_POSIX) && !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_NACL)
+#endif  // BUILDFLAG(IS_POSIX) && !BUILDFLAG(IS_APPLE) && !BUILDFLAG(IS_NACL)
 
 // static
 ReadOnlySharedMemoryRegion
@@ -1002,7 +1003,8 @@ bool FieldTrialList::GetParamsFromSharedMemory(
 
   size_t allocated_size =
       global_->field_trial_allocator_->GetAllocSize(field_trial->ref_);
-  size_t actual_size = sizeof(FieldTrial::FieldTrialEntry) + entry->pickle_size;
+  uint64_t actual_size =
+      sizeof(FieldTrial::FieldTrialEntry) + entry->pickle_size;
   if (allocated_size < actual_size)
     return false;
 
@@ -1230,14 +1232,15 @@ FieldTrialList::DeserializeSharedMemoryRegionMetadata(
   auto* rendezvous = MachPortRendezvousClient::GetInstance();
   if (!rendezvous)
     return ReadOnlySharedMemoryRegion();
-  mac::ScopedMachSendRight scoped_handle =
-      rendezvous->TakeSendRight(field_trial_handle);
+  mac::ScopedMachSendRight scoped_handle = rendezvous->TakeSendRight(
+      static_cast<MachPortsForRendezvous::key_type>(field_trial_handle));
   if (!scoped_handle.is_valid())
     return ReadOnlySharedMemoryRegion();
 #elif BUILDFLAG(IS_FUCHSIA)
   static bool startup_handle_taken = false;
   DCHECK(!startup_handle_taken) << "Shared memory region initialized twice";
-  zx::vmo scoped_handle(zx_take_startup_handle(field_trial_handle));
+  zx::vmo scoped_handle(
+      zx_take_startup_handle(checked_cast<uint32_t>(field_trial_handle)));
   startup_handle_taken = true;
   if (!scoped_handle.is_valid())
     return ReadOnlySharedMemoryRegion();
@@ -1267,7 +1270,7 @@ FieldTrialList::DeserializeSharedMemoryRegionMetadata(
 // static
 bool FieldTrialList::CreateTrialsFromSwitchValue(
     const std::string& switch_value,
-    int fd_key) {
+    uint32_t fd_key) {
   int fd = -1;
 #if BUILDFLAG(IS_POSIX)
   fd = GlobalDescriptors::GetInstance()->MaybeGet(fd_key);

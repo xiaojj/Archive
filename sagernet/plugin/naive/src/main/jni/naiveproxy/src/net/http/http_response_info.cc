@@ -121,8 +121,12 @@ enum {
   // unusable due to the checksum not matching.
   RESPONSE_INFO_SINGLE_KEYED_CACHE_ENTRY_UNUSABLE = 1 << 28,
 
-  // TODO(darin): Add other bits to indicate alternate request methods.
-  // For now, we don't support storing those.
+  // This bit is set if the response has `encrypted_client_hello` set.
+  RESPONSE_INFO_ENCRYPTED_CLIENT_HELLO = 1 << 29,
+
+  // This enum only has a few bits (`1 << 31` is the limit). If allocating the
+  // last flag, instead allocate it as `RESPONSE_INFO_HAS_EXTRA_FLAGS` to
+  // signal another flags word.
 };
 
 HttpResponseInfo::ConnectionInfoCoarse HttpResponseInfo::ConnectionInfoToCoarse(
@@ -187,19 +191,7 @@ HttpResponseInfo::ConnectionInfoCoarse HttpResponseInfo::ConnectionInfoToCoarse(
   return CONNECTION_INFO_COARSE_OTHER;
 }
 
-HttpResponseInfo::HttpResponseInfo()
-    : was_cached(false),
-      cache_entry_status(CacheEntryStatus::ENTRY_UNDEFINED),
-      network_accessed(false),
-      was_fetched_via_spdy(false),
-      was_alpn_negotiated(false),
-      was_fetched_via_proxy(false),
-      did_use_http_auth(false),
-      unused_since_prefetch(false),
-      restricted_prefetch(false),
-      async_revalidation_requested(false),
-      single_keyed_cache_entry_unusable(false),
-      connection_info(CONNECTION_INFO_UNKNOWN) {}
+HttpResponseInfo::HttpResponseInfo() = default;
 
 HttpResponseInfo::HttpResponseInfo(const HttpResponseInfo& rhs) = default;
 
@@ -236,7 +228,7 @@ bool HttpResponseInfo::InitFromPickle(const base::Pickle& pickle,
   response_time = Time::FromInternalValue(time_val);
 
   // Read response-headers
-  headers = new HttpResponseHeaders(&iter);
+  headers = base::MakeRefCounted<HttpResponseHeaders>(&iter);
   if (headers->response_code() == -1)
     return false;
 
@@ -393,6 +385,9 @@ bool HttpResponseInfo::InitFromPickle(const base::Pickle& pickle,
     }
   }
 
+  ssl_info.encrypted_client_hello =
+      (flags & RESPONSE_INFO_ENCRYPTED_CLIENT_HELLO) != 0;
+
   return true;
 }
 
@@ -438,6 +433,8 @@ void HttpResponseInfo::Persist(base::Pickle* pickle,
     flags |= RESPONSE_INFO_HAS_STALENESS;
   if (!dns_aliases.empty())
     flags |= RESPONSE_INFO_HAS_DNS_ALIASES;
+  if (ssl_info.encrypted_client_hello)
+    flags |= RESPONSE_INFO_ENCRYPTED_CLIENT_HELLO;
 
   pickle->WriteInt(flags);
   pickle->WriteInt64(request_time.ToInternalValue());

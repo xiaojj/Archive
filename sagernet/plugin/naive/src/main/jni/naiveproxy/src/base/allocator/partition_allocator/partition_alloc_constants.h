@@ -12,6 +12,7 @@
 
 #include "base/allocator/partition_allocator/address_pool_manager_types.h"
 #include "base/allocator/partition_allocator/page_allocator_constants.h"
+#include "base/allocator/partition_allocator/partition_alloc_base/compiler_specific.h"
 #include "base/allocator/partition_allocator/partition_alloc_config.h"
 #include "base/allocator/partition_allocator/partition_alloc_forward.h"
 #include "base/allocator/partition_allocator/tagging.h"
@@ -26,24 +27,30 @@ namespace partition_alloc {
 // Bit flag constants used as `flag` argument of PartitionRoot::AllocWithFlags,
 // AlignedAllocWithFlags, etc.
 struct AllocFlags {
-  // In order to support bit operations like `flag_a | flag_b`, the old-
-  // fashioned enum (+ surrounding named struct) is used instead of enum class.
-  enum : int {
-    kReturnNull = 1 << 0,
-    kZeroFill = 1 << 1,
-    // Don't allow allocation override hooks. Override hooks are expected to
-    // check for the presence of this flag and return false if it is active.
-    kNoOverrideHooks = 1 << 2,
-    // Don't allow any hooks (override or observers).
-    kNoHooks = 1 << 3,  // Internal only.
-    // If the allocation requires a "slow path" (such as allocating/committing a
-    // new slot span), return nullptr instead. Note this makes all large
-    // allocations return nullptr, such as direct-mapped ones, and even for
-    // smaller ones, a nullptr value is common.
-    kFastPathOrReturnNull = 1 << 4,  // Internal only.
+  static constexpr unsigned int kReturnNull = 1 << 0;
+  static constexpr unsigned int kZeroFill = 1 << 1;
+  // Don't allow allocation override hooks. Override hooks are expected to
+  // check for the presence of this flag and return false if it is active.
+  static constexpr unsigned int kNoOverrideHooks = 1 << 2;
+  // Never let a memory tool like ASan (if active) perform the allocation.
+  static constexpr unsigned int kNoMemoryToolOverride = 1 << 3;
+  // Don't allow any hooks (override or observers).
+  static constexpr unsigned int kNoHooks = 1 << 4;  // Internal.
+  // If the allocation requires a "slow path" (such as allocating/committing a
+  // new slot span), return nullptr instead. Note this makes all large
+  // allocations return nullptr, such as direct-mapped ones, and even for
+  // smaller ones, a nullptr value is common.
+  static constexpr unsigned int kFastPathOrReturnNull = 1 << 5;  // Internal.
 
-    kLastFlag = kFastPathOrReturnNull
-  };
+  static constexpr unsigned int kLastFlag = kFastPathOrReturnNull;
+};
+
+// Bit flag constants used as `flag` argument of PartitionRoot::FreeWithFlags.
+struct FreeFlags {
+  // See AllocFlags::kNoMemoryToolOverride.
+  static constexpr unsigned int kNoMemoryToolOverride = 1 << 0;
+
+  static constexpr unsigned int kLastFlag = kNoMemoryToolOverride;
 };
 
 namespace internal {
@@ -74,36 +81,36 @@ constexpr size_t kPartitionCachelineSize = 64;
 // up against the end of a system page.
 
 #if defined(_MIPS_ARCH_LOONGSON)
-PAGE_ALLOCATOR_CONSTANTS_DECLARE_CONSTEXPR ALWAYS_INLINE size_t
+PAGE_ALLOCATOR_CONSTANTS_DECLARE_CONSTEXPR PA_ALWAYS_INLINE size_t
 PartitionPageShift() {
   return 16;  // 64 KiB
 }
 #elif defined(ARCH_CPU_PPC64)
-PAGE_ALLOCATOR_CONSTANTS_DECLARE_CONSTEXPR ALWAYS_INLINE size_t
+PAGE_ALLOCATOR_CONSTANTS_DECLARE_CONSTEXPR PA_ALWAYS_INLINE size_t
 PartitionPageShift() {
   return 18;  // 256 KiB
 }
 #elif (BUILDFLAG(IS_APPLE) && defined(ARCH_CPU_64_BITS)) || \
     (BUILDFLAG(IS_LINUX) && defined(ARCH_CPU_ARM64))
-PAGE_ALLOCATOR_CONSTANTS_DECLARE_CONSTEXPR ALWAYS_INLINE size_t
+PAGE_ALLOCATOR_CONSTANTS_DECLARE_CONSTEXPR PA_ALWAYS_INLINE size_t
 PartitionPageShift() {
   return PageAllocationGranularityShift() + 2;
 }
 #else
-PAGE_ALLOCATOR_CONSTANTS_DECLARE_CONSTEXPR ALWAYS_INLINE size_t
+PAGE_ALLOCATOR_CONSTANTS_DECLARE_CONSTEXPR PA_ALWAYS_INLINE size_t
 PartitionPageShift() {
   return 14;  // 16 KiB
 }
 #endif
-PAGE_ALLOCATOR_CONSTANTS_DECLARE_CONSTEXPR ALWAYS_INLINE size_t
+PAGE_ALLOCATOR_CONSTANTS_DECLARE_CONSTEXPR PA_ALWAYS_INLINE size_t
 PartitionPageSize() {
   return 1 << PartitionPageShift();
 }
-PAGE_ALLOCATOR_CONSTANTS_DECLARE_CONSTEXPR ALWAYS_INLINE size_t
+PAGE_ALLOCATOR_CONSTANTS_DECLARE_CONSTEXPR PA_ALWAYS_INLINE size_t
 PartitionPageOffsetMask() {
   return PartitionPageSize() - 1;
 }
-PAGE_ALLOCATOR_CONSTANTS_DECLARE_CONSTEXPR ALWAYS_INLINE size_t
+PAGE_ALLOCATOR_CONSTANTS_DECLARE_CONSTEXPR PA_ALWAYS_INLINE size_t
 PartitionPageBaseMask() {
   return ~PartitionPageOffsetMask();
 }
@@ -123,18 +130,18 @@ constexpr size_t kMaxPartitionPagesPerRegularSlotSpan = 4;
 // dirty a private page, which is very wasteful if we never actually store
 // objects there.
 
-PAGE_ALLOCATOR_CONSTANTS_DECLARE_CONSTEXPR ALWAYS_INLINE size_t
+PAGE_ALLOCATOR_CONSTANTS_DECLARE_CONSTEXPR PA_ALWAYS_INLINE size_t
 NumSystemPagesPerPartitionPage() {
   return PartitionPageSize() >> SystemPageShift();
 }
 
-PAGE_ALLOCATOR_CONSTANTS_DECLARE_CONSTEXPR ALWAYS_INLINE size_t
+PAGE_ALLOCATOR_CONSTANTS_DECLARE_CONSTEXPR PA_ALWAYS_INLINE size_t
 MaxSystemPagesPerRegularSlotSpan() {
   return NumSystemPagesPerPartitionPage() *
          kMaxPartitionPagesPerRegularSlotSpan;
 }
 
-PAGE_ALLOCATOR_CONSTANTS_DECLARE_CONSTEXPR ALWAYS_INLINE size_t
+PAGE_ALLOCATOR_CONSTANTS_DECLARE_CONSTEXPR PA_ALWAYS_INLINE size_t
 MaxRegularSlotSpanSize() {
   return kMaxPartitionPagesPerRegularSlotSpan << PartitionPageShift();
 }
@@ -233,19 +240,14 @@ constexpr size_t kSuperPageShift = 21;  // 2 MiB
 constexpr size_t kSuperPageSize = 1 << kSuperPageShift;
 constexpr size_t kSuperPageAlignment = kSuperPageSize;
 constexpr size_t kSuperPageOffsetMask = kSuperPageAlignment - 1;
-constexpr size_t kSuperPageBaseMask = ~kSuperPageOffsetMask & kMemTagUnmask;
+constexpr size_t kSuperPageBaseMask = ~kSuperPageOffsetMask;
 
 // GigaCage is split into two pools, one which supports BackupRefPtr (BRP) and
 // one that doesn't.
 #if defined(PA_HAS_64_BITS_POINTERS)
 // The Configurable Pool is only available in 64-bit mode
 constexpr size_t kNumPools = 3;
-// TODO(crbug.com/1250788): Remove the iOS special case, once larger address
-// space can be used there. This limitation isn't meant for releasing, but is ok
-// to keep for now only because nothing uses PartitionAlloc on iOS yet.
-#if BUILDFLAG(IS_IOS)
-constexpr size_t kPoolMaxSize = kGiB / 4;
-#elif BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
 // Special-case macOS. Contrary to other platforms, there is no sandbox limit
 // there, meaning that a single renderer could "happily" consume >8GiB. So the
 // 8GiB pool size is a regression. Make the limit higher on this platform only
@@ -276,34 +278,34 @@ static constexpr pool_handle kConfigurablePoolHandle = 3;
 constexpr size_t kMaxMemoryTaggingSize = 1024;
 
 #if defined(PA_HAS_MEMORY_TAGGING)
-// Returns whether the tag of |object| overflowed and the containing slot needs
-// to be moved to quarantine.
-ALWAYS_INLINE bool HasOverflowTag(void* object) {
+// Returns whether the tag of |object| overflowed, meaning the containing slot
+// needs to be moved to quarantine.
+PA_ALWAYS_INLINE bool HasOverflowTag(void* object) {
   // The tag with which the slot is put to quarantine.
   constexpr uintptr_t kOverflowTag = 0x0f00000000000000uLL;
-  static_assert((kOverflowTag & ~kMemTagUnmask) != 0,
+  static_assert((kOverflowTag & kPtrTagMask) != 0,
                 "Overflow tag must be in tag bits");
-  return (reinterpret_cast<uintptr_t>(object) & ~kMemTagUnmask) == kOverflowTag;
+  return (reinterpret_cast<uintptr_t>(object) & kPtrTagMask) == kOverflowTag;
 }
 #endif  // defined(PA_HAS_MEMORY_TAGGING)
 
-PAGE_ALLOCATOR_CONSTANTS_DECLARE_CONSTEXPR ALWAYS_INLINE size_t
+PAGE_ALLOCATOR_CONSTANTS_DECLARE_CONSTEXPR PA_ALWAYS_INLINE size_t
 NumPartitionPagesPerSuperPage() {
   return kSuperPageSize >> PartitionPageShift();
 }
 
-constexpr ALWAYS_INLINE size_t MaxSuperPagesInPool() {
+constexpr PA_ALWAYS_INLINE size_t MaxSuperPagesInPool() {
   return kMaxSuperPagesInPool;
 }
 
 #if defined(PA_HAS_64_BITS_POINTERS)
 // In 64-bit mode, the direct map allocation granularity is super page size,
 // because this is the reservation granularity of the GigaCage.
-constexpr ALWAYS_INLINE size_t DirectMapAllocationGranularity() {
+constexpr PA_ALWAYS_INLINE size_t DirectMapAllocationGranularity() {
   return kSuperPageSize;
 }
 
-constexpr ALWAYS_INLINE size_t DirectMapAllocationGranularityShift() {
+constexpr PA_ALWAYS_INLINE size_t DirectMapAllocationGranularityShift() {
   return kSuperPageShift;
 }
 #else   // defined(PA_HAS_64_BITS_POINTERS)
@@ -311,18 +313,18 @@ constexpr ALWAYS_INLINE size_t DirectMapAllocationGranularityShift() {
 // allocation granularity, which is the lowest possible address space allocation
 // unit. However, don't go below partition page size, so that GigaCage bitmaps
 // don't get too large. See kBytesPer1BitOfBRPPoolBitmap.
-PAGE_ALLOCATOR_CONSTANTS_DECLARE_CONSTEXPR ALWAYS_INLINE size_t
+PAGE_ALLOCATOR_CONSTANTS_DECLARE_CONSTEXPR PA_ALWAYS_INLINE size_t
 DirectMapAllocationGranularity() {
   return std::max(PageAllocationGranularity(), PartitionPageSize());
 }
 
-PAGE_ALLOCATOR_CONSTANTS_DECLARE_CONSTEXPR ALWAYS_INLINE size_t
+PAGE_ALLOCATOR_CONSTANTS_DECLARE_CONSTEXPR PA_ALWAYS_INLINE size_t
 DirectMapAllocationGranularityShift() {
   return std::max(PageAllocationGranularityShift(), PartitionPageShift());
 }
 #endif  // defined(PA_HAS_64_BITS_POINTERS)
 
-PAGE_ALLOCATOR_CONSTANTS_DECLARE_CONSTEXPR ALWAYS_INLINE size_t
+PAGE_ALLOCATOR_CONSTANTS_DECLARE_CONSTEXPR PA_ALWAYS_INLINE size_t
 DirectMapAllocationGranularityOffsetMask() {
   return DirectMapAllocationGranularity() - 1;
 }
@@ -365,7 +367,7 @@ constexpr size_t kMinDirectMappedDownsize = kMaxBucketed + 1;
 // fails. This is a security choice in Chrome, to help making size_t vs int bugs
 // harder to exploit.
 
-PAGE_ALLOCATOR_CONSTANTS_DECLARE_CONSTEXPR ALWAYS_INLINE size_t
+PAGE_ALLOCATOR_CONSTANTS_DECLARE_CONSTEXPR PA_ALWAYS_INLINE size_t
 MaxDirectMapped() {
   // Subtract kSuperPageSize to accommodate for granularity inside
   // PartitionRoot::GetDirectMapReservationSize.

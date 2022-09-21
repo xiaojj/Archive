@@ -72,10 +72,7 @@ SocketPosix::SocketPosix()
     : socket_fd_(kInvalidSocket),
       accept_socket_watcher_(FROM_HERE),
       read_socket_watcher_(FROM_HERE),
-      read_buf_len_(0),
-      write_socket_watcher_(FROM_HERE),
-      write_buf_len_(0),
-      waiting_connect_(false) {}
+      write_socket_watcher_(FROM_HERE) {}
 
 SocketPosix::~SocketPosix() {
   Close();
@@ -440,7 +437,7 @@ int SocketPosix::DoAccept(std::unique_ptr<SocketPosix>* socket) {
   if (new_socket < 0)
     return MapAcceptError(errno);
 
-  std::unique_ptr<SocketPosix> accepted_socket(new SocketPosix);
+  auto accepted_socket = std::make_unique<SocketPosix>();
   int rv = accepted_socket->AdoptConnectedSocket(new_socket, new_peer_address);
   if (rv != OK)
     return rv;

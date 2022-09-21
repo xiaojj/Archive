@@ -32,7 +32,7 @@ class BASE_EXPORT DummyHistogram : public HistogramBase {
   HistogramType GetHistogramType() const override;
   bool HasConstructionArguments(Sample expected_minimum,
                                 Sample expected_maximum,
-                                uint32_t expected_bucket_count) const override;
+                                size_t expected_bucket_count) const override;
   void Add(Sample value) override {}
   void AddCount(Sample value, int count) override {}
   void AddSamples(const HistogramSamples& samples) override {}
@@ -41,12 +41,12 @@ class BASE_EXPORT DummyHistogram : public HistogramBase {
   std::unique_ptr<HistogramSamples> SnapshotDelta() override;
   std::unique_ptr<HistogramSamples> SnapshotFinalDelta() const override;
   void WriteAscii(std::string* output) const override {}
-  Value ToGraphDict() const override;
+  Value::Dict ToGraphDict() const override;
 
  protected:
   // HistogramBase:
   void SerializeInfoImpl(Pickle* pickle) const override {}
-  Value GetParameters() const override;
+  Value::Dict GetParameters() const override;
 
  private:
   friend class NoDestructor<DummyHistogram>;

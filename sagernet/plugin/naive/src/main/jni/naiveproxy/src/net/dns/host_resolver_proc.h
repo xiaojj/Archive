@@ -30,7 +30,7 @@ class AddressList;
 class NET_EXPORT HostResolverProc
     : public base::RefCountedThreadSafe<HostResolverProc> {
  public:
-  explicit HostResolverProc(HostResolverProc* previous,
+  explicit HostResolverProc(scoped_refptr<HostResolverProc> previous,
                             bool allow_fallback_to_system_or_default = true);
 
   HostResolverProc(const HostResolverProc&) = delete;
@@ -74,11 +74,11 @@ class NET_EXPORT HostResolverProc
 
   // Sets the previous procedure in the chain.  Aborts if this would result in a
   // cycle.
-  void SetPreviousProc(HostResolverProc* proc);
+  void SetPreviousProc(scoped_refptr<HostResolverProc> proc);
 
   // Sets the last procedure in the chain, i.e. appends |proc| to the end of the
   // current chain.  Aborts if this would result in a cycle.
-  void SetLastProc(HostResolverProc* proc);
+  void SetLastProc(scoped_refptr<HostResolverProc> proc);
 
   // Returns the last procedure in the chain starting at |proc|.  Will return
   // NULL iff |proc| is NULL.
@@ -154,10 +154,12 @@ class NET_EXPORT_PRIVATE SystemHostResolverProc : public HostResolverProc {
 struct NET_EXPORT_PRIVATE ProcTaskParams {
   // Default delay between calls to the system resolver for the same hostname.
   // (Can be overridden by field trial.)
-  static const base::TimeDelta kDnsDefaultUnresponsiveDelay;
+  static constexpr base::TimeDelta kDnsDefaultUnresponsiveDelay =
+      base::Seconds(6);
 
   // Sets up defaults.
-  ProcTaskParams(HostResolverProc* resolver_proc, size_t max_retry_attempts);
+  ProcTaskParams(scoped_refptr<HostResolverProc> resolver_proc,
+                 size_t max_retry_attempts);
 
   ProcTaskParams(const ProcTaskParams& other);
 
@@ -174,10 +176,10 @@ struct NET_EXPORT_PRIVATE ProcTaskParams {
 
   // This is the limit after which we make another attempt to resolve the host
   // if the worker thread has not responded yet.
-  base::TimeDelta unresponsive_delay;
+  base::TimeDelta unresponsive_delay = kDnsDefaultUnresponsiveDelay;
 
   // Factor to grow |unresponsive_delay| when we re-re-try.
-  uint32_t retry_factor;
+  uint32_t retry_factor = 2;
 };
 
 }  // namespace net

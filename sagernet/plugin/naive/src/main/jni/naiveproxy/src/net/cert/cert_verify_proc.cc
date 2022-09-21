@@ -31,15 +31,15 @@
 #include "net/cert/cert_verifier.h"
 #include "net/cert/cert_verify_result.h"
 #include "net/cert/crl_set.h"
-#include "net/cert/internal/extended_key_usage.h"
-#include "net/cert/internal/ocsp.h"
-#include "net/cert/internal/parse_certificate.h"
 #include "net/cert/internal/revocation_checker.h"
-#include "net/cert/internal/signature_algorithm.h"
 #include "net/cert/internal/system_trust_store.h"
 #include "net/cert/known_roots.h"
 #include "net/cert/ocsp_revocation_status.h"
 #include "net/cert/pem.h"
+#include "net/cert/pki/extended_key_usage.h"
+#include "net/cert/pki/ocsp.h"
+#include "net/cert/pki/parse_certificate.h"
+#include "net/cert/pki/signature_algorithm.h"
 #include "net/cert/symantec_certs.h"
 #include "net/cert/x509_certificate.h"
 #include "net/cert/x509_certificate_net_log_param.h"
@@ -359,35 +359,31 @@ bool AreSHA1IntermediatesAllowed() {
 #endif
 }
 
-// Sets the "has_*" boolean members in |verify_result| that correspond with
-// the the presence of |hash| somewhere in the certificate chain (excluding the
-// trust anchor).
-void MapAlgorithmToBool(DigestAlgorithm hash, CertVerifyResult* verify_result) {
+// Validate if a digest hash algorithm is acceptable in a certificate.
+//
+// Sets as a side effect the "has_*" boolean members in
+// |verify_result| that correspond with the the presence of |hash|
+// somewhere in the certificate chain (excluding the trust anchor).
+bool ValidateHashAlgorithm(DigestAlgorithm hash,
+                           CertVerifyResult* verify_result) {
   switch (hash) {
-    case DigestAlgorithm::Md2:
-      verify_result->has_md2 = true;
-      break;
-    case DigestAlgorithm::Md4:
-      verify_result->has_md4 = true;
-      break;
-    case DigestAlgorithm::Md5:
-      verify_result->has_md5 = true;
-      break;
     case DigestAlgorithm::Sha1:
       verify_result->has_sha1 = true;
-      break;
+      return true;  // For now.
     case DigestAlgorithm::Sha256:
     case DigestAlgorithm::Sha384:
     case DigestAlgorithm::Sha512:
-      break;
+      return true;
+    case DigestAlgorithm::Md2:
+    case DigestAlgorithm::Md4:
+    case DigestAlgorithm::Md5:
+      return false;
   }
+  NOTREACHED();
 }
 
 // Inspects the signature algorithms in a single certificate |cert|.
 //
-//   * Sets |verify_result->has_md2| to true if the certificate uses MD2.
-//   * Sets |verify_result->has_md4| to true if the certificate uses MD4.
-//   * Sets |verify_result->has_md5| to true if the certificate uses MD5.
 //   * Sets |verify_result->has_sha1| to true if the certificate uses SHA1.
 //
 // Returns false if the signature algorithm was unknown or mismatched.
@@ -411,10 +407,13 @@ void MapAlgorithmToBool(DigestAlgorithm hash, CertVerifyResult* verify_result) {
 
   std::unique_ptr<SignatureAlgorithm> algorithm =
       SignatureAlgorithm::Create(der::Input(cert_algorithm_sequence), nullptr);
-  if (!algorithm)
+  if (!algorithm) {
     return false;
+  }
 
-  MapAlgorithmToBool(algorithm->digest(), verify_result);
+  if (!ValidateHashAlgorithm(algorithm->digest(), verify_result)) {
+    return false;
+  }
 
   // Check algorithm-specific parameters.
   switch (algorithm->algorithm()) {
@@ -424,8 +423,10 @@ void MapAlgorithmToBool(DigestAlgorithm hash, CertVerifyResult* verify_result) {
       DCHECK(!algorithm->has_params());
       break;
     case SignatureAlgorithmId::RsaPss:
-      MapAlgorithmToBool(algorithm->ParamsForRsaPss()->mgf1_hash(),
-                         verify_result);
+      if (!ValidateHashAlgorithm(algorithm->ParamsForRsaPss()->mgf1_hash(),
+                                 verify_result)) {
+        return false;
+      }
       break;
   }
 
@@ -495,23 +496,22 @@ base::Value CertVerifyParams(X509Certificate* cert,
                              int flags,
                              CRLSet* crl_set,
                              const CertificateList& additional_trust_anchors) {
-  base::Value dict(base::Value::Type::DICTIONARY);
-  dict.SetKey("certificates", NetLogX509CertificateList(cert));
+  base::Value::Dict dict;
+  dict.Set("certificates", NetLogX509CertificateList(cert));
   if (!ocsp_response.empty()) {
-    dict.SetStringKey("ocsp_response",
-                      PEMEncode(ocsp_response, "NETLOG OCSP RESPONSE"));
+    dict.Set("ocsp_response", PEMEncode(ocsp_response, "NETLOG OCSP RESPONSE"));
   }
   if (!sct_list.empty()) {
-    dict.SetStringKey("sct_list", PEMEncode(sct_list, "NETLOG SCT LIST"));
+    dict.Set("sct_list", PEMEncode(sct_list, "NETLOG SCT LIST"));
   }
-  dict.SetKey("host", NetLogStringValue(hostname));
-  dict.SetIntKey("verify_flags", flags);
-  dict.SetKey("crlset_sequence", NetLogNumberValue(crl_set->sequence()));
+  dict.Set("host", NetLogStringValue(hostname));
+  dict.Set("verify_flags", flags);
+  dict.Set("crlset_sequence", NetLogNumberValue(crl_set->sequence()));
   if (crl_set->IsExpired())
-    dict.SetBoolKey("crlset_is_expired", true);
+    dict.Set("crlset_is_expired", true);
 
   if (!additional_trust_anchors.empty()) {
-    base::Value certs(base::Value::Type::LIST);
+    base::Value::List certs;
     for (auto& anchor : additional_trust_anchors) {
       std::string pem_encoded;
       if (X509Certificate::GetPEMEncodedFromDER(
@@ -520,10 +520,10 @@ base::Value CertVerifyParams(X509Certificate* cert,
         certs.Append(std::move(pem_encoded));
       }
     }
-    dict.SetKey("additional_trust_anchors", std::move(certs));
+    dict.Set("additional_trust_anchors", std::move(certs));
   }
 
-  return dict;
+  return base::Value(std::move(dict));
 }
 
 }  // namespace
@@ -534,13 +534,14 @@ base::Value CertVerifyParams(X509Certificate* cert,
 scoped_refptr<CertVerifyProc> CertVerifyProc::CreateSystemVerifyProc(
     scoped_refptr<CertNetFetcher> cert_net_fetcher) {
 #if BUILDFLAG(IS_ANDROID)
-  return new CertVerifyProcAndroid(std::move(cert_net_fetcher));
+  return base::MakeRefCounted<CertVerifyProcAndroid>(
+      std::move(cert_net_fetcher));
 #elif BUILDFLAG(IS_IOS)
-  return new CertVerifyProcIOS();
+  return base::MakeRefCounted<CertVerifyProcIOS>();
 #elif BUILDFLAG(IS_MAC)
-  return new CertVerifyProcMac();
+  return base::MakeRefCounted<CertVerifyProcMac>();
 #elif BUILDFLAG(IS_WIN)
-  return new CertVerifyProcWin();
+  return base::MakeRefCounted<CertVerifyProcWin>();
 #else
 #error Unsupported platform
 #endif
@@ -557,7 +558,7 @@ scoped_refptr<CertVerifyProc> CertVerifyProc::CreateBuiltinVerifyProc(
 }
 #endif
 
-CertVerifyProc::CertVerifyProc() {}
+CertVerifyProc::CertVerifyProc() = default;
 
 CertVerifyProc::~CertVerifyProc() = default;
 
@@ -658,12 +659,6 @@ int CertVerifyProc::Verify(X509Certificate* cert,
       rv = MapCertStatusToNetError(verify_result->cert_status);
   }
 
-  // Treat certificates signed using broken signature algorithms as invalid.
-  if (verify_result->has_md2 || verify_result->has_md4) {
-    verify_result->cert_status |= CERT_STATUS_INVALID;
-    rv = MapCertStatusToNetError(verify_result->cert_status);
-  }
-
   if (verify_result->has_sha1)
     verify_result->cert_status |= CERT_STATUS_SHA1_SIGNATURE_PRESENT;
 
@@ -680,7 +675,7 @@ int CertVerifyProc::Verify(X509Certificate* cert,
       (verify_result->has_sha1_leaf ||
        (verify_result->has_sha1 && !AreSHA1IntermediatesAllowed()));
 
-  if (verify_result->has_md5 || current_sha1_issue) {
+  if (current_sha1_issue) {
     verify_result->cert_status |= CERT_STATUS_WEAK_SIGNATURE_ALGORITHM;
     // Avoid replacing a more serious error, such as an OS/library failure,
     // by ensuring that if verification failed, it failed with a certificate
@@ -821,7 +816,7 @@ static bool CheckNameConstraints(const std::vector<std::string>& dns_names,
         continue;
       base::StringPiece suffix =
           base::StringPiece(dns_name).substr(dns_name.size() - domain.size());
-      if (!base::LowerCaseEqualsASCII(suffix, domain))
+      if (!base::EqualsCaseInsensitiveASCII(suffix, domain))
         continue;
       ok = true;
       break;
