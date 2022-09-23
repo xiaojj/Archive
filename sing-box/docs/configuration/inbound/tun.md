@@ -11,12 +11,12 @@
   
   "interface_name": "tun0",
   "inet4_address": "172.19.0.1/30",
-  "inet6_address": "fdfe:dcba:9876::1/128",
-  "mtu": 1500,
+  "inet6_address": "fdfe:dcba:9876::1/126",
+  "mtu": 9000,
   "auto_route": true,
   "strict_route": true,
   "endpoint_independent_nat": false,
-  "stack": "gvisor",
+  "stack": "system",
   "include_uid": [
     0
   ],
@@ -80,6 +80,10 @@ Set the default route to the Tun.
 
     To avoid traffic loopback, set `route.auto_detect_interface` or `route.default_interface` or `outbound.bind_interface`
 
+!!! note "Use with Android VPN"
+
+    By default, VPN takes precedence over tun. To make tun go through VPN, enable `route.override_android_vpn`.
+
 #### strict_route
 
 Enforce strict routing rules in Linux when `auto_route` is enabled:
@@ -91,6 +95,10 @@ It prevents address leaks and makes DNS hijacking work on Android and Linux with
 not be accessible by others.
 
 #### endpoint_independent_nat
+
+!!! info ""
+
+    This item is only available on the gvisor stack, other stacks are endpoint-independent NAT by default.
 
 Enable endpoint-independent NAT.
 
@@ -104,14 +112,15 @@ UDP NAT expiration time in seconds, default is 300 (5 minutes).
 
 TCP/IP stack.
 
-| Stack            | Upstream                                                              | Status            |
-|------------------|-----------------------------------------------------------------------|-------------------|
-| gVisor (default) | [google/gvisor](https://github.com/google/gvisor)                     | recommended       |
-| LWIP             | [eycorsican/go-tun2socks](https://github.com/eycorsican/go-tun2socks) | upstream archived |
+| Stack            | Description                                                                      | Status            |
+|------------------|----------------------------------------------------------------------------------|-------------------|
+| system (default) | Sometimes better performance                                                     | recommended       |
+| gVisor           | Better compatibility, based on [google/gvisor](https://github.com/google/gvisor) | recommended       |
+| LWIP             | Based on [eycorsican/go-tun2socks](https://github.com/eycorsican/go-tun2socks)   | upstream archived |
 
 !!! warning ""
 
-    The LWIP stack is not included by default, see [Installation](/#installation).
+    gVisor and LWIP stacks is not included by default, see [Installation](/#installation).
 
 #### include_uid
 

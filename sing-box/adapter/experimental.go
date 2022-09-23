@@ -4,21 +4,27 @@ import (
 	"context"
 	"net"
 
+	"github.com/sagernet/sing-box/common/urltest"
 	N "github.com/sagernet/sing/common/network"
 )
 
 type ClashServer interface {
 	Service
-	TrafficController
+	Mode() string
+	StoreSelected() bool
+	CacheFile() ClashCacheFile
+	HistoryStorage() *urltest.HistoryStorage
+	RoutedConnection(ctx context.Context, conn net.Conn, metadata InboundContext, matchedRule Rule) (net.Conn, Tracker)
+	RoutedPacketConnection(ctx context.Context, conn N.PacketConn, metadata InboundContext, matchedRule Rule) (N.PacketConn, Tracker)
+}
+
+type ClashCacheFile interface {
+	LoadSelected(group string) string
+	StoreSelected(group string, selected string) error
 }
 
 type Tracker interface {
 	Leave()
-}
-
-type TrafficController interface {
-	RoutedConnection(ctx context.Context, conn net.Conn, metadata InboundContext, matchedRule Rule) (net.Conn, Tracker)
-	RoutedPacketConnection(ctx context.Context, conn N.PacketConn, metadata InboundContext, matchedRule Rule) (N.PacketConn, Tracker)
 }
 
 type OutboundGroup interface {

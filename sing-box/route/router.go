@@ -86,14 +86,14 @@ type Router struct {
 	transports                         []dns.Transport
 	transportMap                       map[string]dns.Transport
 	transportDomainStrategy            map[dns.Transport]dns.DomainStrategy
-	interfaceBindManager               control.BindManager
+	interfaceFinder                    myInterfaceFinder
 	autoDetectInterface                bool
 	defaultInterface                   string
 	defaultMark                        int
 	networkMonitor                     tun.NetworkUpdateMonitor
 	interfaceMonitor                   tun.DefaultInterfaceMonitor
 	packageManager                     tun.PackageManager
-	trafficController                  adapter.TrafficController
+	clashServer                        adapter.ClashServer
 	processSearcher                    process.Searcher
 }
 
@@ -123,7 +123,6 @@ func NewRouter(ctx context.Context, logger log.ContextLogger, dnsLogger log.Cont
 		defaultDetour:         options.Final,
 		dnsClient:             dns.NewClient(dnsOptions.DNSClientOptions.DisableCache, dnsOptions.DNSClientOptions.DisableExpire),
 		defaultDomainStrategy: dns.DomainStrategy(dnsOptions.Strategy),
-		interfaceBindManager:  control.NewBindManager(),
 		autoDetectInterface:   options.AutoDetectInterface,
 		defaultInterface:      options.DefaultInterface,
 		defaultMark:           options.DefaultMark,
@@ -196,7 +195,7 @@ func NewRouter(ctx context.Context, logger log.ContextLogger, dnsLogger log.Cont
 					return nil, E.New("parse dns server[", tag, "]: missing address_resolver")
 				}
 			}
-			transport, err := dns.NewTransport(ctx, detour, server.Address)
+			transport, err := dns.CreateTransport(ctx, detour, server.Address)
 			if err != nil {
 				return nil, E.Cause(err, "parse dns server[", tag, "]")
 			}
@@ -233,7 +232,7 @@ func NewRouter(ctx context.Context, logger log.ContextLogger, dnsLogger log.Cont
 	}
 	if defaultTransport == nil {
 		if len(transports) == 0 {
-			transports = append(transports, dns.NewLocalTransport())
+			transports = append(transports, &dns.LocalTransport{})
 		}
 		defaultTransport = transports[0]
 	}
@@ -244,26 +243,36 @@ func NewRouter(ctx context.Context, logger log.ContextLogger, dnsLogger log.Cont
 
 	needInterfaceMonitor := options.AutoDetectInterface ||
 		C.IsDarwin && common.Any(inbounds, func(inbound option.Inbound) bool {
-			return inbound.HTTPOptions.SetSystemProxy || inbound.MixedOptions.SetSystemProxy
+			return inbound.HTTPOptions.SetSystemProxy || inbound.MixedOptions.SetSystemProxy || C.IsAndroid && inbound.TunOptions.AutoRoute
 		})
 
-	if router.interfaceBindManager != nil || needInterfaceMonitor {
+	if needInterfaceMonitor {
 		networkMonitor, err := tun.NewNetworkUpdateMonitor(router)
 		if err == nil {
 			router.networkMonitor = networkMonitor
-			if router.interfaceBindManager != nil {
-				networkMonitor.RegisterCallback(router.interfaceBindManager.Update)
-			}
+			networkMonitor.RegisterCallback(router.interfaceFinder.update)
 		}
 	}
 
 	if router.networkMonitor != nil && needInterfaceMonitor {
-		interfaceMonitor, err := tun.NewDefaultInterfaceMonitor(router.networkMonitor)
+		interfaceMonitor, err := tun.NewDefaultInterfaceMonitor(router.networkMonitor, tun.DefaultInterfaceMonitorOptions{
+			OverrideAndroidVPN: options.OverrideAndroidVPN,
+		})
 		if err != nil {
 			return nil, E.New("auto_detect_interface unsupported on current platform")
 		}
-		interfaceMonitor.RegisterCallback(func() error {
-			router.logger.Info("updated default interface ", router.interfaceMonitor.DefaultInterfaceName(netip.IPv4Unspecified()), ", index ", router.interfaceMonitor.DefaultInterfaceIndex(netip.IPv4Unspecified()))
+		interfaceMonitor.RegisterCallback(func(event int) error {
+			if C.IsAndroid {
+				var vpnStatus string
+				if router.interfaceMonitor.AndroidVPNEnabled() {
+					vpnStatus = "enabled"
+				} else {
+					vpnStatus = "disabled"
+				}
+				router.logger.Info("updated default interface ", router.interfaceMonitor.DefaultInterfaceName(netip.IPv4Unspecified()), ", index ", router.interfaceMonitor.DefaultInterfaceIndex(netip.IPv4Unspecified()), ", vpn ", vpnStatus)
+			} else {
+				router.logger.Info("updated default interface ", router.interfaceMonitor.DefaultInterfaceName(netip.IPv4Unspecified()), ", index ", router.interfaceMonitor.DefaultInterfaceIndex(netip.IPv4Unspecified()))
+			}
 			return nil
 		})
 		router.interfaceMonitor = interfaceMonitor
@@ -545,7 +554,7 @@ func (r *Router) RouteConnection(ctx context.Context, conn net.Conn, metadata ad
 		if err == nil {
 			metadata.Protocol = sniffMetadata.Protocol
 			metadata.Domain = sniffMetadata.Domain
-			if metadata.SniffOverrideDestination && sniff.IsDomainName(metadata.Domain) {
+			if metadata.SniffOverrideDestination && M.IsDomainName(metadata.Domain) {
 				metadata.Destination = M.Socksaddr{
 					Fqdn: metadata.Domain,
 					Port: metadata.Destination.Port,
@@ -576,8 +585,8 @@ func (r *Router) RouteConnection(ctx context.Context, conn net.Conn, metadata ad
 		conn.Close()
 		return E.New("missing supported outbound, closing connection")
 	}
-	if r.trafficController != nil {
-		trackerConn, tracker := r.trafficController.RoutedConnection(ctx, conn, metadata, matchedRule)
+	if r.clashServer != nil {
+		trackerConn, tracker := r.clashServer.RoutedConnection(ctx, conn, metadata, matchedRule)
 		defer tracker.Leave()
 		conn = trackerConn
 	}
@@ -622,7 +631,7 @@ func (r *Router) RoutePacketConnection(ctx context.Context, conn N.PacketConn, m
 		if err == nil {
 			metadata.Protocol = sniffMetadata.Protocol
 			metadata.Domain = sniffMetadata.Domain
-			if metadata.SniffOverrideDestination && sniff.IsDomainName(metadata.Domain) {
+			if metadata.SniffOverrideDestination && M.IsDomainName(metadata.Domain) {
 				metadata.Destination = M.Socksaddr{
 					Fqdn: metadata.Domain,
 					Port: metadata.Destination.Port,
@@ -649,8 +658,8 @@ func (r *Router) RoutePacketConnection(ctx context.Context, conn N.PacketConn, m
 		conn.Close()
 		return E.New("missing supported outbound, closing packet connection")
 	}
-	if r.trafficController != nil {
-		trackerConn, tracker := r.trafficController.RoutedPacketConnection(ctx, conn, metadata, matchedRule)
+	if r.clashServer != nil {
+		trackerConn, tracker := r.clashServer.RoutedPacketConnection(ctx, conn, metadata, matchedRule)
 		defer tracker.Leave()
 		conn = trackerConn
 	}
@@ -667,12 +676,12 @@ func (r *Router) match(ctx context.Context, metadata *adapter.InboundContext, de
 		}
 		processInfo, err := process.FindProcessInfo(r.processSearcher, ctx, metadata.Network, metadata.Source.AddrPort(), originDestination)
 		if err != nil {
-			r.logger.DebugContext(ctx, "failed to search process: ", err)
+			r.logger.InfoContext(ctx, "failed to search process: ", err)
 		} else {
 			if processInfo.ProcessPath != "" {
-				r.logger.DebugContext(ctx, "found process path: ", processInfo.ProcessPath)
+				r.logger.InfoContext(ctx, "found process path: ", processInfo.ProcessPath)
 			} else if processInfo.PackageName != "" {
-				r.logger.DebugContext(ctx, "found package name: ", processInfo.PackageName)
+				r.logger.InfoContext(ctx, "found package name: ", processInfo.PackageName)
 			} else if processInfo.UserId != -1 {
 				if /*needUserName &&*/ true {
 					osUser, _ := user.LookupId(F.ToString(processInfo.UserId))
@@ -681,9 +690,9 @@ func (r *Router) match(ctx context.Context, metadata *adapter.InboundContext, de
 					}
 				}
 				if processInfo.User != "" {
-					r.logger.DebugContext(ctx, "found user: ", processInfo.User)
+					r.logger.InfoContext(ctx, "found user: ", processInfo.User)
 				} else {
-					r.logger.DebugContext(ctx, "found user id: ", processInfo.UserId)
+					r.logger.InfoContext(ctx, "found user id: ", processInfo.UserId)
 				}
 			}
 			metadata.ProcessInfo = processInfo
@@ -702,8 +711,8 @@ func (r *Router) match(ctx context.Context, metadata *adapter.InboundContext, de
 	return nil, defaultOutbound
 }
 
-func (r *Router) InterfaceBindManager() control.BindManager {
-	return r.interfaceBindManager
+func (r *Router) InterfaceFinder() control.InterfaceFinder {
+	return &r.interfaceFinder
 }
 
 func (r *Router) AutoDetectInterface() bool {
@@ -734,8 +743,12 @@ func (r *Router) PackageManager() tun.PackageManager {
 	return r.packageManager
 }
 
-func (r *Router) SetTrafficController(controller adapter.TrafficController) {
-	r.trafficController = controller
+func (r *Router) ClashServer() adapter.ClashServer {
+	return r.clashServer
+}
+
+func (r *Router) SetClashServer(controller adapter.ClashServer) {
+	r.clashServer = controller
 }
 
 func hasRule(rules []option.Rule, cond func(rule option.DefaultRule) bool) bool {

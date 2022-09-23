@@ -2,16 +2,17 @@ package outbound
 
 import (
 	"context"
-	"crypto/tls"
 	"net"
 
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/common/dialer"
 	"github.com/sagernet/sing-box/common/mux"
+	"github.com/sagernet/sing-box/common/tls"
 	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-box/option"
 	"github.com/sagernet/sing-box/transport/v2ray"
+	"github.com/sagernet/sing-dns"
 	"github.com/sagernet/sing-vmess"
 	"github.com/sagernet/sing-vmess/packetaddr"
 	"github.com/sagernet/sing/common"
@@ -28,9 +29,10 @@ type VMess struct {
 	client          *vmess.Client
 	serverAddr      M.Socksaddr
 	multiplexDialer N.Dialer
-	tlsConfig       *tls.Config
+	tlsConfig       tls.Config
 	transport       adapter.V2RayClientTransport
 	packetAddr      bool
+	xudp            bool
 }
 
 func NewVMess(ctx context.Context, router adapter.Router, logger log.ContextLogger, tag string, options option.VMessOutboundOptions) (*VMess, error) {
@@ -47,7 +49,7 @@ func NewVMess(ctx context.Context, router adapter.Router, logger log.ContextLogg
 	}
 	var err error
 	if options.TLS != nil {
-		outbound.tlsConfig, err = dialer.TLSConfig(options.Server, common.PtrValueOrDefault(options.TLS))
+		outbound.tlsConfig, err = tls.NewClient(router, options.Server, common.PtrValueOrDefault(options.TLS))
 		if err != nil {
 			return nil, err
 		}
@@ -62,8 +64,14 @@ func NewVMess(ctx context.Context, router adapter.Router, logger log.ContextLogg
 	if err != nil {
 		return nil, err
 	}
-	if outbound.multiplexDialer == nil && options.PacketAddr {
+	switch options.PacketEncoding {
+	case "":
+	case "packetaddr":
 		outbound.packetAddr = true
+	case "xudp":
+		outbound.xudp = true
+	default:
+		return nil, E.New("unknown packet encoding: ", options.PacketEncoding)
 	}
 	var clientOptions []vmess.ClientOption
 	if options.GlobalPadding {
@@ -88,7 +96,7 @@ func NewVMess(ctx context.Context, router adapter.Router, logger log.ContextLogg
 }
 
 func (h *VMess) Close() error {
-	return common.Close(h.transport)
+	return common.Close(h.multiplexDialer, h.transport)
 }
 
 func (h *VMess) DialContext(ctx context.Context, network string, destination M.Socksaddr) (net.Conn, error) {
@@ -142,7 +150,7 @@ func (h *vmessDialer) DialContext(ctx context.Context, network string, destinati
 	} else {
 		conn, err = h.dialer.DialContext(ctx, N.NetworkTCP, h.serverAddr)
 		if err == nil && h.tlsConfig != nil {
-			conn, err = dialer.TLSClient(ctx, conn, h.tlsConfig)
+			conn, err = tls.ClientHandshake(ctx, conn, h.tlsConfig)
 		}
 	}
 	if err != nil {
@@ -169,14 +177,16 @@ func (h *vmessDialer) ListenPacket(ctx context.Context, destination M.Socksaddr)
 	} else {
 		conn, err = h.dialer.DialContext(ctx, N.NetworkTCP, h.serverAddr)
 		if err == nil && h.tlsConfig != nil {
-			conn, err = dialer.TLSClient(ctx, conn, h.tlsConfig)
+			conn, err = tls.ClientHandshake(ctx, conn, h.tlsConfig)
 		}
 	}
 	if err != nil {
 		return nil, err
 	}
 	if h.packetAddr {
-		return packetaddr.NewConn(h.client.DialEarlyPacketConn(conn, M.Socksaddr{Fqdn: packetaddr.SeqPacketMagicAddress}), destination), nil
+		return dialer.NewResolvePacketConn(ctx, h.router, dns.DomainStrategyAsIS, packetaddr.NewConn(h.client.DialEarlyPacketConn(conn, M.Socksaddr{Fqdn: packetaddr.SeqPacketMagicAddress}), destination)), nil
+	} else if h.xudp {
+		return h.client.DialEarlyXUDPPacketConn(conn, destination), nil
 	} else {
 		return h.client.DialEarlyPacketConn(conn, destination), nil
 	}

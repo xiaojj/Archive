@@ -1,3 +1,130 @@
+#### 1.1-beta7
+
+* Add v2ray mux and XUDP support for VMess inbound
+* Add XUDP support for VMess outbound
+* Disable DF on direct outbound by default
+* Fix bugs in 1.1-beta6
+
+#### 1.1-beta6
+
+* Add [URLTest outbound](/configuration/outbound/urltest)
+* Fix bugs in 1.1-beta5
+
+#### 1.1-beta5
+
+* Print tags in version command
+* Redirect clash hello to external ui
+* Move shadowsocksr implementation to clash
+* Make gVisor optional **1**
+* Refactor to miekg/dns
+* Refactor bind control
+* Fix build on go1.18
+* Fix clash store-selected
+* Fix close grpc conn
+* Fix port rule match logic
+* Fix clash api proxy type
+
+*1*:
+
+The build tag `no_gvisor` is replaced by `with_gvisor`.
+
+The default tun stack is changed to system.
+
+#### 1.0.4
+
+* Fix close grpc conn
+* Fix port rule match logic
+* Fix clash api proxy type
+
+#### 1.1-beta4
+
+* Add internal simple-obfs and v2ray-plugin [Shadowsocks plugins](/configuration/outbound/shadowsocks#plugin)
+* Add [ShadowsocksR outbound](/configuration/outbound/shadowsocksr)
+* Add [VLESS outbound and XUDP](/configuration/outbound/vless)
+* Skip wait for hysteria tcp handshake response
+* Fix socks4 client
+* Fix hysteria inbound
+* Fix concurrent write
+
+#### 1.0.3
+
+* Fix socks4 client
+* Fix hysteria inbound
+* Fix concurrent write
+
+#### 1.1-beta3
+
+* Fix using custom TLS client in http2 client
+* Fix bugs in 1.1-beta2
+
+#### 1.1-beta2
+
+* Add Clash mode and persistence support **1**
+* Add TLS ECH and uTLS support for outbound TLS options **2**
+* Fix socks4 request
+* Fix processing empty dns result
+
+*1*:
+
+Switching modes using the Clash API, and `store-selected` are now supported,
+see [Experimental](/configuration/experimental).
+
+*2*:
+
+ECH (Encrypted Client Hello) is a TLS extension that allows a client to encrypt the first part of its ClientHello
+message, see [TLS#ECH](/configuration/shared/tls#ech).
+
+uTLS is a fork of "crypto/tls", which provides ClientHello fingerprinting resistance,
+see [TLS#uTLS](/configuration/shared/tls#utls).
+
+#### 1.0.2
+
+* Fix socks4 request
+* Fix processing empty dns result
+
+#### 1.1-beta1
+
+* Add support for use with android VPNService **1**
+* Add tun support for WireGuard outbound **2**
+* Add system tun stack **3**
+* Add comment filter for config **4**
+* Add option for allow optional proxy protocol header
+* Add half close for smux
+* Set UDP DF by default **5**
+* Set default tun mtu to 9000
+* Update gVisor to 20220905.0
+
+*1*:
+
+In previous versions, Android VPN would not work with tun enabled.
+
+The usage of tun over VPN and VPN over tun is now supported, see [Tun Inbound](/configuration/inbound/tun#auto_route).
+
+*2*:
+
+In previous releases, WireGuard outbound support was backed by the lower performance gVisor virtual interface.
+
+It achieves the same performance as wireguard-go by providing automatic system interface support.
+
+*3*:
+
+It does not depend on gVisor and has better performance in some cases.
+
+It is less compatible and may not be available in some environments.
+
+*4*:
+
+Annotated json configuration files are now supported.
+
+*5*:
+
+UDP fragmentation is now blocked by default.
+
+Including shadowsocks-libev, shadowsocks-rust and quic-go all disable segmentation by default.
+
+See [Dial Fields](/configuration/shared/dial#udp_fragment)
+and [Listen Fields](/configuration/shared/listen#udp_fragment).
+
 #### 1.0.1
 
 * Fix match 4in6 address in ip_cidr
