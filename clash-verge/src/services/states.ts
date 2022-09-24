@@ -17,7 +17,52 @@ export const atomLogData = atom<ApiType.LogItem[]>({
 
 export const atomEnableLog = atom<boolean>({
   key: "atomEnableLog",
-  default: true,
+  effects: [
+    ({ setSelf, onSet }) => {
+      const key = "enable-log";
+
+      try {
+        setSelf(localStorage.getItem(key) !== "false");
+      } catch {}
+
+      onSet((newValue, _, isReset) => {
+        try {
+          if (isReset) {
+            localStorage.removeItem(key);
+          } else {
+            localStorage.setItem(key, newValue.toString());
+          }
+        } catch {}
+      });
+    },
+  ],
+});
+
+interface IConnectionSetting {
+  layout: "table" | "list";
+}
+
+export const atomConnectionSetting = atom<IConnectionSetting>({
+  key: "atomConnectionSetting",
+  effects: [
+    ({ setSelf, onSet }) => {
+      const key = "connections-setting";
+
+      try {
+        const value = localStorage.getItem(key);
+        const data = value == null ? { layout: "list" } : JSON.parse(value);
+        setSelf(data);
+      } catch {
+        setSelf({ layout: "list" });
+      }
+
+      onSet((newValue) => {
+        try {
+          localStorage.setItem(key, JSON.stringify(newValue));
+        } catch {}
+      });
+    },
+  ],
 });
 
 // save the state of each profile item loading
