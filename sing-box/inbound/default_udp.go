@@ -10,7 +10,6 @@ import (
 	"github.com/sagernet/sing-dns"
 	"github.com/sagernet/sing/common"
 	"github.com/sagernet/sing/common/buf"
-	"github.com/sagernet/sing/common/control"
 	E "github.com/sagernet/sing/common/exceptions"
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
@@ -18,15 +17,11 @@ import (
 
 func (a *myInboundAdapter) ListenUDP() (net.PacketConn, error) {
 	bindAddr := M.SocksaddrFrom(netip.Addr(a.listenOptions.Listen), a.listenOptions.ListenPort)
-	var lc net.ListenConfig
-	if !a.listenOptions.UDPFragment {
-		lc.Control = control.Append(lc.Control, control.DisableUDPFragment())
-	}
-	udpConn, err := lc.ListenPacket(a.ctx, M.NetworkFromNetAddr(N.NetworkUDP, bindAddr.Addr), bindAddr.String())
+	udpConn, err := net.ListenUDP(M.NetworkFromNetAddr(N.NetworkUDP, bindAddr.Addr), bindAddr.UDPAddr())
 	if err != nil {
 		return nil, err
 	}
-	a.udpConn = udpConn.(*net.UDPConn)
+	a.udpConn = udpConn
 	a.udpAddr = bindAddr
 	a.logger.Info("udp server started at ", udpConn.LocalAddr())
 	return udpConn, err

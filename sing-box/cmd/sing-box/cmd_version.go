@@ -3,9 +3,9 @@ package main
 import (
 	"os"
 	"runtime"
-	"runtime/debug"
 
 	C "github.com/sagernet/sing-box/constant"
+	F "github.com/sagernet/sing/common/format"
 
 	"github.com/spf13/cobra"
 )
@@ -25,40 +25,30 @@ func init() {
 }
 
 func printVersion(cmd *cobra.Command, args []string) {
-	if nameOnly {
-		os.Stdout.WriteString(C.Version + "\n")
-		return
+	var version string
+	if !nameOnly {
+		version = "sing-box "
 	}
-	version := "sing-box version " + C.Version + "\n\n"
-	version += "Environment: " + runtime.Version() + " " + runtime.GOOS + "/" + runtime.GOARCH + "\n"
-
-	var tags string
-	var revision string
-
-	debugInfo, loaded := debug.ReadBuildInfo()
-	if loaded {
-		for _, setting := range debugInfo.Settings {
-			switch setting.Key {
-			case "-tags":
-				tags = setting.Value
-			case "vcs.revision":
-				revision = setting.Value
-			}
+	version += F.ToString(C.Version)
+	if C.Commit != "" {
+		version += "." + C.Commit
+	}
+	if !nameOnly {
+		version += " ("
+		version += runtime.Version()
+		version += ", "
+		version += runtime.GOOS
+		version += "/"
+		version += runtime.GOARCH
+		version += ", "
+		version += "CGO "
+		if C.CGO_ENABLED {
+			version += "enabled"
+		} else {
+			version += "disabled"
 		}
+		version += ")"
 	}
-
-	if tags != "" {
-		version += "Tags: " + tags + "\n"
-	}
-	if revision != "" {
-		version += "Revision: " + revision + "\n"
-	}
-
-	if C.CGO_ENABLED {
-		version += "CGO: enabled\n"
-	} else {
-		version += "CGO: disabled\n"
-	}
-
+	version += "\n"
 	os.Stdout.WriteString(version)
 }

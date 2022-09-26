@@ -73,7 +73,6 @@
         "user_id": [
           1000
         ],
-        "clash_mode": "direct",
         "invert": false,
         "outbound": [
           "direct"
@@ -104,10 +103,8 @@
 
     The default rule uses the following matching logic:  
     (`domain` || `domain_suffix` || `domain_keyword` || `domain_regex` || `geosite`) &&  
-    (`port` || `port_range`) &&  
     (`source_geoip` || `source_ip_cidr`) &&  
-    (`source_port` || `source_port_range`) &&  
-    `other fields`
+    `other fields`  
 
 #### inbound
 
@@ -210,10 +207,6 @@ Match user name.
     Only supported on Linux.
 
 Match user id.
-
-#### clash_mode
-
-Match Clash mode.
 
 #### invert
 

@@ -374,33 +374,15 @@ var _ net.Conn = (*Conn)(nil)
 
 type Conn struct {
 	quic.Stream
-	destination      M.Socksaddr
-	needReadResponse bool
+	destination     M.Socksaddr
+	responseWritten bool
 }
 
-func NewConn(stream quic.Stream, destination M.Socksaddr, isClient bool) *Conn {
+func NewConn(stream quic.Stream, destination M.Socksaddr) *Conn {
 	return &Conn{
-		Stream:           stream,
-		destination:      destination,
-		needReadResponse: isClient,
+		Stream:      stream,
+		destination: destination,
 	}
-}
-
-func (c *Conn) Read(p []byte) (n int, err error) {
-	if c.needReadResponse {
-		var response *ServerResponse
-		response, err = ReadServerResponse(c.Stream)
-		if err != nil {
-			c.Close()
-			return
-		}
-		if !response.OK {
-			c.Close()
-			return 0, E.New("remote error: ", response.Message)
-		}
-		c.needReadResponse = false
-	}
-	return c.Stream.Read(p)
 }
 
 func (c *Conn) LocalAddr() net.Addr {
@@ -412,7 +394,7 @@ func (c *Conn) RemoteAddr() net.Addr {
 }
 
 func (c *Conn) ReaderReplaceable() bool {
-	return !c.needReadResponse
+	return true
 }
 
 func (c *Conn) WriterReplaceable() bool {
@@ -487,25 +469,6 @@ func (c *PacketConn) WritePacket(buffer *buf.Buffer, destination M.Socksaddr) er
 	})
 }
 
-func (c *PacketConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
-	msg := <-c.msgCh
-	if msg == nil {
-		err = net.ErrClosed
-		return
-	}
-	n = copy(p, msg.Data)
-	addr = M.ParseSocksaddrHostPort(msg.Host, msg.Port).UDPAddr()
-	return
-}
-
-func (c *PacketConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
-	err = c.WritePacket(buf.As(p), M.SocksaddrFromNet(addr))
-	if err == nil {
-		n = len(p)
-	}
-	return
-}
-
 func (c *PacketConn) LocalAddr() net.Addr {
 	return nil
 }
@@ -524,6 +487,14 @@ func (c *PacketConn) SetReadDeadline(t time.Time) error {
 
 func (c *PacketConn) SetWriteDeadline(t time.Time) error {
 	return os.ErrInvalid
+}
+
+func (c *PacketConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
+	return 0, nil, os.ErrInvalid
+}
+
+func (c *PacketConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
+	return 0, os.ErrInvalid
 }
 
 func (c *PacketConn) Read(b []byte) (n int, err error) {

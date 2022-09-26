@@ -1,8 +1,9 @@
 NAME = sing-box
 COMMIT = $(shell git rev-parse --short HEAD)
-TAGS ?= with_gvisor,with_quic,with_wireguard,with_clash_api
-TAGS_TEST ?= with_gvisor,with_quic,with_wireguard,with_grpc,with_ech,with_utls,with_shadowsocksr
-PARAMS = -v -trimpath -tags "$(TAGS)" -ldflags "-s -w -buildid="
+TAGS ?= with_quic,with_wireguard,with_clash_api
+PARAMS = -v -trimpath -tags '$(TAGS)' -ldflags \
+		'-X "github.com/sagernet/sing-box/constant.Commit=$(COMMIT)" \
+		-w -s -buildid='
 MAIN = ./cmd/sing-box
 
 .PHONY: test release
@@ -60,15 +61,11 @@ release_install:
 	go install -v github.com/tcnksm/ghr@latest
 
 test:
-	@go test -v ./... && \
-	cd test && \
+	@go test -v . && \
+	pushd test && \
 	go mod tidy && \
-	go test -v -tags "$(TAGS_TEST)" .
-test_stdio:
-	@go test -v ./... && \
-	cd test && \
-	go mod tidy && \
-	go test -v -tags "$(TAGS_TEST),force_stdio" .
+	go test -v -tags with_quic,with_wireguard,with_grpc . && \
+	popd
 
 clean:
 	rm -rf bin dist

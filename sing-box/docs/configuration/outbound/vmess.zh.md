@@ -14,7 +14,7 @@
   "authenticated_length": true,
   "network": "tcp",
   "tls": {},
-  "packet_encoding": "",
+  "packet_addr": false,
   "multiplex": {},
   "transport": {},
 
@@ -84,13 +84,9 @@ VMess 用户 ID。
 
 TLS 配置, 参阅 [TLS](/zh/configuration/shared/tls/#outbound)。
 
-#### packet_encoding
+#### packet_addr
 
-| 编码         | 描述            |
-|------------|---------------|
-| (空)        | 禁用            |
-| packetaddr | 由 v2ray 5+ 支持 |
-| xudp       | 由 xray 支持     |
+启用 packetaddr 支持。
 
 #### multiplex
 

@@ -2,7 +2,6 @@ package clashapi
 
 import (
 	"net/http"
-	"strings"
 
 	"github.com/sagernet/sing-box/log"
 
@@ -10,11 +9,11 @@ import (
 	"github.com/go-chi/render"
 )
 
-func configRouter(server *Server, logFactory log.Factory, logger log.Logger) http.Handler {
+func configRouter(logFactory log.Factory) http.Handler {
 	r := chi.NewRouter()
-	r.Get("/", getConfigs(server, logFactory))
+	r.Get("/", getConfigs(logFactory))
 	r.Put("/", updateConfigs)
-	r.Patch("/", patchConfigs(server, logger))
+	r.Patch("/", patchConfigs)
 	return r
 }
 
@@ -32,7 +31,7 @@ type configSchema struct {
 	Tun         map[string]any `json:"tun"`
 }
 
-func getConfigs(server *Server, logFactory log.Factory) func(w http.ResponseWriter, r *http.Request) {
+func getConfigs(logFactory log.Factory) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		logLevel := logFactory.Level()
 		if logLevel == log.LevelTrace {
@@ -41,31 +40,15 @@ func getConfigs(server *Server, logFactory log.Factory) func(w http.ResponseWrit
 			logLevel = log.LevelError
 		}
 		render.JSON(w, r, &configSchema{
-			Mode:        server.mode,
+			Mode:        "rule",
 			BindAddress: "*",
 			LogLevel:    log.FormatLevel(logLevel),
 		})
 	}
 }
 
-func patchConfigs(server *Server, logger log.Logger) func(w http.ResponseWriter, r *http.Request) {
-	return func(w http.ResponseWriter, r *http.Request) {
-		var newConfig configSchema
-		err := render.DecodeJSON(r.Body, &newConfig)
-		if err != nil {
-			render.Status(r, http.StatusBadRequest)
-			render.JSON(w, r, ErrBadRequest)
-			return
-		}
-		if newConfig.Mode != "" {
-			mode := strings.ToLower(newConfig.Mode)
-			if server.mode != mode {
-				server.mode = mode
-				logger.Info("updated mode: ", mode)
-			}
-		}
-		render.NoContent(w, r)
-	}
+func patchConfigs(w http.ResponseWriter, r *http.Request) {
+	render.NoContent(w, r)
 }
 
 func updateConfigs(w http.ResponseWriter, r *http.Request) {

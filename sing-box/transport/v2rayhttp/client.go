@@ -3,6 +3,7 @@ package v2rayhttp
 import (
 	"bufio"
 	"context"
+	"crypto/tls"
 	"io"
 	"math/rand"
 	"net"
@@ -11,13 +12,10 @@ import (
 	"strings"
 
 	"github.com/sagernet/sing-box/adapter"
-	"github.com/sagernet/sing-box/common/tls"
 	"github.com/sagernet/sing-box/option"
 	E "github.com/sagernet/sing/common/exceptions"
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
-
-	"golang.org/x/net/http2"
 )
 
 var _ adapter.V2RayClientTransport = (*Client)(nil)
@@ -26,7 +24,7 @@ type Client struct {
 	ctx        context.Context
 	dialer     N.Dialer
 	serverAddr M.Socksaddr
-	transport  http.RoundTripper
+	client     *http.Client
 	http2      bool
 	url        *url.URL
 	host       []string
@@ -34,26 +32,7 @@ type Client struct {
 	headers    http.Header
 }
 
-func NewClient(ctx context.Context, dialer N.Dialer, serverAddr M.Socksaddr, options option.V2RayHTTPOptions, tlsConfig tls.Config) adapter.V2RayClientTransport {
-	var transport http.RoundTripper
-	if tlsConfig == nil {
-		transport = &http.Transport{
-			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-				return dialer.DialContext(ctx, network, M.ParseSocksaddr(addr))
-			},
-		}
-	} else {
-		tlsConfig.SetNextProtos([]string{http2.NextProtoTLS})
-		transport = &http2.Transport{
-			DialTLSContext: func(ctx context.Context, network, addr string, cfg *tls.STDConfig) (net.Conn, error) {
-				conn, err := dialer.DialContext(ctx, network, M.ParseSocksaddr(addr))
-				if err != nil {
-					return nil, err
-				}
-				return tls.ClientHandshake(ctx, conn, tlsConfig)
-			},
-		}
-	}
+func NewClient(ctx context.Context, dialer N.Dialer, serverAddr M.Socksaddr, options option.V2RayHTTPOptions, tlsConfig *tls.Config) adapter.V2RayClientTransport {
 	client := &Client{
 		ctx:        ctx,
 		dialer:     dialer,
@@ -61,8 +40,16 @@ func NewClient(ctx context.Context, dialer N.Dialer, serverAddr M.Socksaddr, opt
 		host:       options.Host,
 		method:     options.Method,
 		headers:    make(http.Header),
-		transport:  transport,
-		http2:      tlsConfig != nil,
+		client: &http.Client{
+			Transport: &http.Transport{
+				DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+					return dialer.DialContext(ctx, network, M.ParseSocksaddr(addr))
+				},
+				ForceAttemptHTTP2: true,
+				TLSClientConfig:   tlsConfig,
+			},
+		},
+		http2: tlsConfig != nil,
 	}
 	if client.method == "" {
 		client.method = "PUT"
@@ -148,16 +135,17 @@ func (c *Client) dialHTTP2(ctx context.Context) (net.Conn, error) {
 	}
 	// Disable any compression method from server.
 	request.Header.Set("Accept-Encoding", "identity")
-	conn := newLateHTTPConn(pipeInWriter)
-	go func() {
-		response, err := c.transport.RoundTrip(request)
-		if err != nil {
-			conn.setup(nil, err)
-		} else if response.StatusCode != 200 {
-			conn.setup(nil, E.New("unexpected status: ", response.StatusCode, " ", response.Status))
-		} else {
-			conn.setup(response.Body, nil)
-		}
-	}()
-	return conn, nil
+	response, err := c.client.Do(request) // nolint: bodyclose
+	if err != nil {
+		pipeInWriter.Close()
+		return nil, err
+	}
+	if response.StatusCode != 200 {
+		pipeInWriter.Close()
+		return nil, E.New("unexpected status: ", response.StatusCode, " ", response.Status)
+	}
+	return &HTTPConn{
+		response.Body,
+		pipeInWriter,
+	}, nil
 }

@@ -17,14 +17,18 @@ var muxProtocols = []mux.Protocol{
 	mux.ProtocolSMux,
 }
 
-func TestVMessSMux(t *testing.T) {
-	testVMessMux(t, mux.ProtocolSMux.String())
-}
-
 func TestShadowsocksMux(t *testing.T) {
 	for _, protocol := range muxProtocols {
 		t.Run(protocol.String(), func(t *testing.T) {
 			testShadowsocksMux(t, protocol.String())
+		})
+	}
+}
+
+func TestVMessMux(t *testing.T) {
+	for _, protocol := range muxProtocols {
+		t.Run(protocol.String(), func(t *testing.T) {
+			testVMessMux(t, protocol.String())
 		})
 	}
 }

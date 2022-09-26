@@ -61,6 +61,7 @@ func findProxyByName(router adapter.Router) func(next http.Handler) http.Handler
 func proxyInfo(server *Server, detour adapter.Outbound) *badjson.JSONObject {
 	var info badjson.JSONObject
 	var clashType string
+	var isGroup bool
 	switch detour.Type() {
 	case C.TypeDirect:
 		clashType = "Direct"
@@ -80,18 +81,13 @@ func proxyInfo(server *Server, detour adapter.Outbound) *badjson.JSONObject {
 		clashType = "Hysteria"
 	case C.TypeWireGuard:
 		clashType = "WireGuard"
-	case C.TypeShadowsocksR:
-		clashType = "ShadowsocksR"
-	case C.TypeVLESS:
-		clashType = "VLESS"
 	case C.TypeTor:
 		clashType = "Tor"
 	case C.TypeSSH:
 		clashType = "SSH"
 	case C.TypeSelector:
 		clashType = "Selector"
-	case C.TypeURLTest:
-		clashType = "URLTest"
+		isGroup = true
 	default:
 		clashType = "Direct"
 	}
@@ -104,9 +100,10 @@ func proxyInfo(server *Server, detour adapter.Outbound) *badjson.JSONObject {
 	} else {
 		info.Put("history", []*urltest.History{})
 	}
-	if group, isGroup := detour.(adapter.OutboundGroup); isGroup {
-		info.Put("now", group.Now())
-		info.Put("all", group.All())
+	if isGroup {
+		selector := detour.(adapter.OutboundGroup)
+		info.Put("now", selector.Now())
+		info.Put("all", selector.All())
 	}
 	return &info
 }

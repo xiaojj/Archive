@@ -3,7 +3,6 @@ package main
 import (
 	"os"
 
-	_ "github.com/sagernet/sing-box/include"
 	"github.com/sagernet/sing-box/log"
 
 	"github.com/spf13/cobra"

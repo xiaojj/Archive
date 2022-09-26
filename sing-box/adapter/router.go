@@ -11,7 +11,7 @@ import (
 	"github.com/sagernet/sing/common/control"
 	N "github.com/sagernet/sing/common/network"
 
-	mdns "github.com/miekg/dns"
+	"golang.org/x/net/dns/dnsmessage"
 )
 
 type Router interface {
@@ -27,11 +27,11 @@ type Router interface {
 	GeoIPReader() *geoip.Reader
 	LoadGeosite(code string) (Rule, error)
 
-	Exchange(ctx context.Context, message *mdns.Msg) (*mdns.Msg, error)
+	Exchange(ctx context.Context, message *dnsmessage.Message) (*dnsmessage.Message, error)
 	Lookup(ctx context.Context, domain string, strategy dns.DomainStrategy) ([]netip.Addr, error)
 	LookupDefault(ctx context.Context, domain string) ([]netip.Addr, error)
 
-	InterfaceFinder() control.InterfaceFinder
+	InterfaceBindManager() control.BindManager
 	DefaultInterface() string
 	AutoDetectInterface() bool
 	DefaultMark() int
@@ -39,9 +39,7 @@ type Router interface {
 	InterfaceMonitor() tun.DefaultInterfaceMonitor
 	PackageManager() tun.PackageManager
 	Rules() []Rule
-
-	ClashServer() ClashServer
-	SetClashServer(controller ClashServer)
+	SetTrafficController(controller TrafficController)
 }
 
 type Rule interface {

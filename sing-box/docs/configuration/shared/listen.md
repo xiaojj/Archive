@@ -5,27 +5,24 @@
   "listen": "::",
   "listen_port": 5353,
   "tcp_fast_open": false,
-  "udp_fragment": false,
   "sniff": false,
   "sniff_override_destination": false,
   "domain_strategy": "prefer_ipv6",
   "udp_timeout": 300,
   "proxy_protocol": false,
-  "proxy_protocol_accept_no_header": false,
   "detour": "another-in"
 }
 ```
 
 ### Fields
 
-| Field                             | Available Context                                                 |
-|-----------------------------------|-------------------------------------------------------------------|
-| `listen`                          | Needs to listen on TCP or UDP.                                    |
-| `listen_port`                     | Needs to listen on TCP or UDP.                                    |
-| `tcp_fast_open`                   | Needs to listen on TCP.                                           |
-| `udp_timeout`                     | Needs to assemble UDP connections, currently Tun and Shadowsocks. |
-| `proxy_protocol`                  | Needs to listen on TCP.                                           |
-| `proxy_protocol_accept_no_header` | When `proxy_protocol` enabled                                     |
+| Field            | Available Context                                                 |
+|------------------|-------------------------------------------------------------------|
+| `listen`         | Needs to listen on TCP or UDP.                                    |
+| `listen_port`    | Needs to listen on TCP or UDP.                                    |
+| `tcp_fast_open`  | Needs to listen on TCP.                                           |
+| `udp_timeout`    | Needs to assemble UDP connections, currently Tun and Shadowsocks. |
+| `proxy_protocol` | Needs to listen on TCP.                                           |
 
 #### listen
 
@@ -39,11 +36,7 @@ Listen port.
 
 #### tcp_fast_open
 
-Enable TCP Fast Open.
-
-#### udp_fragment
-
-Enable UDP fragmentation.
+Enable tcp fast open for listener.
 
 #### sniff
 
@@ -72,10 +65,6 @@ UDP NAT expiration time in seconds, default is 300 (5 minutes).
 #### proxy_protocol
 
 Parse [Proxy Protocol](https://www.haproxy.org/download/1.8/doc/proxy-protocol.txt) in the connection header.
-
-#### proxy_protocol_accept_no_header
-
-Accept connections without Proxy Protocol header.
 
 #### detour
 

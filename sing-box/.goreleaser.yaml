@@ -9,9 +9,8 @@ builds:
     gcflags:
       - all=-trimpath={{.Env.GOPATH}}
     ldflags:
-      - -s -w -buildid=
+      - -X github.com/sagernet/sing-box/constant.Commit={{ .ShortCommit }} -s -w -buildid=
     tags:
-      - with_gvisor
       - with_quic
       - with_wireguard
       - with_clash_api

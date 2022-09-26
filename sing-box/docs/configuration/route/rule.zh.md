@@ -78,7 +78,6 @@
         "user_id": [
           1000
         ],
-        "clash_mode": "direct",
         "invert": false,
         "outbound": "direct"
       },
@@ -105,10 +104,8 @@
 
     默认规则使用以下匹配逻辑:  
     (`domain` || `domain_suffix` || `domain_keyword` || `domain_regex` || `geosite` || `geoip` || `ip_cidr`) &&  
-    (`port` || `port_range`) &&  
     (`source_geoip` || `source_ip_cidr`) &&  
-    (`source_port` || `source_port_range`) &&  
-    `other fields`
+    `other fields`  
 
 #### inbound
 
@@ -219,10 +216,6 @@
     仅支持 Linux.
 
 匹配用户 ID。
-
-#### clash_mode
-
-匹配 Clash 模式。
 
 #### invert
 

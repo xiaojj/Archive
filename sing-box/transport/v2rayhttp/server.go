@@ -2,13 +2,13 @@ package v2rayhttp
 
 import (
 	"context"
+	"crypto/tls"
 	"net"
 	"net/http"
 	"os"
 	"strings"
 
 	"github.com/sagernet/sing-box/adapter"
-	"github.com/sagernet/sing-box/common/tls"
 	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing-box/option"
 	"github.com/sagernet/sing/common"
@@ -16,8 +16,6 @@ import (
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
 	sHttp "github.com/sagernet/sing/protocol/http"
-
-	"golang.org/x/net/http2"
 )
 
 var _ adapter.V2RayServerTransport = (*Server)(nil)
@@ -37,7 +35,7 @@ func (s *Server) Network() []string {
 	return []string{N.NetworkTCP}
 }
 
-func NewServer(ctx context.Context, options option.V2RayHTTPOptions, tlsConfig tls.Config, handler N.TCPConnectionHandler, errorHandler E.Handler) (*Server, error) {
+func NewServer(ctx context.Context, options option.V2RayHTTPOptions, tlsConfig *tls.Config, handler N.TCPConnectionHandler, errorHandler E.Handler) *Server {
 	server := &Server{
 		ctx:          ctx,
 		handler:      handler,
@@ -60,15 +58,9 @@ func NewServer(ctx context.Context, options option.V2RayHTTPOptions, tlsConfig t
 		Handler:           server,
 		ReadHeaderTimeout: C.TCPTimeout,
 		MaxHeaderBytes:    http.DefaultMaxHeaderBytes,
+		TLSConfig:         tlsConfig,
 	}
-	if tlsConfig != nil {
-		stdConfig, err := tlsConfig.Config()
-		if err != nil {
-			return nil, err
-		}
-		server.httpServer.TLSConfig = stdConfig
-	}
-	return server, nil
+	return server
 }
 
 func (s *Server) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
@@ -112,7 +104,10 @@ func (s *Server) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 		s.handler.NewConnection(request.Context(), conn, metadata)
 	} else {
 		conn := &ServerHTTPConn{
-			newHTTPConn(request.Body, writer),
+			HTTPConn{
+				request.Body,
+				writer,
+			},
 			writer.(http.Flusher),
 		}
 		s.handler.NewConnection(request.Context(), conn, metadata)
@@ -127,10 +122,6 @@ func (s *Server) Serve(listener net.Listener) error {
 	if s.httpServer.TLSConfig == nil {
 		return s.httpServer.Serve(listener)
 	} else {
-		err := http2.ConfigureServer(s.httpServer, &http2.Server{})
-		if err != nil {
-			return err
-		}
 		return s.httpServer.ServeTLS(listener, "", "")
 	}
 }

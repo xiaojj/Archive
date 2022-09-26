@@ -16,7 +16,7 @@ import (
 	N "github.com/sagernet/sing/common/network"
 	"github.com/sagernet/sing/common/task"
 
-	mDNS "github.com/miekg/dns"
+	"golang.org/x/net/dns/dnsmessage"
 )
 
 var _ adapter.Outbound = (*DNS)(nil)
@@ -72,7 +72,7 @@ func (d *DNS) handleConnection(ctx context.Context, conn net.Conn, metadata adap
 	if err != nil {
 		return err
 	}
-	var message mDNS.Msg
+	var message dnsmessage.Message
 	err = message.Unpack(buffer.Bytes())
 	if err != nil {
 		return err
@@ -88,7 +88,7 @@ func (d *DNS) handleConnection(ctx context.Context, conn net.Conn, metadata adap
 		responseBuffer := common.Dup(_responseBuffer)
 		defer responseBuffer.Release()
 		responseBuffer.Resize(2, 0)
-		n, err := response.PackBuffer(responseBuffer.FreeBytes())
+		n, err := response.AppendPack(responseBuffer.Index(0))
 		if err != nil {
 			return err
 		}
@@ -117,7 +117,7 @@ func (d *DNS) NewPacketConnection(ctx context.Context, conn N.PacketConn, metada
 			if err != nil {
 				return err
 			}
-			var message mDNS.Msg
+			var message dnsmessage.Message
 			err = message.Unpack(buffer.Bytes())
 			if err != nil {
 				return err
@@ -131,7 +131,7 @@ func (d *DNS) NewPacketConnection(ctx context.Context, conn N.PacketConn, metada
 				}
 				timeout.Update()
 				responseBuffer := buf.NewPacket()
-				n, err := response.PackBuffer(responseBuffer.FreeBytes())
+				n, err := response.AppendPack(responseBuffer.Index(0))
 				if err != nil {
 					responseBuffer.Release()
 					return err

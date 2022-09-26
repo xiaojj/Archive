@@ -2,12 +2,12 @@ package v2rayquic
 
 import (
 	"context"
+	"crypto/tls"
 	"net"
 	"os"
 
 	"github.com/sagernet/quic-go"
 	"github.com/sagernet/sing-box/adapter"
-	"github.com/sagernet/sing-box/common/tls"
 	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing-box/option"
 	"github.com/sagernet/sing-box/transport/hysteria"
@@ -21,7 +21,7 @@ var _ adapter.V2RayServerTransport = (*Server)(nil)
 
 type Server struct {
 	ctx          context.Context
-	tlsConfig    *tls.STDConfig
+	tlsConfig    *tls.Config
 	quicConfig   *quic.Config
 	handler      N.TCPConnectionHandler
 	errorHandler E.Handler
@@ -29,25 +29,21 @@ type Server struct {
 	quicListener quic.Listener
 }
 
-func NewServer(ctx context.Context, options option.V2RayQUICOptions, tlsConfig tls.Config, handler N.TCPConnectionHandler, errorHandler E.Handler) (*Server, error) {
+func NewServer(ctx context.Context, options option.V2RayQUICOptions, tlsConfig *tls.Config, handler N.TCPConnectionHandler, errorHandler E.Handler) *Server {
 	quicConfig := &quic.Config{
 		DisablePathMTUDiscovery: !C.IsLinux && !C.IsWindows,
 	}
-	stdConfig, err := tlsConfig.Config()
-	if err != nil {
-		return nil, err
-	}
-	if len(stdConfig.NextProtos) == 0 {
-		stdConfig.NextProtos = []string{"h2", "http/1.1"}
+	if len(tlsConfig.NextProtos) == 0 {
+		tlsConfig.NextProtos = []string{"h2", "http/1.1"}
 	}
 	server := &Server{
 		ctx:          ctx,
-		tlsConfig:    stdConfig,
+		tlsConfig:    tlsConfig,
 		quicConfig:   quicConfig,
 		handler:      handler,
 		errorHandler: errorHandler,
 	}
-	return server, nil
+	return server
 }
 
 func (s *Server) Network() []string {

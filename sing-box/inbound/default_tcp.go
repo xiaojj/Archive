@@ -29,7 +29,7 @@ func (a *myInboundAdapter) ListenTCP() (net.Listener, error) {
 	}
 	if a.listenOptions.ProxyProtocol {
 		a.logger.Debug("proxy protocol enabled")
-		tcpListener = &proxyproto.Listener{Listener: tcpListener, AcceptNoHeader: a.listenOptions.ProxyProtocolAcceptNoHeader}
+		tcpListener = &proxyproto.Listener{Listener: tcpListener}
 	}
 	a.tcpListener = tcpListener
 	return tcpListener, err

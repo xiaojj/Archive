@@ -11,10 +11,9 @@ import (
 	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing/common"
 	"github.com/sagernet/sing/common/buf"
-	M "github.com/sagernet/sing/common/metadata"
 	"github.com/sagernet/sing/common/task"
 
-	mDNS "github.com/miekg/dns"
+	"golang.org/x/net/dns/dnsmessage"
 )
 
 func StreamDomainNameQuery(readCtx context.Context, reader io.Reader) (*adapter.InboundContext, error) {
@@ -45,13 +44,18 @@ func StreamDomainNameQuery(readCtx context.Context, reader io.Reader) (*adapter.
 }
 
 func DomainNameQuery(ctx context.Context, packet []byte) (*adapter.InboundContext, error) {
-	var msg mDNS.Msg
-	err := msg.Unpack(packet)
+	var parser dnsmessage.Parser
+	_, err := parser.Start(packet)
 	if err != nil {
 		return nil, err
 	}
-	if len(msg.Question) == 0 || msg.Question[0].Qclass != mDNS.ClassINET || !M.IsDomainName(msg.Question[0].Name) {
+	question, err := parser.Question()
+	if err != nil {
 		return nil, os.ErrInvalid
 	}
-	return &adapter.InboundContext{Protocol: C.ProtocolDNS}, nil
+	domain := question.Name.String()
+	if question.Class == dnsmessage.ClassINET && IsDomainName(domain) {
+		return &adapter.InboundContext{Protocol: C.ProtocolDNS /*, Domain: domain*/}, nil
+	}
+	return nil, os.ErrInvalid
 }

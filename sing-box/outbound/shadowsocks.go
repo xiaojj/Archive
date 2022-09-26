@@ -10,7 +10,6 @@ import (
 	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-box/option"
-	"github.com/sagernet/sing-box/transport/sip003"
 	"github.com/sagernet/sing-shadowsocks"
 	"github.com/sagernet/sing-shadowsocks/shadowimpl"
 	"github.com/sagernet/sing/common"
@@ -28,7 +27,6 @@ type Shadowsocks struct {
 	dialer          N.Dialer
 	method          shadowsocks.Method
 	serverAddr      M.Socksaddr
-	plugin          sip003.Plugin
 	uot             bool
 	multiplexDialer N.Dialer
 }
@@ -50,12 +48,6 @@ func NewShadowsocks(ctx context.Context, router adapter.Router, logger log.Conte
 		method:     method,
 		serverAddr: options.ServerOptions.Build(),
 		uot:        options.UoT,
-	}
-	if options.Plugin != "" {
-		outbound.plugin, err = sip003.CreatePlugin(options.Plugin, options.PluginOptions, router, outbound.dialer, outbound.serverAddr)
-		if err != nil {
-			return nil, err
-		}
 	}
 	if !options.UoT {
 		outbound.multiplexDialer, err = mux.NewClientWithOptions(ctx, (*shadowsocksDialer)(outbound), common.PtrValueOrDefault(options.MultiplexOptions))
@@ -143,13 +135,7 @@ type shadowsocksDialer Shadowsocks
 func (h *shadowsocksDialer) DialContext(ctx context.Context, network string, destination M.Socksaddr) (net.Conn, error) {
 	switch N.NetworkName(network) {
 	case N.NetworkTCP:
-		var outConn net.Conn
-		var err error
-		if h.plugin != nil {
-			outConn, err = h.plugin.DialContext(ctx)
-		} else {
-			outConn, err = h.dialer.DialContext(ctx, N.NetworkTCP, h.serverAddr)
-		}
+		outConn, err := h.dialer.DialContext(ctx, N.NetworkTCP, h.serverAddr)
 		if err != nil {
 			return nil, err
 		}

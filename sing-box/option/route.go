@@ -16,7 +16,6 @@ type RouteOptions struct {
 	Final               string          `json:"final,omitempty"`
 	FindProcess         bool            `json:"find_process,omitempty"`
 	AutoDetectInterface bool            `json:"auto_detect_interface,omitempty"`
-	OverrideAndroidVPN  bool            `json:"override_android_vpn,omitempty"`
 	DefaultInterface    string          `json:"default_interface,omitempty"`
 	DefaultMark         int             `json:"default_mark,omitempty"`
 }
@@ -101,7 +100,6 @@ type DefaultRule struct {
 	PackageName     Listable[string] `json:"package_name,omitempty"`
 	User            Listable[string] `json:"user,omitempty"`
 	UserID          Listable[int32]  `json:"user_id,omitempty"`
-	ClashMode       string           `json:"clash_mode,omitempty"`
 	Invert          bool             `json:"invert,omitempty"`
 	Outbound        string           `json:"outbound,omitempty"`
 }
