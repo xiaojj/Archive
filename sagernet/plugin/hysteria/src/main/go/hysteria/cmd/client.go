@@ -4,38 +4,42 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
-	"github.com/oschwald/geoip2-golang"
-	"github.com/tobyxdd/hysteria/pkg/pmtud_fix"
-	"github.com/tobyxdd/hysteria/pkg/redirect"
-	"github.com/yosuke-furukawa/json5/encoding/json5"
 	"io"
 	"io/ioutil"
 	"net"
 	"net/http"
 	"os"
-	"strings"
 	"time"
 
+	"github.com/HyNetwork/hysteria/pkg/pmtud_fix"
+	"github.com/HyNetwork/hysteria/pkg/redirect"
+	"github.com/oschwald/geoip2-golang"
+	"github.com/yosuke-furukawa/json5/encoding/json5"
+
+	"github.com/HyNetwork/hysteria/pkg/acl"
+	hyCongestion "github.com/HyNetwork/hysteria/pkg/congestion"
+	"github.com/HyNetwork/hysteria/pkg/core"
+	hyHTTP "github.com/HyNetwork/hysteria/pkg/http"
+	"github.com/HyNetwork/hysteria/pkg/obfs"
+	"github.com/HyNetwork/hysteria/pkg/relay"
+	"github.com/HyNetwork/hysteria/pkg/socks5"
+	"github.com/HyNetwork/hysteria/pkg/tproxy"
+	"github.com/HyNetwork/hysteria/pkg/transport"
 	"github.com/lucas-clemente/quic-go"
 	"github.com/lucas-clemente/quic-go/congestion"
 	"github.com/sirupsen/logrus"
-	"github.com/tobyxdd/hysteria/pkg/acl"
-	hyCongestion "github.com/tobyxdd/hysteria/pkg/congestion"
-	"github.com/tobyxdd/hysteria/pkg/core"
-	hyHTTP "github.com/tobyxdd/hysteria/pkg/http"
-	"github.com/tobyxdd/hysteria/pkg/obfs"
-	"github.com/tobyxdd/hysteria/pkg/relay"
-	"github.com/tobyxdd/hysteria/pkg/socks5"
-	"github.com/tobyxdd/hysteria/pkg/tproxy"
-	"github.com/tobyxdd/hysteria/pkg/transport"
-	"github.com/tobyxdd/hysteria/pkg/tun"
 )
 
 func client(config *clientConfig) {
 	logrus.WithField("config", config.String()).Info("Client configuration loaded")
 	// Resolver
 	if len(config.Resolver) > 0 {
-		setResolver(config.Resolver)
+		err := setResolver(config.Resolver)
+		if err != nil {
+			logrus.WithFields(logrus.Fields{
+				"error": err,
+			}).Fatal("Failed to set resolver")
+		}
 	}
 	// TLS
 	tlsConfig := &tls.Config{
@@ -100,15 +104,13 @@ func client(config *clientConfig) {
 	}
 	// Resolve preference
 	if len(config.ResolvePreference) > 0 {
-		pref, excl, err := transport.ResolvePreferenceFromString(config.ResolvePreference)
+		pref, err := transport.ResolvePreferenceFromString(config.ResolvePreference)
 		if err != nil {
 			logrus.WithFields(logrus.Fields{
 				"error": err,
 			}).Fatal("Failed to parse the resolve preference")
 		}
-		transport.DefaultClientTransport.PrefEnabled = true
-		transport.DefaultClientTransport.PrefIPv6 = pref
-		transport.DefaultClientTransport.PrefExclusive = excl
+		transport.DefaultClientTransport.ResolvePreference = pref
 	}
 	// ACL
 	var aclEngine *acl.Engine
@@ -174,38 +176,38 @@ func client(config *clientConfig) {
 				func(addr net.Addr, reqAddr string, action acl.Action, arg string) {
 					logrus.WithFields(logrus.Fields{
 						"action": actionToString(action, arg),
-						"src":    addr.String(),
-						"dst":    reqAddr,
+						"src":    defaultIPMasker.Mask(addr.String()),
+						"dst":    defaultIPMasker.Mask(reqAddr),
 					}).Debug("SOCKS5 TCP request")
 				},
 				func(addr net.Addr, reqAddr string, err error) {
 					if err != io.EOF {
 						logrus.WithFields(logrus.Fields{
 							"error": err,
-							"src":   addr.String(),
-							"dst":   reqAddr,
+							"src":   defaultIPMasker.Mask(addr.String()),
+							"dst":   defaultIPMasker.Mask(reqAddr),
 						}).Info("SOCKS5 TCP error")
 					} else {
 						logrus.WithFields(logrus.Fields{
-							"src": addr.String(),
-							"dst": reqAddr,
+							"src": defaultIPMasker.Mask(addr.String()),
+							"dst": defaultIPMasker.Mask(reqAddr),
 						}).Debug("SOCKS5 TCP EOF")
 					}
 				},
 				func(addr net.Addr) {
 					logrus.WithFields(logrus.Fields{
-						"src": addr.String(),
+						"src": defaultIPMasker.Mask(addr.String()),
 					}).Debug("SOCKS5 UDP associate")
 				},
 				func(addr net.Addr, err error) {
 					if err != io.EOF {
 						logrus.WithFields(logrus.Fields{
 							"error": err,
-							"src":   addr.String(),
+							"src":   defaultIPMasker.Mask(addr.String()),
 						}).Info("SOCKS5 UDP error")
 					} else {
 						logrus.WithFields(logrus.Fields{
-							"src": addr.String(),
+							"src": defaultIPMasker.Mask(addr.String()),
 						}).Debug("SOCKS5 UDP EOF")
 					}
 				})
@@ -226,14 +228,19 @@ func client(config *clientConfig) {
 				}
 			}
 			proxy, err := hyHTTP.NewProxyHTTPServer(client, transport.DefaultClientTransport,
-				time.Duration(config.HTTP.Timeout)*time.Second, aclEngine,
+				time.Duration(config.HTTP.Timeout)*time.Second, aclEngine, authFunc,
 				func(reqAddr string, action acl.Action, arg string) {
 					logrus.WithFields(logrus.Fields{
 						"action": actionToString(action, arg),
-						"dst":    reqAddr,
+						"dst":    defaultIPMasker.Mask(reqAddr),
 					}).Debug("HTTP request")
 				},
-				authFunc)
+				func(reqAddr string, err error) {
+					logrus.WithFields(logrus.Fields{
+						"error": err,
+						"dst":   defaultIPMasker.Mask(reqAddr),
+					}).Info("HTTP error")
+				})
 			if err != nil {
 				logrus.WithField("error", err).Fatal("Failed to initialize HTTP server")
 			}
@@ -248,50 +255,7 @@ func client(config *clientConfig) {
 	}
 
 	if len(config.TUN.Name) != 0 {
-		go func() {
-			timeout := time.Duration(config.TUN.Timeout) * time.Second
-			if timeout == 0 {
-				timeout = 300 * time.Second
-			}
-			tunServer, err := tun.NewServer(client, time.Duration(config.TUN.Timeout)*time.Second,
-				config.TUN.Name, config.TUN.Address, config.TUN.Gateway, config.TUN.Mask, config.TUN.DNS, config.TUN.Persist)
-			if err != nil {
-				logrus.WithField("error", err).Fatal("Failed to initialize TUN server")
-			}
-			tunServer.RequestFunc = func(addr net.Addr, reqAddr string) {
-				logrus.WithFields(logrus.Fields{
-					"src": addr.String(),
-					"dst": reqAddr,
-				}).Debugf("TUN %s request", strings.ToUpper(addr.Network()))
-			}
-			tunServer.ErrorFunc = func(addr net.Addr, reqAddr string, err error) {
-				if err != nil {
-					if err == io.EOF {
-						logrus.WithFields(logrus.Fields{
-							"src": addr.String(),
-							"dst": reqAddr,
-						}).Debugf("TUN %s EOF", strings.ToUpper(addr.Network()))
-					} else if err == core.ErrClosed && strings.HasPrefix(addr.Network(), "udp") {
-						logrus.WithFields(logrus.Fields{
-							"src": addr.String(),
-							"dst": reqAddr,
-						}).Debugf("TUN %s closed for timeout", strings.ToUpper(addr.Network()))
-					} else if nErr, ok := err.(net.Error); ok && nErr.Timeout() && strings.HasPrefix(addr.Network(), "tcp") {
-						logrus.WithFields(logrus.Fields{
-							"src": addr.String(),
-							"dst": reqAddr,
-						}).Debugf("TUN %s closed for timeout", strings.ToUpper(addr.Network()))
-					} else {
-						logrus.WithFields(logrus.Fields{
-							"error": err,
-							"src":   addr.String(),
-							"dst":   reqAddr,
-						}).Infof("TUN %s error", strings.ToUpper(addr.Network()))
-					}
-				}
-			}
-			errChan <- tunServer.ListenAndServe()
-		}()
+		go startTUN(config, client, errChan)
 	}
 
 	if len(config.TCPRelay.Listen) > 0 {
@@ -309,18 +273,18 @@ func client(config *clientConfig) {
 					time.Duration(tcpr.Timeout)*time.Second,
 					func(addr net.Addr) {
 						logrus.WithFields(logrus.Fields{
-							"src": addr.String(),
+							"src": defaultIPMasker.Mask(addr.String()),
 						}).Debug("TCP relay request")
 					},
 					func(addr net.Addr, err error) {
 						if err != io.EOF {
 							logrus.WithFields(logrus.Fields{
 								"error": err,
-								"src":   addr.String(),
+								"src":   defaultIPMasker.Mask(addr.String()),
 							}).Info("TCP relay error")
 						} else {
 							logrus.WithFields(logrus.Fields{
-								"src": addr.String(),
+								"src": defaultIPMasker.Mask(addr.String()),
 							}).Debug("TCP relay EOF")
 						}
 					})
@@ -348,18 +312,18 @@ func client(config *clientConfig) {
 					time.Duration(udpr.Timeout)*time.Second,
 					func(addr net.Addr) {
 						logrus.WithFields(logrus.Fields{
-							"src": addr.String(),
+							"src": defaultIPMasker.Mask(addr.String()),
 						}).Debug("UDP relay request")
 					},
 					func(addr net.Addr, err error) {
 						if err != relay.ErrTimeout {
 							logrus.WithFields(logrus.Fields{
 								"error": err,
-								"src":   addr.String(),
+								"src":   defaultIPMasker.Mask(addr.String()),
 							}).Info("UDP relay error")
 						} else {
 							logrus.WithFields(logrus.Fields{
-								"src": addr.String(),
+								"src": defaultIPMasker.Mask(addr.String()),
 							}).Debug("UDP relay session closed")
 						}
 					})
@@ -378,21 +342,21 @@ func client(config *clientConfig) {
 				time.Duration(config.TCPTProxy.Timeout)*time.Second,
 				func(addr, reqAddr net.Addr) {
 					logrus.WithFields(logrus.Fields{
-						"src": addr.String(),
-						"dst": reqAddr.String(),
+						"src": defaultIPMasker.Mask(addr.String()),
+						"dst": defaultIPMasker.Mask(reqAddr.String()),
 					}).Debug("TCP TProxy request")
 				},
 				func(addr, reqAddr net.Addr, err error) {
 					if err != io.EOF {
 						logrus.WithFields(logrus.Fields{
 							"error": err,
-							"src":   addr.String(),
-							"dst":   reqAddr.String(),
+							"src":   defaultIPMasker.Mask(addr.String()),
+							"dst":   defaultIPMasker.Mask(reqAddr.String()),
 						}).Info("TCP TProxy error")
 					} else {
 						logrus.WithFields(logrus.Fields{
-							"src": addr.String(),
-							"dst": reqAddr.String(),
+							"src": defaultIPMasker.Mask(addr.String()),
+							"dst": defaultIPMasker.Mask(reqAddr.String()),
 						}).Debug("TCP TProxy EOF")
 					}
 				})
@@ -410,21 +374,21 @@ func client(config *clientConfig) {
 				time.Duration(config.UDPTProxy.Timeout)*time.Second,
 				func(addr, reqAddr net.Addr) {
 					logrus.WithFields(logrus.Fields{
-						"src": addr.String(),
-						"dst": reqAddr.String(),
+						"src": defaultIPMasker.Mask(addr.String()),
+						"dst": defaultIPMasker.Mask(reqAddr.String()),
 					}).Debug("UDP TProxy request")
 				},
 				func(addr, reqAddr net.Addr, err error) {
 					if !errors.Is(err, os.ErrDeadlineExceeded) {
 						logrus.WithFields(logrus.Fields{
 							"error": err,
-							"src":   addr.String(),
-							"dst":   reqAddr.String(),
+							"src":   defaultIPMasker.Mask(addr.String()),
+							"dst":   defaultIPMasker.Mask(reqAddr.String()),
 						}).Info("UDP TProxy error")
 					} else {
 						logrus.WithFields(logrus.Fields{
-							"src": addr.String(),
-							"dst": reqAddr.String(),
+							"src": defaultIPMasker.Mask(addr.String()),
+							"dst": defaultIPMasker.Mask(reqAddr.String()),
 						}).Debug("UDP TProxy session closed")
 					}
 				})
@@ -442,21 +406,21 @@ func client(config *clientConfig) {
 				time.Duration(config.TCPRedirect.Timeout)*time.Second,
 				func(addr, reqAddr net.Addr) {
 					logrus.WithFields(logrus.Fields{
-						"src": addr.String(),
-						"dst": reqAddr.String(),
+						"src": defaultIPMasker.Mask(addr.String()),
+						"dst": defaultIPMasker.Mask(reqAddr.String()),
 					}).Debug("TCP Redirect request")
 				},
 				func(addr, reqAddr net.Addr, err error) {
 					if err != io.EOF {
 						logrus.WithFields(logrus.Fields{
 							"error": err,
-							"src":   addr.String(),
-							"dst":   reqAddr.String(),
+							"src":   defaultIPMasker.Mask(addr.String()),
+							"dst":   defaultIPMasker.Mask(reqAddr.String()),
 						}).Info("TCP Redirect error")
 					} else {
 						logrus.WithFields(logrus.Fields{
-							"src": addr.String(),
-							"dst": reqAddr.String(),
+							"src": defaultIPMasker.Mask(addr.String()),
+							"dst": defaultIPMasker.Mask(reqAddr.String()),
 						}).Debug("TCP Redirect EOF")
 					}
 				})

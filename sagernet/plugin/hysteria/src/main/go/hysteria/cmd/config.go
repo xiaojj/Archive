@@ -3,11 +3,12 @@ package main
 import (
 	"errors"
 	"fmt"
-	"github.com/sirupsen/logrus"
-	"github.com/yosuke-furukawa/json5/encoding/json5"
 	"regexp"
 	"strconv"
 	"time"
+
+	"github.com/sirupsen/logrus"
+	"github.com/yosuke-furukawa/json5/encoding/json5"
 )
 
 const (
@@ -162,13 +163,12 @@ type clientConfig struct {
 		Key      string `json:"key"`
 	} `json:"http"`
 	TUN struct {
-		Name    string   `json:"name"`
-		Timeout int      `json:"timeout"`
-		Address string   `json:"address"`
-		Gateway string   `json:"gateway"`
-		Mask    string   `json:"mask"`
-		DNS     []string `json:"dns"`
-		Persist bool     `json:"persist"`
+		Name                     string `json:"name"`
+		Timeout                  int    `json:"timeout"`
+		MTU                      uint32 `json:"mtu"`
+		TCPSendBufferSize        string `json:"tcp_sndbuf"`
+		TCPReceiveBufferSize     string `json:"tcp_rcvbuf"`
+		TCPModerateReceiveBuffer bool   `json:"tcp_autotuning"`
 	} `json:"tun"`
 	TCPRelays []Relay `json:"relay_tcps"`
 	TCPRelay  Relay   `json:"relay_tcp"` // deprecated, but we still support it for backward compatibility

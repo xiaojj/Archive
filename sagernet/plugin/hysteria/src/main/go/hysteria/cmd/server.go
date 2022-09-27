@@ -3,32 +3,38 @@ package main
 import (
 	"crypto/tls"
 	"errors"
+	"io"
+	"net"
+	"net/http"
+	"time"
+
+	"github.com/HyNetwork/hysteria/cmd/auth"
+	"github.com/HyNetwork/hysteria/pkg/acl"
+	hyCongestion "github.com/HyNetwork/hysteria/pkg/congestion"
+	"github.com/HyNetwork/hysteria/pkg/core"
+	"github.com/HyNetwork/hysteria/pkg/obfs"
+	"github.com/HyNetwork/hysteria/pkg/pmtud_fix"
+	"github.com/HyNetwork/hysteria/pkg/sockopt"
+	"github.com/HyNetwork/hysteria/pkg/transport"
 	"github.com/lucas-clemente/quic-go"
 	"github.com/lucas-clemente/quic-go/congestion"
 	"github.com/oschwald/geoip2-golang"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sirupsen/logrus"
-	"github.com/tobyxdd/hysteria/cmd/auth"
-	"github.com/tobyxdd/hysteria/pkg/acl"
-	hyCongestion "github.com/tobyxdd/hysteria/pkg/congestion"
-	"github.com/tobyxdd/hysteria/pkg/core"
-	"github.com/tobyxdd/hysteria/pkg/obfs"
-	"github.com/tobyxdd/hysteria/pkg/pmtud_fix"
-	"github.com/tobyxdd/hysteria/pkg/sockopt"
-	"github.com/tobyxdd/hysteria/pkg/transport"
 	"github.com/yosuke-furukawa/json5/encoding/json5"
-	"io"
-	"net"
-	"net/http"
-	"time"
 )
 
 func server(config *serverConfig) {
 	logrus.WithField("config", config.String()).Info("Server configuration loaded")
 	// Resolver
 	if len(config.Resolver) > 0 {
-		setResolver(config.Resolver)
+		err := setResolver(config.Resolver)
+		if err != nil {
+			logrus.WithFields(logrus.Fields{
+				"error": err,
+			}).Fatal("Failed to set resolver")
+		}
 	}
 	// Load TLS config
 	var tlsConfig *tls.Config
@@ -126,12 +132,12 @@ func server(config *serverConfig) {
 		ok, msg := authFunc(addr, auth, sSend, sRecv)
 		if !ok {
 			logrus.WithFields(logrus.Fields{
-				"src": addr,
+				"src": defaultIPMasker.Mask(addr.String()),
 				"msg": msg,
 			}).Info("Authentication failed, client rejected")
 		} else {
 			logrus.WithFields(logrus.Fields{
-				"src": addr,
+				"src": defaultIPMasker.Mask(addr.String()),
 			}).Info("Client connected")
 		}
 		return ok, msg
@@ -143,15 +149,13 @@ func server(config *serverConfig) {
 	}
 	// Resolve preference
 	if len(config.ResolvePreference) > 0 {
-		pref, excl, err := transport.ResolvePreferenceFromString(config.ResolvePreference)
+		pref, err := transport.ResolvePreferenceFromString(config.ResolvePreference)
 		if err != nil {
 			logrus.WithFields(logrus.Fields{
 				"error": err,
 			}).Fatal("Failed to parse the resolve preference")
 		}
-		transport.DefaultServerTransport.PrefEnabled = true
-		transport.DefaultServerTransport.PrefIPv6 = pref
-		transport.DefaultServerTransport.PrefExclusive = excl
+		transport.DefaultServerTransport.ResolvePreference = pref
 	}
 	// SOCKS5 outbound
 	if config.SOCKS5Outbound.Server != "" {
@@ -284,15 +288,15 @@ func externalAuthFunc(rawMsg json5.RawMessage) (core.ConnectFunc, error) {
 
 func disconnectFunc(addr net.Addr, auth []byte, err error) {
 	logrus.WithFields(logrus.Fields{
-		"src":   addr,
+		"src":   defaultIPMasker.Mask(addr.String()),
 		"error": err,
 	}).Info("Client disconnected")
 }
 
 func tcpRequestFunc(addr net.Addr, auth []byte, reqAddr string, action acl.Action, arg string) {
 	logrus.WithFields(logrus.Fields{
-		"src":    addr.String(),
-		"dst":    reqAddr,
+		"src":    defaultIPMasker.Mask(addr.String()),
+		"dst":    defaultIPMasker.Mask(reqAddr),
 		"action": actionToString(action, arg),
 	}).Debug("TCP request")
 }
@@ -300,21 +304,21 @@ func tcpRequestFunc(addr net.Addr, auth []byte, reqAddr string, action acl.Actio
 func tcpErrorFunc(addr net.Addr, auth []byte, reqAddr string, err error) {
 	if err != io.EOF {
 		logrus.WithFields(logrus.Fields{
-			"src":   addr.String(),
-			"dst":   reqAddr,
+			"src":   defaultIPMasker.Mask(addr.String()),
+			"dst":   defaultIPMasker.Mask(reqAddr),
 			"error": err,
 		}).Info("TCP error")
 	} else {
 		logrus.WithFields(logrus.Fields{
-			"src": addr.String(),
-			"dst": reqAddr,
+			"src": defaultIPMasker.Mask(addr.String()),
+			"dst": defaultIPMasker.Mask(reqAddr),
 		}).Debug("TCP EOF")
 	}
 }
 
 func udpRequestFunc(addr net.Addr, auth []byte, sessionID uint32) {
 	logrus.WithFields(logrus.Fields{
-		"src":     addr.String(),
+		"src":     defaultIPMasker.Mask(addr.String()),
 		"session": sessionID,
 	}).Debug("UDP request")
 }
@@ -322,13 +326,13 @@ func udpRequestFunc(addr net.Addr, auth []byte, sessionID uint32) {
 func udpErrorFunc(addr net.Addr, auth []byte, sessionID uint32, err error) {
 	if err != io.EOF {
 		logrus.WithFields(logrus.Fields{
-			"src":     addr.String(),
+			"src":     defaultIPMasker.Mask(addr.String()),
 			"session": sessionID,
 			"error":   err,
 		}).Info("UDP error")
 	} else {
 		logrus.WithFields(logrus.Fields{
-			"src":     addr.String(),
+			"src":     defaultIPMasker.Mask(addr.String()),
 			"session": sessionID,
 		}).Debug("UDP EOF")
 	}

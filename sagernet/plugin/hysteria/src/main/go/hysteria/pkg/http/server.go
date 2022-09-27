@@ -3,27 +3,36 @@ package http
 import (
 	"errors"
 	"fmt"
-	"github.com/tobyxdd/hysteria/pkg/transport"
-	"github.com/tobyxdd/hysteria/pkg/utils"
 	"net"
 	"net/http"
 	"time"
 
+	"github.com/HyNetwork/hysteria/pkg/transport"
+	"github.com/HyNetwork/hysteria/pkg/utils"
+
 	"github.com/elazarl/goproxy/ext/auth"
 
+	"github.com/HyNetwork/hysteria/pkg/acl"
+	"github.com/HyNetwork/hysteria/pkg/core"
 	"github.com/elazarl/goproxy"
-	"github.com/tobyxdd/hysteria/pkg/acl"
-	"github.com/tobyxdd/hysteria/pkg/core"
 )
 
 func NewProxyHTTPServer(hyClient *core.Client, transport *transport.ClientTransport, idleTimeout time.Duration,
-	aclEngine *acl.Engine, newDialFunc func(reqAddr string, action acl.Action, arg string),
-	basicAuthFunc func(user, password string) bool) (*goproxy.ProxyHttpServer, error) {
+	aclEngine *acl.Engine,
+	basicAuthFunc func(user, password string) bool,
+	newDialFunc func(reqAddr string, action acl.Action, arg string),
+	proxyErrorFunc func(reqAddr string, err error),
+) (*goproxy.ProxyHttpServer, error) {
 	proxy := goproxy.NewProxyHttpServer()
 	proxy.Logger = &nopLogger{}
 	proxy.NonproxyHandler = http.NotFoundHandler()
 	proxy.Tr = &http.Transport{
-		Dial: func(network, addr string) (net.Conn, error) {
+		Dial: func(network, addr string) (conn net.Conn, err error) {
+			defer func() {
+				if err != nil {
+					proxyErrorFunc(addr, err)
+				}
+			}()
 			// Parse addr string
 			host, port, err := utils.SplitHostPort(addr)
 			if err != nil {

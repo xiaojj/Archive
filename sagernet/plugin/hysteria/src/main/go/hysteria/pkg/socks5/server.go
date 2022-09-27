@@ -4,17 +4,19 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"github.com/tobyxdd/hysteria/pkg/acl"
-	"github.com/tobyxdd/hysteria/pkg/core"
-	"github.com/tobyxdd/hysteria/pkg/transport"
-	"github.com/tobyxdd/hysteria/pkg/utils"
 	"strconv"
+
+	"github.com/HyNetwork/hysteria/pkg/acl"
+	"github.com/HyNetwork/hysteria/pkg/core"
+	"github.com/HyNetwork/hysteria/pkg/transport"
+	"github.com/HyNetwork/hysteria/pkg/utils"
 )
 
 import (
-	"github.com/txthinking/socks5"
 	"net"
 	"time"
+
+	"github.com/txthinking/socks5"
 )
 
 const udpBufferSize = 65535
@@ -47,7 +49,8 @@ func NewServer(hyClient *core.Client, transport *transport.ClientTransport, addr
 	aclEngine *acl.Engine, disableUDP bool,
 	tcpReqFunc func(addr net.Addr, reqAddr string, action acl.Action, arg string),
 	tcpErrorFunc func(addr net.Addr, reqAddr string, err error),
-	udpAssocFunc func(addr net.Addr), udpErrorFunc func(addr net.Addr, err error)) (*Server, error) {
+	udpAssocFunc func(addr net.Addr), udpErrorFunc func(addr net.Addr, err error),
+) (*Server, error) {
 	tAddr, err := net.ResolveTCPAddr("tcp", addr)
 	if err != nil {
 		return nil, err
