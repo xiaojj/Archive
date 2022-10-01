@@ -18,6 +18,7 @@ DEBIAN_PACKAGES='
   libatomic1
   libstdc++-10-dev
   libstdc++6
+  libcrypt1
 '
 
 DEBIAN_PACKAGES_AMD64='

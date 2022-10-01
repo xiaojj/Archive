@@ -37,6 +37,7 @@
 #include "quiche/quic/core/quic_packet_writer.h"
 #include "quiche/quic/core/quic_packets.h"
 #include "quiche/quic/core/quic_path_validator.h"
+#include "quiche/quic/core/quic_time.h"
 #include "quiche/quic/core/quic_types.h"
 #include "quiche/quic/core/quic_utils.h"
 #include "quiche/quic/platform/api/quic_bug_tracker.h"
@@ -176,6 +177,9 @@ class DiscardZeroRttDecryptionKeysAlarmDelegate
     QUICHE_DCHECK(connection_->connected());
     QUIC_DLOG(INFO) << "0-RTT discard alarm fired";
     connection_->RemoveDecrypter(ENCRYPTION_ZERO_RTT);
+    if (GetQuicRestartFlag(quic_map_original_connection_ids2)) {
+      connection_->RetireOriginalDestinationConnectionId();
+    }
   }
 };
 
@@ -322,7 +326,7 @@ QuicConnection::QuicConnection(
       blackhole_detector_(this, &arena_, alarm_factory_, &context_),
       idle_network_detector_(this, clock_->ApproximateNow(), &arena_,
                              alarm_factory_, &context_),
-      path_validator_(alarm_factory_, &arena_, this, random_generator_,
+      path_validator_(alarm_factory_, &arena_, this, random_generator_, clock_,
                       &context_),
       ping_manager_(perspective, this, &arena_, alarm_factory_, &context_) {
   QUICHE_DCHECK(perspective_ == Perspective::IS_CLIENT ||
@@ -520,9 +524,6 @@ void QuicConnection::SetFromConfig(const QuicConfig& config) {
   } else {
     SetNetworkTimeouts(config.max_time_before_crypto_handshake(),
                        config.max_idle_time_before_crypto_handshake());
-    if (config.HasClientRequestedIndependentOption(kNCHP, perspective_)) {
-      packet_creator_.set_chaos_protection_enabled(false);
-    }
   }
 
   if (version().HasIetfQuicFrames() &&
@@ -968,11 +969,19 @@ void QuicConnection::SetOriginalDestinationConnectionId(
       default_path_.server_connection_id;
 }
 
-QuicConnectionId QuicConnection::GetOriginalDestinationConnectionId() {
+QuicConnectionId QuicConnection::GetOriginalDestinationConnectionId() const {
   if (original_destination_connection_id_.has_value()) {
     return original_destination_connection_id_.value();
   }
   return default_path_.server_connection_id;
+}
+
+void QuicConnection::RetireOriginalDestinationConnectionId() {
+  if (original_destination_connection_id_.has_value()) {
+    visitor_->OnServerConnectionIdRetired(*original_destination_connection_id_);
+    QUIC_RESTART_FLAG_COUNT_N(quic_map_original_connection_ids2, 3, 4);
+    original_destination_connection_id_.reset();
+  }
 }
 
 bool QuicConnection::ValidateServerConnectionId(
@@ -1038,10 +1047,14 @@ bool QuicConnection::OnUnauthenticatedPublicHeader(
     if (debug_visitor_ != nullptr) {
       debug_visitor_->OnIncorrectConnectionId(server_connection_id);
     }
-    // If this is a server, the dispatcher routes each packet to the
-    // QuicConnection responsible for the packet's connection ID.  So if control
-    // arrives here and this is a server, the dispatcher must be malfunctioning.
-    QUICHE_DCHECK_NE(Perspective::IS_SERVER, perspective_);
+    // The only way for a connection to get a packet with an invalid connection
+    // ID is if quic_map_original_connection_ids2 is false and a packet
+    // arrives with a connection ID that is deterministically replaced with one
+    // that the connection owns, but is different from
+    // original_destination_connection_id_.
+    if (GetQuicRestartFlag(quic_map_original_connection_ids2)) {
+      QUICHE_DCHECK_NE(Perspective::IS_SERVER, perspective_);
+    }
     return false;
   }
 
@@ -6905,27 +6918,28 @@ std::vector<QuicConnectionId> QuicConnection::GetActiveServerConnectionIds()
     QUICHE_DCHECK(version().HasIetfQuicFrames());
     result = self_issued_cid_manager_->GetUnretiredConnectionIds();
   }
-  if (GetQuicReloadableFlag(
-          quic_consider_original_connection_id_as_active_pre_handshake)) {
-    QUIC_RELOADABLE_FLAG_COUNT(
-        quic_consider_original_connection_id_as_active_pre_handshake);
-    if (!IsHandshakeComplete() &&
-        original_destination_connection_id_.has_value()) {
-      // Consider original_destination_connection_id_ as active before handshake
-      // completes.
-      if (std::find(result.begin(), result.end(),
-                    original_destination_connection_id_.value()) !=
-          result.end()) {
-        QUIC_BUG(quic_unexpected_original_destination_connection_id)
-            << "original_destination_connection_id: "
-            << original_destination_connection_id_.value()
-            << " is unexpectedly in active "
-               "list";
-      } else {
-        result.insert(result.end(),
-                      original_destination_connection_id_.value());
-      }
-      QUIC_CODE_COUNT(quic_active_original_connection_id_pre_handshake);
+  if (!original_destination_connection_id_.has_value()) {
+    return result;
+  }
+  bool add_original_connection_id = false;
+  if (GetQuicRestartFlag(quic_map_original_connection_ids2)) {
+    QUIC_RESTART_FLAG_COUNT_N(quic_map_original_connection_ids2, 4, 4);
+    add_original_connection_id = true;
+  } else if (!IsHandshakeComplete()) {
+    QUIC_CODE_COUNT(quic_active_original_connection_id_pre_handshake);
+    add_original_connection_id = true;
+  }
+  if (add_original_connection_id) {
+    if (std::find(result.begin(), result.end(),
+                  original_destination_connection_id_.value()) !=
+        result.end()) {
+      QUIC_BUG(quic_unexpected_original_destination_connection_id)
+          << "original_destination_connection_id: "
+          << original_destination_connection_id_.value()
+          << " is unexpectedly in active "
+             "list";
+    } else {
+      result.insert(result.end(), original_destination_connection_id_.value());
     }
   }
   return result;
@@ -6952,7 +6966,7 @@ void QuicConnection::CreateConnectionIdManager() {
 
 void QuicConnection::QuicBugIfHasPendingFrames(QuicStreamId id) const {
   QUIC_BUG_IF(quic_has_pending_frames_unexpectedly,
-              packet_creator_.HasPendingStreamFramesOfStream(id))
+              connected_ && packet_creator_.HasPendingStreamFramesOfStream(id))
       << "Stream " << id
       << " has pending frames unexpectedly. Received packet info: "
       << last_received_packet_info_;
@@ -7104,9 +7118,10 @@ QuicConnection::ReversePathValidationResultDelegate::
           connection_->active_effective_peer_migration_type_) {}
 
 void QuicConnection::ReversePathValidationResultDelegate::
-    OnPathValidationSuccess(
-        std::unique_ptr<QuicPathValidationContext> context) {
-  QUIC_DLOG(INFO) << "Successfully validated new path " << *context;
+    OnPathValidationSuccess(std::unique_ptr<QuicPathValidationContext> context,
+                            QuicTime start_time) {
+  QUIC_DLOG(INFO) << "Successfully validated new path " << *context
+                  << ", validation started at " << start_time;
   if (connection_->IsDefaultPath(context->self_address(),
                                  context->peer_address())) {
     QUIC_CODE_COUNT_N(quic_kick_off_client_address_validation, 3, 6);

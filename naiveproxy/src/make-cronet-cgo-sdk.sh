@@ -194,6 +194,11 @@ if [ "$target_cpu" = 'arm' ]; then
   cgo_cflags=$(echo "$cgo_cflags" | sed 's/ -mthumb / /g')
 fi
 
+# CGO build fails with -Werror,-Wunused-command-line-argument with these
+if [ "$target_cpu" = 'mipsel' ]; then
+  cgo_cflags=$(echo "$cgo_cflags" | sed 's/ -mtune=\(24\|74\)kc / /g')
+fi
+
 buildmode_flag='-buildmode=pie'
 
 if [ "$target_cpu" = 'mipsel' -o "$target_cpu" = 'mips64el' ]; then

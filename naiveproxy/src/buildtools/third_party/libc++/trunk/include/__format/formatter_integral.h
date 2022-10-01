@@ -243,7 +243,7 @@ _LIBCPP_HIDE_FROM_ABI auto __format_integer(
     // The zero padding is done like:
     // - Write [sign][prefix]
     // - Write data right aligned with '0' as fill character.
-    __out_it             = _VSTD::copy(__begin, __first, _VSTD::move(__out_it));
+    __out_it             = __formatter::__copy(__begin, __first, _VSTD::move(__out_it));
     __specs.__alignment_ = __format_spec::__alignment::__right;
     __specs.__fill_      = _CharT('0');
     int32_t __size       = __first - __begin;
@@ -343,7 +343,7 @@ __format_bool(bool __value, auto& __ctx, __format_spec::__parsed_specifications<
   if (__specs.__std_.__locale_specific_form_) {
     const auto& __np           = use_facet<numpunct<_CharT>>(__ctx.locale());
     basic_string<_CharT> __str = __value ? __np.truename() : __np.falsename();
-    return __formatter::__write_unicode_no_precision(basic_string_view<_CharT>{__str}, __ctx.out(), __specs);
+    return __formatter::__write_string_no_precision(basic_string_view<_CharT>{__str}, __ctx.out(), __specs);
   }
 #  endif
   basic_string_view<_CharT> __str =
