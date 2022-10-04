@@ -11,8 +11,8 @@
     xmlns:tb="http://www.hardcodet.net/taskbar"
     xmlns:vms="clr-namespace:clashN.ViewModels"
     Title="clashN"
-    Width="1000"
-    Height="700"
+    Width="900"
+    Height="680"
     MinWidth="800"
     MinHeight="600"
     x:TypeArguments="vms:MainWindowViewModel"
@@ -29,8 +29,8 @@
         Style="{StaticResource MaterialDesignEmbeddedDialogHost}">
         <Grid>
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="5*" MinWidth="100" />
-                <ColumnDefinition Width="4*" />
+                <ColumnDefinition Width="2*" MinWidth="100" />
+                <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
             <Grid Grid.Column="0">
                 <TabControl Style="{StaticResource MaterialDesignNavigatilRailTabControl}">
@@ -197,7 +197,7 @@
                     IconSource="/clashN.ico"
                     TrayMouseDoubleClick="tbNotify_TrayMouseDoubleClick">
                     <tb:TaskbarIcon.ContextMenu>
-                        <ContextMenu>
+                        <ContextMenu Style="{StaticResource DefMenu}">
                             <MenuItem Header="{x:Static resx:ResUI.menuSystemproxy}">
                                 <MenuItem
                                     x:Name="menuSystemProxyClear"
@@ -235,7 +235,10 @@
                             <MenuItem x:Name="menuSubUpdate" Header="{x:Static resx:ResUI.menuSubUpdate}" />
                             <MenuItem x:Name="menuSubUpdateViaProxy" Header="{x:Static resx:ResUI.menuSubUpdateViaProxy}" />
                             <Separator />
-                            <MenuItem x:Name="menuExit" Header="{x:Static resx:ResUI.menuExit}" />
+                            <MenuItem
+                                x:Name="menuExit"
+                                Click="menuExit_Click"
+                                Header="{x:Static resx:ResUI.menuExit}" />
                         </ContextMenu>
                     </tb:TaskbarIcon.ContextMenu>
                 </tb:TaskbarIcon>

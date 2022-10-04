@@ -17,6 +17,7 @@ namespace clashN.Views
         {
             InitializeComponent();
             this.Closing += MainWindow_Closing;
+            App.Current.SessionEnding += Current_SessionEnding;
 
             ViewModel = new MainWindowViewModel(MainSnackbar.MessageQueue!);
             Locator.CurrentMutable.RegisterLazySingleton(() => ViewModel, typeof(MainWindowViewModel));
@@ -55,7 +56,7 @@ namespace clashN.Views
                 this.BindCommand(ViewModel, vm => vm.SubUpdateCmd, v => v.menuSubUpdate).DisposeWith(disposables);
                 this.BindCommand(ViewModel, vm => vm.SubUpdateViaProxyCmd, v => v.menuSubUpdateViaProxy).DisposeWith(disposables);
 
-                this.BindCommand(ViewModel, vm => vm.ExitCmd, v => v.menuExit).DisposeWith(disposables);
+                //this.BindCommand(ViewModel, vm => vm.ExitCmd, v => v.menuExit).DisposeWith(disposables);
                 this.BindCommand(ViewModel, vm => vm.ReloadCmd, v => v.btnReload).DisposeWith(disposables);
 
                 this.OneWayBind(ViewModel, vm => vm.NotifyIcon, v => v.tbNotify.Icon).DisposeWith(disposables);
@@ -76,6 +77,16 @@ namespace clashN.Views
             ViewModel?.ShowHideWindow(true);
         }
 
+        private void menuExit_Click(object sender, RoutedEventArgs e)
+        {
+            tbNotify.Dispose();
+            ViewModel?.MyAppExit(false);
+        }
 
+        private void Current_SessionEnding(object sender, SessionEndingCancelEventArgs e)
+        {
+            Utils.SaveLog("Current_SessionEnding");
+            ViewModel?.MyAppExit(true);
+        }
     }
 }
