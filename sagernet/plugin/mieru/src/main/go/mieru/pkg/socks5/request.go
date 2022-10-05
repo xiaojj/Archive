@@ -7,10 +7,13 @@ import (
 	"net"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 
 	"github.com/enfein/mieru/pkg/log"
 	"github.com/enfein/mieru/pkg/metrics"
+	"github.com/enfein/mieru/pkg/netutil"
+	"github.com/enfein/mieru/pkg/stderror"
 )
 
 const (
@@ -37,11 +40,6 @@ const (
 var (
 	unrecognizedAddrType = fmt.Errorf("unrecognized address type")
 )
-
-// AddressRewriter is used to rewrite a destination transparently.
-type AddressRewriter interface {
-	Rewrite(ctx context.Context, request *Request) (context.Context, *AddrSpec)
-}
 
 // AddrSpec is used to return the target AddrSpec
 // which may be specified as IPv4, IPv6, or a FQDN.
@@ -79,21 +77,13 @@ type Request struct {
 	RemoteAddr *AddrSpec
 	// AddrSpec of the desired destination.
 	DestAddr *AddrSpec
-	// AddrSpec of the actual destination (might be affected by rewrite).
-	realDestAddr *AddrSpec
-	bufConn      io.Reader
-}
-
-type conn interface {
-	Write([]byte) (int, error)
-	RemoteAddr() net.Addr
 }
 
 // NewRequest creates a new Request from the tcp connection.
-func NewRequest(bufConn io.Reader) (*Request, error) {
+func NewRequest(conn io.Reader) (*Request, error) {
 	// Read the version byte.
 	header := []byte{0, 0, 0}
-	if _, err := io.ReadFull(bufConn, header); err != nil {
+	if _, err := io.ReadFull(conn, header); err != nil {
 		return nil, fmt.Errorf("failed to get command version: %w", err)
 	}
 
@@ -103,7 +93,7 @@ func NewRequest(bufConn io.Reader) (*Request, error) {
 	}
 
 	// Read in the destination address.
-	dest, err := readAddrSpec(bufConn)
+	dest, err := readAddrSpec(conn)
 	if err != nil {
 		return nil, err
 	}
@@ -112,14 +102,13 @@ func NewRequest(bufConn io.Reader) (*Request, error) {
 		Version:  socks5Version,
 		Command:  header[1],
 		DestAddr: dest,
-		bufConn:  bufConn,
 	}
 
 	return request, nil
 }
 
 // handleRequest is used for request processing after authentication.
-func (s *Server) handleRequest(req *Request, conn conn) error {
+func (s *Server) handleRequest(req *Request, conn io.ReadWriteCloser) error {
 	ctx := context.Background()
 
 	// Resolve the address if we have a FQDN.
@@ -135,12 +124,6 @@ func (s *Server) handleRequest(req *Request, conn conn) error {
 		}
 		ctx = ctx_
 		dest.IP = addr
-	}
-
-	// Apply any address rewrites.
-	req.realDestAddr = req.DestAddr
-	if s.config.Rewriter != nil {
-		ctx, req.realDestAddr = s.config.Rewriter.Rewrite(ctx, req)
 	}
 
 	// Return error if access local destination is not allowed.
@@ -166,33 +149,21 @@ func (s *Server) handleRequest(req *Request, conn conn) error {
 }
 
 // handleConnect is used to handle a connect command.
-func (s *Server) handleConnect(ctx context.Context, conn conn, req *Request) error {
-	// Check if this is allowed.
-	if ctx_, ok := s.config.Rules.Allow(ctx, req); !ok {
-		if err := sendReply(conn, ruleFailure, nil); err != nil {
-			return fmt.Errorf("failed to send reply: %w", err)
-		}
-		return fmt.Errorf("connect to %v blocked by rules", req.DestAddr)
-	} else {
-		ctx = ctx_
-	}
-
-	// Attempt to connect.
-	if s.config.NetworkType == "" {
-		s.config.NetworkType = "tcp"
-	}
+func (s *Server) handleConnect(ctx context.Context, conn io.ReadWriteCloser, req *Request) error {
 	var d net.Dialer
-	target, err := d.DialContext(ctx, s.config.NetworkType, req.realDestAddr.Address())
+	target, err := d.DialContext(ctx, "tcp", req.DestAddr.Address())
 	if err != nil {
 		msg := err.Error()
-		resp := hostUnreachable
-		atomic.AddUint64(&metrics.Socks5HostUnreachableErrors, 1)
+		var resp uint8
 		if strings.Contains(msg, "refused") {
 			resp = connectionRefused
 			atomic.AddUint64(&metrics.Socks5ConnectionRefusedErrors, 1)
 		} else if strings.Contains(msg, "network is unreachable") {
 			resp = networkUnreachable
 			atomic.AddUint64(&metrics.Socks5NetworkUnreachableErrors, 1)
+		} else {
+			resp = hostUnreachable
+			atomic.AddUint64(&metrics.Socks5HostUnreachableErrors, 1)
 		}
 		if err := sendReply(conn, resp, nil); err != nil {
 			return fmt.Errorf("failed to send reply: %w", err)
@@ -205,69 +176,349 @@ func (s *Server) handleConnect(ctx context.Context, conn conn, req *Request) err
 	local := target.LocalAddr().(*net.TCPAddr)
 	bind := AddrSpec{IP: local.IP, Port: local.Port}
 	if err := sendReply(conn, successReply, &bind); err != nil {
+		atomic.AddUint64(&metrics.Socks5HandshakeErrors, 1)
 		return fmt.Errorf("failed to send reply: %w", err)
 	}
 
-	// Start proxying.
-	errCh := make(chan error, 2)
-	go proxy(target, req.bufConn, errCh)
-	go proxy(conn, target, errCh)
-
-	// Wait for connection to close.
-	for i := 0; i < 2; i++ {
-		e := <-errCh
-		if e != nil {
-			// Return from this function closes target (and conn).
-			return e
-		}
-	}
-	return nil
+	return BidiCopy(conn, target, false)
 }
 
 // handleBind is used to handle a bind command.
-func (s *Server) handleBind(ctx context.Context, conn conn, req *Request) error {
-	if log.IsLevelEnabled(log.DebugLevel) {
-		log.Debugf("received unsupported socks5 bind request from %v", conn.RemoteAddr())
-	}
-
-	// Check if this is allowed.
-	if ctx_, ok := s.config.Rules.Allow(ctx, req); !ok {
-		if err := sendReply(conn, ruleFailure, nil); err != nil {
-			return fmt.Errorf("failed to send reply: %w", err)
-		}
-		return fmt.Errorf("bind to %v blocked by rules", req.DestAddr)
-	} else {
-		ctx = ctx_
-	}
-
+func (s *Server) handleBind(ctx context.Context, conn io.ReadWriteCloser, req *Request) error {
 	atomic.AddUint64(&metrics.Socks5UnsupportedCommandErrors, 1)
 	if err := sendReply(conn, commandNotSupported, nil); err != nil {
+		atomic.AddUint64(&metrics.Socks5HandshakeErrors, 1)
 		return fmt.Errorf("failed to send reply: %w", err)
 	}
 	return nil
 }
 
 // handleAssociate is used to handle a associate command.
-func (s *Server) handleAssociate(ctx context.Context, conn conn, req *Request) error {
-	if log.IsLevelEnabled(log.DebugLevel) {
-		log.Debugf("received unsupported socks5 associate request from %v", conn.RemoteAddr())
+func (s *Server) handleAssociate(ctx context.Context, conn io.ReadWriteCloser, req *Request) error {
+	// Create a UDP listener on a random port.
+	// All the requests associated to this connection will go through this port.
+	udpListenerAddr, err := net.ResolveUDPAddr("udp", netutil.MaybeDecorateIPv6(netutil.AllIPAddr())+":0")
+	if err != nil {
+		atomic.AddUint64(&metrics.Socks5UDPAssociateErrors, 1)
+		return fmt.Errorf("failed to resolve UDP address: %w", err)
+	}
+	udpConn, err := net.ListenUDP("udp", udpListenerAddr)
+	if err != nil {
+		atomic.AddUint64(&metrics.Socks5UDPAssociateErrors, 1)
+		return fmt.Errorf("failed to listen UDP: %w", err)
 	}
 
-	// Check if this is allowed.
-	if ctx_, ok := s.config.Rules.Allow(ctx, req); !ok {
-		if err := sendReply(conn, ruleFailure, nil); err != nil {
-			return fmt.Errorf("failed to send reply: %w", err)
-		}
-		return fmt.Errorf("associate to %v blocked by rules", req.DestAddr)
-	} else {
-		ctx = ctx_
+	// Use 0.0.0.0:<port> as the bind address.
+	// This is the port used by the server. Client will rewrite the port number.
+	// As the traffic between the client and the server goes through tunnel,
+	// it is OK to use an IPv4 bind address even though the UDP listener is IPv6.
+	_, udpPortStr, err := net.SplitHostPort(udpConn.LocalAddr().String())
+	if err != nil {
+		atomic.AddUint64(&metrics.Socks5UDPAssociateErrors, 1)
+		return fmt.Errorf("net.SplitHostPort() failed: %w", err)
 	}
-
-	atomic.AddUint64(&metrics.Socks5UnsupportedCommandErrors, 1)
-	if err := sendReply(conn, commandNotSupported, nil); err != nil {
+	udpPort, err := strconv.Atoi(udpPortStr)
+	if err != nil {
+		atomic.AddUint64(&metrics.Socks5UDPAssociateErrors, 1)
+		return fmt.Errorf("strconv.Atoi() failed: %w", err)
+	}
+	bind := AddrSpec{IP: net.IP{0, 0, 0, 0}, Port: udpPort}
+	if err := sendReply(conn, successReply, &bind); err != nil {
+		atomic.AddUint64(&metrics.Socks5HandshakeErrors, 1)
 		return fmt.Errorf("failed to send reply: %w", err)
 	}
+
+	conn = WrapUDPAssociateTunnel(conn)
+	var udpErr atomic.Value
+
+	// addrMap maps the UDPAddr in string to the bytes in UDP associate header.
+	var addrMap sync.Map
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	// Send UDP packets to destinations.
+	go func() {
+		defer wg.Done()
+		defer udpConn.Close()
+		buf := make([]byte, 1<<16)
+		var n int
+		var err error
+		for {
+			n, err = conn.Read(buf)
+			if err != nil {
+				udpErr.Store(err)
+				return
+			}
+
+			// Validate received UDP request.
+			if n <= 6 {
+				udpErr.Store(stderror.ErrNoEnoughData)
+				atomic.AddUint64(&metrics.Socks5UDPAssociateErrors, 1)
+				return
+			}
+			if buf[0] != 0x00 || buf[1] != 0x00 {
+				udpErr.Store(stderror.ErrInvalidArgument)
+				atomic.AddUint64(&metrics.Socks5UDPAssociateErrors, 1)
+				return
+			}
+			if buf[2] != 0x00 {
+				// UDP fragment is not supported.
+				udpErr.Store(stderror.ErrUnsupported)
+				atomic.AddUint64(&metrics.Socks5UDPAssociateErrors, 1)
+				return
+			}
+			addrType := buf[3]
+			if addrType != 0x01 && addrType != 0x03 && addrType != 0x04 {
+				udpErr.Store(stderror.ErrInvalidArgument)
+				atomic.AddUint64(&metrics.Socks5UDPAssociateErrors, 1)
+				return
+			}
+			if (addrType == 0x01 && n <= 10) || (addrType == 0x03 && n <= int(buf[4])+6) || (addrType == 0x04 && n <= 22) {
+				udpErr.Store(stderror.ErrNoEnoughData)
+				atomic.AddUint64(&metrics.Socks5UDPAssociateErrors, 1)
+				return
+			}
+
+			// Get target address and send data.
+			switch addrType {
+			case 0x01:
+				dstAddr := &net.UDPAddr{
+					IP:   net.IP(buf[4:8]),
+					Port: int(buf[8])<<8 + int(buf[9]),
+				}
+				addrMap.Store(dstAddr.String(), buf[:10])
+				ws, err := udpConn.WriteToUDP(buf[10:n], dstAddr)
+				if err != nil {
+					if log.IsLevelEnabled(log.DebugLevel) {
+						log.Debugf("UDP associate [%v - %v] WriteToUDP() failed: %v", udpConn.LocalAddr(), dstAddr, err)
+					}
+					atomic.AddUint64(&metrics.Socks5UDPAssociateErrors, 1)
+				} else {
+					atomic.AddUint64(&metrics.UDPAssociateInPkts, 1)
+					atomic.AddUint64(&metrics.UDPAssociateInBytes, uint64(ws))
+				}
+			case 0x03:
+				fqdnLen := buf[4]
+				fqdn := string(buf[5 : 5+fqdnLen])
+				dstAddr, err := net.ResolveUDPAddr("udp", fqdn+":"+strconv.Itoa(int(buf[5+fqdnLen])<<8+int(buf[6+fqdnLen])))
+				if err != nil {
+					if log.IsLevelEnabled(log.DebugLevel) {
+						log.Debugf("UDP associate %v ResolveUDPAddr() failed: %v", udpConn.LocalAddr(), err)
+					}
+					atomic.AddUint64(&metrics.Socks5UDPAssociateErrors, 1)
+					break
+				}
+				addrMap.Store(dstAddr.String(), buf[:7+fqdnLen])
+				ws, err := udpConn.WriteToUDP(buf[7+fqdnLen:n], dstAddr)
+				if err != nil {
+					if log.IsLevelEnabled(log.DebugLevel) {
+						log.Debugf("UDP associate [%v - %v] WriteToUDP() failed: %v", udpConn.LocalAddr(), dstAddr, err)
+					}
+					atomic.AddUint64(&metrics.Socks5UDPAssociateErrors, 1)
+				} else {
+					atomic.AddUint64(&metrics.UDPAssociateInPkts, 1)
+					atomic.AddUint64(&metrics.UDPAssociateInBytes, uint64(ws))
+				}
+			case 0x04:
+				dstAddr := &net.UDPAddr{
+					IP:   net.IP(buf[4:20]),
+					Port: int(buf[20])<<8 + int(buf[21]),
+				}
+				addrMap.Store(dstAddr.String(), buf[:22])
+				ws, err := udpConn.WriteToUDP(buf[22:n], dstAddr)
+				if err != nil {
+					if log.IsLevelEnabled(log.DebugLevel) {
+						log.Debugf("UDP associate [%v - %v] WriteToUDP() failed: %v", udpConn.LocalAddr(), dstAddr, err)
+					}
+					atomic.AddUint64(&metrics.Socks5UDPAssociateErrors, 1)
+				} else {
+					atomic.AddUint64(&metrics.UDPAssociateInPkts, 1)
+					atomic.AddUint64(&metrics.UDPAssociateInBytes, uint64(ws))
+				}
+			}
+		}
+	}()
+
+	// Receive UDP packets from destinations.
+	go func() {
+		defer wg.Done()
+		buf := make([]byte, 1<<16)
+		var n int
+		var addr *net.UDPAddr
+		var err error
+		for {
+			n, addr, err = udpConn.ReadFromUDP(buf)
+			if err != nil {
+				// This is typically due to close of UDP listener.
+				// Don't contribute to metrics.Socks5UDPAssociateErrors.
+				log.Debugf("UDP associate %v Read() failed: %v", udpConn.LocalAddr(), err)
+				if udpErr.Load() == nil {
+					udpErr.Store(err)
+				}
+				return
+			}
+			v, ok := addrMap.Load(addr.String())
+			if !ok {
+				log.Debugf("UDP associate %v received packet from unknown remote %v, packet is discarded", udpConn.LocalAddr(), addr)
+				atomic.AddUint64(&metrics.Socks5UDPAssociateErrors, 1)
+				continue
+			}
+			header := v.([]byte)
+			_, err = conn.Write(append(header, buf[:n]...))
+			if err != nil {
+				log.Debugf("UDP associate %v Write() to proxy client failed: %v", udpConn.LocalAddr(), err)
+				if udpErr.Load() == nil {
+					udpErr.Store(err)
+				}
+				return
+			}
+			atomic.AddUint64(&metrics.UDPAssociateOutPkts, 1)
+			atomic.AddUint64(&metrics.UDPAssociateOutBytes, uint64(n))
+		}
+	}()
+
+	wg.Wait()
+	return udpErr.Load().(error)
+}
+
+// proxySocks5AuthReq transfers the socks5 authentication request and response
+// between socks5 client and server.
+func (s *Server) proxySocks5AuthReq(conn, proxyConn net.Conn) error {
+	// Send the version and authtication methods to the server.
+	version := []byte{0}
+	if _, err := io.ReadFull(conn, version); err != nil {
+		return fmt.Errorf("failed to get version byte: %w", err)
+	}
+	if version[0] != socks5Version {
+		return fmt.Errorf("unsupported SOCKS version: %v", version)
+	}
+	nMethods := []byte{0}
+	if _, err := io.ReadFull(conn, nMethods); err != nil {
+		return fmt.Errorf("failed to get the length of authentication methods: %w", err)
+	}
+	methods := make([]byte, int(nMethods[0]))
+	if _, err := io.ReadFull(conn, methods); err != nil {
+		return fmt.Errorf("failed to get authentication methods: %w", err)
+	}
+	authReq := []byte{}
+	authReq = append(authReq, version...)
+	authReq = append(authReq, nMethods...)
+	authReq = append(authReq, methods...)
+	if _, err := proxyConn.Write(authReq); err != nil {
+		return fmt.Errorf("failed to write authentication request to the server: %w", err)
+	}
+
+	// Get server authentication response.
+	authResp := make([]byte, 2)
+	if _, err := io.ReadFull(proxyConn, authResp); err != nil {
+		return fmt.Errorf("failed to read authentication response from the socks5 server: %w", err)
+	}
+	if _, err := conn.Write(authResp); err != nil {
+		return fmt.Errorf("failed to write authentication response to the socks5 client: %w", err)
+	}
+
 	return nil
+}
+
+// proxySocks5ConnReq transfers the socks5 connection request and response
+// between socks5 client and server. Optionally, if UDP association is used,
+// return the created UDP connection.
+func (s *Server) proxySocks5ConnReq(conn, proxyConn net.Conn) (*net.UDPConn, error) {
+	// Send the connection request to the server.
+	connReq := make([]byte, 4)
+	if _, err := io.ReadFull(conn, connReq); err != nil {
+		return nil, fmt.Errorf("failed to get socks5 connection request: %w", err)
+	}
+	cmd := connReq[1]
+	reqAddrType := connReq[3]
+	var reqFQDNLen []byte
+	var dstAddr []byte
+	switch reqAddrType {
+	case ipv4Address:
+		dstAddr = make([]byte, 6)
+	case fqdnAddress:
+		reqFQDNLen = []byte{0}
+		if _, err := io.ReadFull(conn, reqFQDNLen); err != nil {
+			return nil, fmt.Errorf("failed to get FQDN length: %w", err)
+		}
+		dstAddr = make([]byte, reqFQDNLen[0]+2)
+	case ipv6Address:
+		dstAddr = make([]byte, 18)
+	default:
+		return nil, fmt.Errorf("unsupported address type: %d", reqAddrType)
+	}
+	if _, err := io.ReadFull(conn, dstAddr); err != nil {
+		return nil, fmt.Errorf("failed to get destination address: %w", err)
+	}
+	if len(reqFQDNLen) != 0 {
+		connReq = append(connReq, reqFQDNLen...)
+	}
+	connReq = append(connReq, dstAddr...)
+	if _, err := proxyConn.Write(connReq); err != nil {
+		return nil, fmt.Errorf("failed to write connection request to the server: %w", err)
+	}
+
+	// Get server connection response.
+	connResp := make([]byte, 4)
+	if _, err := io.ReadFull(proxyConn, connResp); err != nil {
+		return nil, fmt.Errorf("failed to read connection response from the server: %w", err)
+	}
+	respAddrType := connResp[3]
+	var respFQDNLen []byte
+	var bindAddr []byte
+	switch respAddrType {
+	case ipv4Address:
+		bindAddr = make([]byte, 6)
+	case fqdnAddress:
+		respFQDNLen = []byte{0}
+		if _, err := io.ReadFull(proxyConn, respFQDNLen); err != nil {
+			return nil, fmt.Errorf("failed to get FQDN length: %w", err)
+		}
+		bindAddr = make([]byte, respFQDNLen[0]+2)
+	case ipv6Address:
+		bindAddr = make([]byte, 18)
+	default:
+		return nil, fmt.Errorf("unsupported address type: %d", respAddrType)
+	}
+	if _, err := io.ReadFull(proxyConn, bindAddr); err != nil {
+		return nil, fmt.Errorf("failed to get bind address: %w", err)
+	}
+	if len(respFQDNLen) != 0 {
+		connResp = append(connResp, respFQDNLen...)
+	}
+	connResp = append(connResp, bindAddr...)
+
+	var udpConn *net.UDPConn
+	if cmd == AssociateCommand {
+		// Create a UDP listener on a random port in IPv4 network.
+		var err error
+		udpAddr := &net.UDPAddr{IP: net.IP{0, 0, 0, 0}, Port: 0}
+		udpConn, err = net.ListenUDP("udp4", udpAddr)
+		if err != nil {
+			return nil, fmt.Errorf("net.ListenUDP() failed: %w", err)
+		}
+		// Get the port number and rewrite the response.
+		_, udpPortStr, err := net.SplitHostPort(udpConn.LocalAddr().String())
+		if err != nil {
+			udpConn.Close()
+			return nil, fmt.Errorf("net.SplitHostPort() failed: %w", err)
+		}
+		udpPort, err := strconv.Atoi(udpPortStr)
+		if err != nil {
+			udpConn.Close()
+			return nil, fmt.Errorf("strconv.Atoi() failed: %w", err)
+		}
+		lenResp := len(connResp)
+		connResp[lenResp-2] = byte(udpPort >> 8)
+		connResp[lenResp-1] = byte(udpPort)
+	}
+
+	if _, err := conn.Write(connResp); err != nil {
+		return nil, fmt.Errorf("failed to write connection response to the socks5 client: %w", err)
+	}
+
+	return udpConn, nil
 }
 
 // readAddrSpec is used to read AddrSpec.
@@ -366,20 +617,6 @@ func sendReply(w io.Writer, resp uint8, addr *AddrSpec) error {
 	// Send the message.
 	_, err := w.Write(msg)
 	return err
-}
-
-type closeWriter interface {
-	CloseWrite() error
-}
-
-// proxy is used to suffle data from src to destination, and sends errors
-// down a dedicated channel.
-func proxy(dst io.Writer, src io.Reader, errCh chan error) {
-	_, err := io.Copy(dst, src)
-	if tcpConn, ok := dst.(closeWriter); ok {
-		tcpConn.CloseWrite()
-	}
-	errCh <- err
 }
 
 func isLocalhostDest(req *Request) bool {

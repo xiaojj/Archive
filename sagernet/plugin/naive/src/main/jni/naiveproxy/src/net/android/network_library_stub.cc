@@ -71,7 +71,7 @@ bool GetDnsServersForNetwork(std::vector<IPEndPoint>* dns_servers,
                              bool* dns_over_tls_active,
                              std::string* dns_over_tls_hostname,
                              std::vector<std::string>* search_suffixes,
-                             NetworkChangeNotifier::NetworkHandle network) {
+                             handles::NetworkHandle network) {
   return false;
 }
 
@@ -82,17 +82,15 @@ bool ReportBadDefaultNetwork() {
 void TagSocket(SocketDescriptor socket, uid_t uid, int32_t tag) {
 }
 
-int BindToNetwork(SocketDescriptor socket,
-                  NetworkChangeNotifier::NetworkHandle network) {
+int BindToNetwork(SocketDescriptor socket, handles::NetworkHandle network) {
   return ERR_NOT_IMPLEMENTED;
 }
 
-int GetAddrInfoForNetwork(
-    NetworkChangeNotifier::NetworkHandle network,
-    const char* node,
-    const char* service,
-    const struct addrinfo* hints,
-    struct addrinfo** res) {
+int GetAddrInfoForNetwork(handles::NetworkHandle network,
+                          const char* node,
+                          const char* service,
+                          const struct addrinfo* hints,
+                          struct addrinfo** res) {
   return EAI_SYSTEM;
 }
 

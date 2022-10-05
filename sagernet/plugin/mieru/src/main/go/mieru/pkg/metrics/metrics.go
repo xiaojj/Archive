@@ -70,6 +70,12 @@ var (
 	ReplayKnownSession uint64 // replay packets sent from a known session
 	ReplayNewSession   uint64 // replay packets sent from a new session
 
+	// Socks5 UDP association
+	UDPAssociateInBytes  uint64 // incoming UDP association bytes
+	UDPAssociateOutBytes uint64 // outgoing UDP association bytes
+	UDPAssociateInPkts   uint64 // incoming UDP association packets count
+	UDPAssociateOutPkts  uint64 // outgoing UDP association packets count
+
 	// UDP Errors
 	UDPInErrors      uint64 // UDP read errors reported from net.PacketConn
 	KCPInErrors      uint64 // packet input errors reported from KCP
@@ -87,6 +93,7 @@ var (
 	Socks5NetworkUnreachableErrors uint64 // Destination network is unreachable
 	Socks5HostUnreachableErrors    uint64 // Destination Host is unreachable
 	Socks5ConnectionRefusedErrors  uint64 // Connection is refused
+	Socks5UDPAssociateErrors       uint64 // UDP associate errors
 )
 
 var ticker *time.Ticker
@@ -146,6 +153,7 @@ func logMetrics() {
 			LogUDPBytes()
 			LogKCPBytes()
 			LogTCPBytes()
+			LogUDPAssociation()
 			LogReplay()
 			LogUDPErrors()
 			LogTCPErrors()
@@ -223,6 +231,15 @@ func LogTCPBytes() {
 	}).Infof("[metrics - TCP bytes]")
 }
 
+func LogUDPAssociation() {
+	log.WithFields(log.Fields{
+		"UDPAssociateInBytes":  UDPAssociateInBytes,
+		"UDPAssociateOutBytes": UDPAssociateOutBytes,
+		"UDPAssociateInPkts":   UDPAssociateInPkts,
+		"UDPAssociateOutPkts":  UDPAssociateOutPkts,
+	}).Infof("[metrics - socks5 UDP association]")
+}
+
 func LogReplay() {
 	log.WithFields(log.Fields{
 		"ReplayKnownSession": ReplayKnownSession,
@@ -254,5 +271,6 @@ func LogSocks5Errors() {
 		"NetworkUnreachable": Socks5NetworkUnreachableErrors,
 		"HostUnreachable":    Socks5HostUnreachableErrors,
 		"ConnectionRefused":  Socks5ConnectionRefusedErrors,
-	}).Infof("[metrics - server socks5 errors]")
+		"UDPAssociateErrors": Socks5UDPAssociateErrors,
+	}).Infof("[metrics - socks5 errors]")
 }

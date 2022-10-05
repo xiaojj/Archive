@@ -28,7 +28,7 @@ PROJECT_NAME=$(shell basename "${ROOT}")
 # - build/package/mita/arm64/rpm/mita.spec
 # - docs/client-install.md
 # - docs/server-install.md
-VERSION="1.6.1"
+VERSION="1.7.0"
 
 # Build binaries and installation packages.
 .PHONY: build
@@ -262,10 +262,12 @@ test-container:
 	if [ ! -z $$(command -v docker) ]; then\
 		CGO_ENABLED=0 go build cmd/mieru/mieru.go;\
 		CGO_ENABLED=0 go build cmd/mita/mita.go;\
-		CGO_ENABLED=0 go build test/cmd/sockshttpclient/sockshttpclient.go;\
 		CGO_ENABLED=0 go build test/cmd/httpserver/httpserver.go;\
+		CGO_ENABLED=0 go build test/cmd/sockshttpclient/sockshttpclient.go;\
+		CGO_ENABLED=0 go build test/cmd/socksudpclient/socksudpclient.go;\
+		CGO_ENABLED=0 go build test/cmd/udpserver/udpserver.go;\
 		docker build -t mieru_httptest:${SHORT_SHA} -f test/deploy/httptest/Dockerfile .;\
-		rm mieru mita sockshttpclient httpserver;\
+		rm mieru mita httpserver sockshttpclient socksudpclient udpserver;\
 	fi
 
 # Format source code.

@@ -4,6 +4,7 @@
 
 #include <arpa/inet.h>
 #include <fcntl.h>
+#include <net/if.h>
 #include <netinet/in.h>
 #include <sys/select.h>
 #include <sys/socket.h>
@@ -83,6 +84,13 @@ void SetV6SelfIpInControlMessage(const QuicIpAddress& self_address,
 void PopulatePacketInfoFromControlMessage(struct cmsghdr* cmsg,
                                           QuicUdpPacketInfo* packet_info,
                                           BitMask64 packet_info_interested) {
+#ifdef SOL_UDP
+  if (packet_info_interested.IsSet(QuicUdpPacketInfoBit::IS_GRO) &&
+      cmsg->cmsg_level == SOL_UDP && cmsg->cmsg_type == UDP_GRO) {
+    packet_info->set_gso_size(*reinterpret_cast<uint16_t*>(CMSG_DATA(cmsg)));
+  }
+#endif
+
 #if defined(__linux__) && defined(SO_RXQ_OVFL)
   if (cmsg->cmsg_level == SOL_SOCKET && cmsg->cmsg_type == SO_RXQ_OVFL) {
     if (packet_info_interested.IsSet(QuicUdpPacketInfoBit::DROPPED_PACKETS)) {
@@ -273,6 +281,26 @@ bool QuicUdpSocketApi::Bind(QuicUdpSocketFd fd, QuicSocketAddress address) {
   return 0 == bind(fd, reinterpret_cast<sockaddr*>(&addr), addr_len);
 }
 
+bool QuicUdpSocketApi::BindInterface(QuicUdpSocketFd fd,
+                                     const std::string& interface_name) {
+#if defined(__linux__) && !defined(__ANDROID_API__)
+  if (interface_name.empty() || interface_name.size() >= IFNAMSIZ) {
+    QUIC_BUG(udp_bad_interface_name)
+        << "interface_name must be nonempty and shorter than " << IFNAMSIZ;
+    return false;
+  }
+
+  return 0 == setsockopt(fd, SOL_SOCKET, SO_BINDTODEVICE,
+                         interface_name.c_str(), interface_name.length());
+#else
+  (void)fd;
+  (void)interface_name;
+  QUIC_BUG(interface_bind_not_implemented)
+      << "Interface binding is not implemented on this platform";
+  return false;
+#endif
+}
+
 bool QuicUdpSocketApi::EnableDroppedPacketCount(QuicUdpSocketFd fd) {
 #if defined(__linux__) && defined(SO_RXQ_OVFL)
   int get_overflow = 1;
@@ -427,87 +455,102 @@ size_t QuicUdpSocketApi::ReadMultiplePackets(QuicUdpSocketFd fd,
                                              BitMask64 packet_info_interested,
                                              ReadPacketResults* results) {
 #if defined(__linux__) && !defined(__ANDROID__)
-  // Use recvmmsg.
-  size_t hdrs_size = sizeof(mmsghdr) * results->size();
-  mmsghdr* hdrs = static_cast<mmsghdr*>(alloca(hdrs_size));
-  memset(hdrs, 0, hdrs_size);
-
-  struct TempPerPacketData {
-    iovec iov;
-    sockaddr_storage raw_peer_address;
-  };
-  TempPerPacketData* packet_data_array = static_cast<TempPerPacketData*>(
-      alloca(sizeof(TempPerPacketData) * results->size()));
-
-  for (size_t i = 0; i < results->size(); ++i) {
-    (*results)[i].ok = false;
-
-    msghdr* hdr = &hdrs[i].msg_hdr;
-    TempPerPacketData* packet_data = &packet_data_array[i];
-    packet_data->iov.iov_base = (*results)[i].packet_buffer.buffer;
-    packet_data->iov.iov_len = (*results)[i].packet_buffer.buffer_len;
-
-    hdr->msg_name = &packet_data->raw_peer_address;
-    hdr->msg_namelen = sizeof(sockaddr_storage);
-    hdr->msg_iov = &packet_data->iov;
-    hdr->msg_iovlen = 1;
-    hdr->msg_flags = 0;
-    hdr->msg_control = (*results)[i].control_buffer.buffer;
-    hdr->msg_controllen = (*results)[i].control_buffer.buffer_len;
-
-    QUICHE_DCHECK_GE(hdr->msg_controllen, kMinCmsgSpaceForRead);
-  }
-  // If MSG_TRUNC is set on Linux, recvmmsg will return the real packet size in
-  // |hdrs[i].msg_len| even if packet buffer is too small to receive it.
-  int packets_read = recvmmsg(fd, hdrs, results->size(), MSG_TRUNC, nullptr);
-  if (packets_read <= 0) {
-    const int error_num = errno;
-    if (error_num != EAGAIN) {
-      QUIC_LOG_FIRST_N(ERROR, 100)
-          << "Error reading packets: " << strerror(error_num);
+  if (packet_info_interested.IsSet(QuicUdpPacketInfoBit::IS_GRO)) {
+    size_t num_packets = 0;
+    for (ReadPacketResult& result : *results) {
+      result.ok = false;
     }
-    return 0;
-  }
-
-  for (int i = 0; i < packets_read; ++i) {
-    if (hdrs[i].msg_len == 0) {
-      continue;
+    for (ReadPacketResult& result : *results) {
+      ReadPacket(fd, packet_info_interested, &result);
+      if (!result.ok) {
+        break;
+      }
+      ++num_packets;
     }
+    return num_packets;
+  } else {
+    // Use recvmmsg.
+    size_t hdrs_size = sizeof(mmsghdr) * results->size();
+    mmsghdr* hdrs = static_cast<mmsghdr*>(alloca(hdrs_size));
+    memset(hdrs, 0, hdrs_size);
 
-    msghdr& hdr = hdrs[i].msg_hdr;
-    if (ABSL_PREDICT_FALSE(hdr.msg_flags & MSG_CTRUNC)) {
-      QUIC_BUG(quic_bug_10751_4) << "Control buffer too small. size:"
-                                 << (*results)[i].control_buffer.buffer_len
-                                 << ", need:" << hdr.msg_controllen;
-      continue;
+    struct TempPerPacketData {
+      iovec iov;
+      sockaddr_storage raw_peer_address;
+    };
+    TempPerPacketData* packet_data_array = static_cast<TempPerPacketData*>(
+        alloca(sizeof(TempPerPacketData) * results->size()));
+
+    for (size_t i = 0; i < results->size(); ++i) {
+      (*results)[i].ok = false;
+
+      msghdr* hdr = &hdrs[i].msg_hdr;
+      TempPerPacketData* packet_data = &packet_data_array[i];
+      packet_data->iov.iov_base = (*results)[i].packet_buffer.buffer;
+      packet_data->iov.iov_len = (*results)[i].packet_buffer.buffer_len;
+
+      hdr->msg_name = &packet_data->raw_peer_address;
+      hdr->msg_namelen = sizeof(sockaddr_storage);
+      hdr->msg_iov = &packet_data->iov;
+      hdr->msg_iovlen = 1;
+      hdr->msg_flags = 0;
+      hdr->msg_control = (*results)[i].control_buffer.buffer;
+      hdr->msg_controllen = (*results)[i].control_buffer.buffer_len;
+
+      QUICHE_DCHECK_GE(hdr->msg_controllen, kMinCmsgSpaceForRead);
     }
-
-    if (ABSL_PREDICT_FALSE(hdr.msg_flags & MSG_TRUNC)) {
-      QUIC_LOG_FIRST_N(WARNING, 100)
-          << "Received truncated QUIC packet: buffer size:"
-          << (*results)[i].packet_buffer.buffer_len
-          << " packet size:" << hdrs[i].msg_len;
-      continue;
+    // If MSG_TRUNC is set on Linux, recvmmsg will return the real packet size
+    // in |hdrs[i].msg_len| even if packet buffer is too small to receive it.
+    int packets_read = recvmmsg(fd, hdrs, results->size(), MSG_TRUNC, nullptr);
+    if (packets_read <= 0) {
+      const int error_num = errno;
+      if (error_num != EAGAIN) {
+        QUIC_LOG_FIRST_N(ERROR, 100)
+            << "Error reading packets: " << strerror(error_num);
+      }
+      return 0;
     }
 
-    (*results)[i].ok = true;
-    (*results)[i].packet_buffer.buffer_len = hdrs[i].msg_len;
+    for (int i = 0; i < packets_read; ++i) {
+      if (hdrs[i].msg_len == 0) {
+        continue;
+      }
 
-    QuicUdpPacketInfo* packet_info = &(*results)[i].packet_info;
-    if (packet_info_interested.IsSet(QuicUdpPacketInfoBit::PEER_ADDRESS)) {
-      packet_info->SetPeerAddress(
-          QuicSocketAddress(packet_data_array[i].raw_peer_address));
-    }
+      msghdr& hdr = hdrs[i].msg_hdr;
+      if (ABSL_PREDICT_FALSE(hdr.msg_flags & MSG_CTRUNC)) {
+        QUIC_BUG(quic_bug_10751_4) << "Control buffer too small. size:"
+                                   << (*results)[i].control_buffer.buffer_len
+                                   << ", need:" << hdr.msg_controllen;
+        continue;
+      }
 
-    if (hdr.msg_controllen > 0) {
-      for (struct cmsghdr* cmsg = CMSG_FIRSTHDR(&hdr); cmsg != nullptr;
-           cmsg = CMSG_NXTHDR(&hdr, cmsg)) {
-        PopulatePacketInfoFromControlMessage(cmsg, packet_info,
-                                             packet_info_interested);
+      if (ABSL_PREDICT_FALSE(hdr.msg_flags & MSG_TRUNC)) {
+        QUIC_LOG_FIRST_N(WARNING, 100)
+            << "Received truncated QUIC packet: buffer size:"
+            << (*results)[i].packet_buffer.buffer_len
+            << " packet size:" << hdrs[i].msg_len;
+        continue;
+      }
+
+      (*results)[i].ok = true;
+      (*results)[i].packet_buffer.buffer_len = hdrs[i].msg_len;
+
+      QuicUdpPacketInfo* packet_info = &(*results)[i].packet_info;
+      if (packet_info_interested.IsSet(QuicUdpPacketInfoBit::PEER_ADDRESS)) {
+        packet_info->SetPeerAddress(
+            QuicSocketAddress(packet_data_array[i].raw_peer_address));
+      }
+
+      if (hdr.msg_controllen > 0) {
+        for (struct cmsghdr* cmsg = CMSG_FIRSTHDR(&hdr); cmsg != nullptr;
+             cmsg = CMSG_NXTHDR(&hdr, cmsg)) {
+          PopulatePacketInfoFromControlMessage(cmsg, packet_info,
+                                               packet_info_interested);
+        }
       }
     }
+    return packets_read;
   }
-  return packets_read;
 #else
   size_t num_packets = 0;
   for (ReadPacketResult& result : *results) {

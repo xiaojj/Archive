@@ -64,6 +64,7 @@ source_set("dns") {
     "mapped_host_resolver.cc",
     "nsswitch_reader.cc",
     "nsswitch_reader.h",
+    "opt_record_rdata.cc",
     "record_parsed.cc",
     "record_rdata.cc",
     "resolve_context.cc",
@@ -256,6 +257,7 @@ source_set("dns_client") {
     "dns_response.h",
     "dns_transaction.h",
     "https_record_rdata.h",
+    "opt_record_rdata.h",
     "record_parsed.h",
     "record_rdata.h",
   ]
