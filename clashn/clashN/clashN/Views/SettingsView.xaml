@@ -36,7 +36,9 @@
                 <ComboBox
                     x:Name="cmbSwatches"
                     Width="100"
-                    DisplayMemberPath="Name" />
+                    Margin="8"
+                    DisplayMemberPath="Name"
+                    Style="{StaticResource DefComboBox}" />
                 <Separator />
                 <TextBlock
                     VerticalAlignment="Center"
@@ -45,7 +47,9 @@
                 <ComboBox
                     x:Name="cmbCurrentLanguage"
                     Width="100"
-                    materialDesign:HintAssist.Hint="Language" />
+                    Margin="8"
+                    materialDesign:HintAssist.Hint="Language"
+                    Style="{StaticResource DefComboBox}" />
 
             </ToolBar>
         </ToolBarTray>
@@ -173,13 +177,7 @@
                             Grid.Row="7"
                             Grid.Column="1"
                             Margin="8"
-                            materialDesign:HintAssist.Hint="Level">
-                            <ComboBoxItem Content="debug" />
-                            <ComboBoxItem Content="info" />
-                            <ComboBoxItem Content="warning" />
-                            <ComboBoxItem Content="error" />
-                            <ComboBoxItem Content="slient" />
-                        </ComboBox>
+                            materialDesign:HintAssist.Hint="Level" />
 
                         <TextBlock
                             Grid.Row="8"
