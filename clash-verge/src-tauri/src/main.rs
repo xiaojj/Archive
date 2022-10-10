@@ -19,18 +19,12 @@ use tauri::{
 };
 
 fn main() -> std::io::Result<()> {
-  let mut context = tauri::generate_context!();
+  {
+    let verge = Verge::new();
 
-  let verge = Verge::new();
-
-  if server::check_singleton(verge.app_singleton_port).is_err() {
-    println!("app exists");
-    return Ok(());
-  }
-
-  for win in context.config_mut().tauri.windows.iter_mut() {
-    if verge.enable_silent_start.unwrap_or(false) {
-      win.visible = false;
+    if server::check_singleton(verge.app_singleton_port).is_err() {
+      println!("app exists");
+      return Ok(());
     }
   }
 
@@ -145,9 +139,13 @@ fn main() -> std::io::Result<()> {
     builder = builder.menu(Menu::new().add_submenu(submenu_file));
   }
 
-  let app = builder
-    .build(context)
+  #[allow(unused_mut)]
+  let mut app = builder
+    .build(tauri::generate_context!())
     .expect("error while running tauri application");
+
+  #[cfg(target_os = "macos")]
+  app.set_activation_policy(tauri::ActivationPolicy::Accessory);
 
   let app_handle = app.app_handle();
   ctrlc::set_handler(move || {
