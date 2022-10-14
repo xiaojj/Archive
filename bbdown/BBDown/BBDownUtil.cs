@@ -227,7 +227,7 @@ namespace BBDown
                 json = await GetWebSourceAsync(api);
                 using var infoJson = JsonDocument.Parse(json);
                 var data = infoJson.RootElement.GetProperty("data");
-                if (data.TryGetProperty("redirect_url", out _) && data.GetProperty("redirect_url").ToString().Contains("bangumi")) 
+                if (data.TryGetProperty("redirect_url", out _) && data.GetProperty("redirect_url").ToString().Contains("bangumi"))
                 {
                     var epId = RedirectRegex().Match(data.GetProperty("redirect_url").ToString()).Groups[1].Value;
                     return $"ep:{epId}";
@@ -327,7 +327,7 @@ namespace BBDown
             }
         }
 
-        public static async Task DownloadFile(string url, string path, bool aria2c, string aria2cProxy, bool forceHttp = false)
+        public static async Task DownloadFile(string url, string path, bool aria2c, string aria2cArgs, bool forceHttp = false)
         {
             if (forceHttp) url = ReplaceUrl(url);
             LogDebug("Start downloading: {0}", url);
@@ -337,7 +337,7 @@ namespace BBDown
             }
             if (aria2c)
             {
-                await BBDownAria2c.DownloadFileByAria2cAsync(url, path, aria2cProxy);
+                await BBDownAria2c.DownloadFileByAria2cAsync(url, path, aria2cArgs);
                 if (File.Exists(path + ".aria2") || !File.Exists(path))
                     throw new Exception("aria2下载可能存在错误");
                 Console.WriteLine();
@@ -359,13 +359,13 @@ namespace BBDown
             }
         }
 
-        public static async Task MultiThreadDownloadFileAsync(string url, string path, bool aria2c, string aria2cProxy, bool forceHttp = false)
+        public static async Task MultiThreadDownloadFileAsync(string url, string path, bool aria2c, string aria2cArgs, bool forceHttp = false)
         {
             if (forceHttp) url = ReplaceUrl(url);
             LogDebug("Start downloading: {0}", url);
             if (aria2c)
             {
-                await BBDownAria2c.DownloadFileByAria2cAsync(url, path, aria2cProxy);
+                await BBDownAria2c.DownloadFileByAria2cAsync(url, path, aria2cArgs);
                 if (File.Exists(path + ".aria2") || !File.Exists(path))
                     throw new Exception("aria2下载可能存在错误");
                 Console.WriteLine();
@@ -543,10 +543,14 @@ namespace BBDown
             return redirectedUrl;
         }
 
+        private static char[] InvalidChars = "34,60,62,124,0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,58,42,63,92,47"
+                .Split(',').Select(s => (char)int.Parse(s)).ToArray();
+
         public static string GetValidFileName(string input, string re = ".", bool filterSlash = false)
         {
             string title = input;
-            foreach (char invalidChar in Path.GetInvalidFileNameChars())
+
+            foreach (char invalidChar in InvalidChars)
             {
                 title = title.Replace(invalidChar.ToString(), re);
             }
@@ -559,12 +563,12 @@ namespace BBDown
         }
 
 
-        /// <summary>    
-        /// 获取url字符串参数，返回参数值字符串    
-        /// </summary>    
-        /// <param name="name">参数名称</param>    
-        /// <param name="url">url字符串</param>    
-        /// <returns></returns>    
+        /// <summary>
+        /// 获取url字符串参数，返回参数值字符串
+        /// </summary>
+        /// <param name="name">参数名称</param>
+        /// <param name="url">url字符串</param>
+        /// <returns></returns>
         public static string GetQueryString(string name, string url)
         {
             Regex re = QueryRegex();
