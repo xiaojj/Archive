@@ -219,7 +219,7 @@ namespace BBDown.Core.Util
             {
                 try
                 {
-                    string api = $"https://api.bilibili.tv/intl/gateway/web/v2/subtitle?&episode_id={epId}";
+                    string api = $"https://api.biliintl.com/intl/gateway/web/v2/subtitle?&episode_id={epId}";
                     string json = await GetWebSourceAsync(api);
                     using var infoJson = JsonDocument.Parse(json);
                     var subs = infoJson.RootElement.GetProperty("data").GetProperty("subtitles").EnumerateArray();
@@ -276,7 +276,7 @@ namespace BBDown.Core.Util
                         var lan = sub.GetProperty("lan").ToString();
                         Subtitle subtitle = new()
                         {
-                            url = "https://" + sub.GetProperty("subtitle_url").ToString(),
+                            url = "https:" + sub.GetProperty("subtitle_url").ToString(),
                             lan = lan,
                             path = $"{aid}/{aid}.{cid}.{lan}.srt"
                         };

@@ -11,7 +11,7 @@ require (
 	github.com/elazarl/goproxy v0.0.0-20220115173737-adb46da277ac
 	github.com/elazarl/goproxy/ext v0.0.0-20220115173737-adb46da277ac
 	github.com/folbricht/routedns v0.1.6-0.20220806202012-361f5b35b4c3
-	github.com/fsnotify/fsnotify v1.5.4
+	github.com/fsnotify/fsnotify v1.6.0
 	github.com/google/gopacket v1.1.19
 	github.com/hashicorp/golang-lru v0.5.4
 	github.com/lucas-clemente/quic-go v0.28.1
@@ -19,12 +19,12 @@ require (
 	github.com/oschwald/geoip2-golang v1.8.0
 	github.com/prometheus/client_golang v1.13.0
 	github.com/sirupsen/logrus v1.9.0
-	github.com/spf13/cobra v1.5.0
+	github.com/spf13/cobra v1.6.0
 	github.com/spf13/viper v1.13.0
 	github.com/txthinking/socks5 v0.0.0-20220212043548-414499347d4a
 	github.com/xjasonlyu/tun2socks/v2 v2.4.1
 	github.com/yosuke-furukawa/json5 v0.1.1
-	golang.org/x/sys v0.0.0-20220804214406-8e32c043e418
+	golang.org/x/sys v0.0.0-20220908164124-27713097b956
 	gvisor.dev/gvisor v0.0.0-20220405222207-795f4f0139bb
 )
 
@@ -37,7 +37,7 @@ require (
 	github.com/golang/protobuf v1.5.2 // indirect
 	github.com/google/btree v1.0.1 // indirect
 	github.com/hashicorp/hcl v1.0.0 // indirect
-	github.com/inconshreveable/mousetrap v1.0.0 // indirect
+	github.com/inconshreveable/mousetrap v1.0.1 // indirect
 	github.com/jtacoma/uritemplates v1.0.0 // indirect
 	github.com/klauspost/cpuid/v2 v2.1.1 // indirect
 	github.com/libdns/libdns v0.2.1 // indirect
