@@ -409,6 +409,7 @@ object Utils {
             "zh-rCN" -> Locale("zh", "CN")
             "zh-rTW" -> Locale("zh", "TW")
             "vi" -> Locale("vi")
+            "ru" -> Locale("ru")
             else -> getSysLocale()
         }
 
@@ -422,6 +423,10 @@ object Utils {
         return str
             .replace(" ","%20")
             .replace("|","%7C")
+    }
+
+    fun removeWhiteSpace(str: String?): String? {
+        return str?.replace(" ", "")
     }
 }
 
