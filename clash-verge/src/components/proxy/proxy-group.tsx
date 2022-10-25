@@ -18,9 +18,8 @@ import {
 import { providerHealthCheck, updateProxy } from "@/services/api";
 import { getProfiles, patchProfile } from "@/services/cmds";
 import delayManager from "@/services/delay";
-import useSortProxy from "./use-sort-proxy";
 import useHeadState from "./use-head-state";
-import useFilterProxy from "./use-filter-proxy";
+import useFilterSort from "./use-filter-sort";
 import ProxyHead from "./proxy-head";
 import ProxyItem from "./proxy-item";
 
@@ -35,14 +34,10 @@ const ProxyGroup = ({ group }: Props) => {
   const [headState, setHeadState] = useHeadState(group.name);
 
   const virtuosoRef = useRef<any>();
-  const filterProxies = useFilterProxy(
+  const sortedProxies = useFilterSort(
     group.all,
     group.name,
-    headState.filterText
-  );
-  const sortedProxies = useSortProxy(
-    filterProxies,
-    group.name,
+    headState.filterText,
     headState.sortType
   );
 
@@ -105,21 +100,29 @@ const ProxyGroup = ({ group }: Props) => {
     }
 
     await delayManager.checkListDelay(
-      {
-        names: sortedProxies.filter((p) => !p.provider).map((p) => p.name),
-        groupName: group.name,
-        skipNum: 16,
-      },
-      () => mutate("getProxies")
+      sortedProxies.filter((p) => !p.provider).map((p) => p.name),
+      group.name,
+      16
     );
+
+    mutate("getProxies");
   });
 
   // auto scroll to current index
   useEffect(() => {
     if (headState.open) {
-      setTimeout(() => onLocation(false), 5);
+      setTimeout(() => onLocation(false), 10);
     }
-  }, [headState.open]);
+  }, [headState.open, sortedProxies]);
+
+  // auto scroll when sorted changed
+  const timerRef = useRef<any>();
+  useEffect(() => {
+    if (headState.open) {
+      clearTimeout(timerRef.current);
+      timerRef.current = setTimeout(() => onLocation(false), 500);
+    }
+  }, [headState.open, sortedProxies]);
 
   return (
     <>

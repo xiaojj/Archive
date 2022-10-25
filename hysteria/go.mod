@@ -19,7 +19,7 @@ require (
 	github.com/oschwald/geoip2-golang v1.8.0
 	github.com/prometheus/client_golang v1.13.0
 	github.com/sirupsen/logrus v1.9.0
-	github.com/spf13/cobra v1.6.0
+	github.com/spf13/cobra v1.6.1
 	github.com/spf13/viper v1.13.0
 	github.com/txthinking/socks5 v0.0.0-20220212043548-414499347d4a
 	github.com/xjasonlyu/tun2socks/v2 v2.4.1
@@ -91,4 +91,4 @@ require (
 
 replace github.com/lucas-clemente/quic-go => github.com/HyNetwork/quic-go v0.30.1-0.20221023055600-93b146ab9c48
 
-replace github.com/LiamHaworth/go-tproxy => github.com/HyNetwork/go-tproxy v0.0.0-20220916084518-d32f8ab1e8e9
+replace github.com/LiamHaworth/go-tproxy => github.com/HyNetwork/go-tproxy v0.0.0-20221025153553-ed04a2935f88
