@@ -7,8 +7,9 @@
   
   "server": "127.0.0.1",
   "server_port": 1080,
+  "system_interface": false,
+  "interface_name": "wg0",
   "local_address": [
-    "10.0.0.1",
     "10.0.0.2/32"
   ],
   "private_key": "YNXtAzepDqRv9H52osJVDQnznT5AM11eCK3ESpwSt04=",
@@ -25,6 +26,10 @@
 
     WireGuard is not included by default, see [Installation](/#installation).
 
+!!! warning ""
+
+    gVisor, which is required by the unprivileged WireGuard is not included by default, see [Installation](/#installation).
+
 ### Fields
 
 #### server
@@ -39,11 +44,23 @@ The server address.
 
 The server port.
 
+#### system_interface
+
+Use system tun support.
+
+Requires privilege and cannot conflict with system interfaces.
+
+Forced if gVisor not included in the build.
+
+#### interface_name
+
+Custom device name when `system_interface` enabled.
+
 #### local_address
 
 ==Required==
 
-List of IP (v4 or v6) addresses (optionally with CIDR masks) to be assigned to the interface.
+List of IP (v4 or v6) address prefixes to be assigned to the interface.
 
 #### private_key
 

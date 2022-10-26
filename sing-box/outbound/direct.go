@@ -35,6 +35,7 @@ type Direct struct {
 }
 
 func NewDirect(router adapter.Router, logger log.ContextLogger, tag string, options option.DirectOutboundOptions) (*Direct, error) {
+	options.UDPFragmentDefault = true
 	outbound := &Direct{
 		myOutboundAdapter: myOutboundAdapter{
 			protocol: C.TypeDirect,
@@ -131,7 +132,7 @@ func (h *Direct) DialParallel(ctx context.Context, network string, destination M
 	if h.domainStrategy != dns.DomainStrategyAsIS {
 		domainStrategy = h.domainStrategy
 	} else {
-		domainStrategy = metadata.DomainStrategy
+		domainStrategy = dns.DomainStrategy(metadata.InboundOptions.DomainStrategy)
 	}
 	conn, err := N.DialParallel(ctx, h.dialer, network, destination, destinationAddresses, domainStrategy == dns.DomainStrategyPreferIPv6, h.fallbackDelay)
 	if err != nil {

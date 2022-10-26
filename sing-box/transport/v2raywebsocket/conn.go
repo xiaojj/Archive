@@ -10,14 +10,25 @@ import (
 	"time"
 
 	C "github.com/sagernet/sing-box/constant"
+	"github.com/sagernet/sing/common"
+	"github.com/sagernet/sing/common/buf"
 	E "github.com/sagernet/sing/common/exceptions"
 	"github.com/sagernet/websocket"
 )
 
 type WebsocketConn struct {
 	*websocket.Conn
+	*Writer
 	remoteAddr net.Addr
 	reader     io.Reader
+}
+
+func NewServerConn(wsConn *websocket.Conn, remoteAddr net.Addr) *WebsocketConn {
+	return &WebsocketConn{
+		Conn:       wsConn,
+		remoteAddr: remoteAddr,
+		Writer:     NewWriter(wsConn, true),
+	}
 }
 
 func (c *WebsocketConn) Close() error {
@@ -47,14 +58,6 @@ func (c *WebsocketConn) Read(b []byte) (n int, err error) {
 	}
 }
 
-func (c *WebsocketConn) Write(b []byte) (n int, err error) {
-	err = wrapError(c.WriteMessage(websocket.BinaryMessage, b))
-	if err != nil {
-		return
-	}
-	return len(b), nil
-}
-
 func (c *WebsocketConn) RemoteAddr() net.Addr {
 	if c.remoteAddr != nil {
 		return c.remoteAddr
@@ -64,6 +67,14 @@ func (c *WebsocketConn) RemoteAddr() net.Addr {
 
 func (c *WebsocketConn) SetDeadline(t time.Time) error {
 	return os.ErrInvalid
+}
+
+func (c *WebsocketConn) Upstream() any {
+	return c.Conn.NetConn()
+}
+
+func (c *WebsocketConn) UpstreamWriter() any {
+	return c.Writer
 }
 
 type EarlyWebsocketConn struct {
@@ -90,9 +101,9 @@ func (c *EarlyWebsocketConn) Write(b []byte) (n int, err error) {
 		conn      *websocket.Conn
 		response  *http.Response
 	)
-	if len(earlyData) > int(c.maxEarlyData) {
-		earlyData = earlyData[:c.maxEarlyData]
-		lateData = lateData[c.maxEarlyData:]
+	if len(b) > int(c.maxEarlyData) {
+		earlyData = b[:c.maxEarlyData]
+		lateData = b[c.maxEarlyData:]
 	} else {
 		earlyData = b
 	}
@@ -111,7 +122,7 @@ func (c *EarlyWebsocketConn) Write(b []byte) (n int, err error) {
 	if err != nil {
 		return 0, wrapDialError(response, err)
 	}
-	c.conn = &WebsocketConn{Conn: conn}
+	c.conn = &WebsocketConn{Conn: conn, Writer: NewWriter(conn, false)}
 	close(c.create)
 	if len(lateData) > 0 {
 		_, err = c.conn.Write(lateData)
@@ -120,6 +131,46 @@ func (c *EarlyWebsocketConn) Write(b []byte) (n int, err error) {
 		return
 	}
 	return len(b), nil
+}
+
+func (c *EarlyWebsocketConn) WriteBuffer(buffer *buf.Buffer) error {
+	if c.conn != nil {
+		return c.conn.WriteBuffer(buffer)
+	}
+	var (
+		earlyData []byte
+		lateData  []byte
+		conn      *websocket.Conn
+		response  *http.Response
+		err       error
+	)
+	if buffer.Len() > int(c.maxEarlyData) {
+		earlyData = buffer.Bytes()[:c.maxEarlyData]
+		lateData = buffer.Bytes()[c.maxEarlyData:]
+	} else {
+		earlyData = buffer.Bytes()
+	}
+	if len(earlyData) > 0 {
+		earlyDataString := base64.RawURLEncoding.EncodeToString(earlyData)
+		if c.earlyDataHeaderName == "" {
+			conn, response, err = c.dialer.DialContext(c.ctx, c.uri+earlyDataString, c.headers)
+		} else {
+			headers := c.headers.Clone()
+			headers.Set(c.earlyDataHeaderName, earlyDataString)
+			conn, response, err = c.dialer.DialContext(c.ctx, c.uri, headers)
+		}
+	} else {
+		conn, response, err = c.dialer.DialContext(c.ctx, c.uri, c.headers)
+	}
+	if err != nil {
+		return wrapDialError(response, err)
+	}
+	c.conn = &WebsocketConn{Conn: conn, Writer: NewWriter(conn, false)}
+	close(c.create)
+	if len(lateData) > 0 {
+		_, err = c.conn.Write(lateData)
+	}
+	return err
 }
 
 func (c *EarlyWebsocketConn) Close() error {
@@ -162,6 +213,14 @@ func (c *EarlyWebsocketConn) SetWriteDeadline(t time.Time) error {
 		return os.ErrInvalid
 	}
 	return c.conn.SetWriteDeadline(t)
+}
+
+func (c *EarlyWebsocketConn) Upstream() any {
+	return common.PtrOrNil(c.conn)
+}
+
+func (c *EarlyWebsocketConn) LazyHeadroom() bool {
+	return c.conn == nil
 }
 
 func wrapError(err error) error {

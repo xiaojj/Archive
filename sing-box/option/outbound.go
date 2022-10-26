@@ -8,20 +8,23 @@ import (
 )
 
 type _Outbound struct {
-	Type               string                     `json:"type"`
-	Tag                string                     `json:"tag,omitempty"`
-	DirectOptions      DirectOutboundOptions      `json:"-"`
-	SocksOptions       SocksOutboundOptions       `json:"-"`
-	HTTPOptions        HTTPOutboundOptions        `json:"-"`
-	ShadowsocksOptions ShadowsocksOutboundOptions `json:"-"`
-	VMessOptions       VMessOutboundOptions       `json:"-"`
-	TrojanOptions      TrojanOutboundOptions      `json:"-"`
-	WireGuardOptions   WireGuardOutboundOptions   `json:"-"`
-	HysteriaOptions    HysteriaOutboundOptions    `json:"-"`
-	TorOptions         TorOutboundOptions         `json:"-"`
-	SSHOptions         SSHOutboundOptions         `json:"-"`
-	ShadowTLSOptions   ShadowTLSOutboundOptions   `json:"-"`
-	SelectorOptions    SelectorOutboundOptions    `json:"-"`
+	Type                string                      `json:"type"`
+	Tag                 string                      `json:"tag,omitempty"`
+	DirectOptions       DirectOutboundOptions       `json:"-"`
+	SocksOptions        SocksOutboundOptions        `json:"-"`
+	HTTPOptions         HTTPOutboundOptions         `json:"-"`
+	ShadowsocksOptions  ShadowsocksOutboundOptions  `json:"-"`
+	VMessOptions        VMessOutboundOptions        `json:"-"`
+	TrojanOptions       TrojanOutboundOptions       `json:"-"`
+	WireGuardOptions    WireGuardOutboundOptions    `json:"-"`
+	HysteriaOptions     HysteriaOutboundOptions     `json:"-"`
+	TorOptions          TorOutboundOptions          `json:"-"`
+	SSHOptions          SSHOutboundOptions          `json:"-"`
+	ShadowTLSOptions    ShadowTLSOutboundOptions    `json:"-"`
+	ShadowsocksROptions ShadowsocksROutboundOptions `json:"-"`
+	VLESSOptions        VLESSOutboundOptions        `json:"-"`
+	SelectorOptions     SelectorOutboundOptions     `json:"-"`
+	URLTestOptions      URLTestOutboundOptions      `json:"-"`
 }
 
 type Outbound _Outbound
@@ -53,8 +56,14 @@ func (h Outbound) MarshalJSON() ([]byte, error) {
 		v = h.SSHOptions
 	case C.TypeShadowTLS:
 		v = h.ShadowTLSOptions
+	case C.TypeShadowsocksR:
+		v = h.ShadowsocksROptions
+	case C.TypeVLESS:
+		v = h.VLESSOptions
 	case C.TypeSelector:
 		v = h.SelectorOptions
+	case C.TypeURLTest:
+		v = h.URLTestOptions
 	default:
 		return nil, E.New("unknown outbound type: ", h.Type)
 	}
@@ -92,8 +101,14 @@ func (h *Outbound) UnmarshalJSON(bytes []byte) error {
 		v = &h.SSHOptions
 	case C.TypeShadowTLS:
 		v = &h.ShadowTLSOptions
+	case C.TypeShadowsocksR:
+		v = &h.ShadowsocksROptions
+	case C.TypeVLESS:
+		v = &h.VLESSOptions
 	case C.TypeSelector:
 		v = &h.SelectorOptions
+	case C.TypeURLTest:
+		v = &h.URLTestOptions
 	default:
 		return E.New("unknown outbound type: ", h.Type)
 	}
@@ -105,16 +120,18 @@ func (h *Outbound) UnmarshalJSON(bytes []byte) error {
 }
 
 type DialerOptions struct {
-	Detour         string         `json:"detour,omitempty"`
-	BindInterface  string         `json:"bind_interface,omitempty"`
-	BindAddress    *ListenAddress `json:"bind_address,omitempty"`
-	ProtectPath    string         `json:"protect_path,omitempty"`
-	RoutingMark    int            `json:"routing_mark,omitempty"`
-	ReuseAddr      bool           `json:"reuse_addr,omitempty"`
-	ConnectTimeout Duration       `json:"connect_timeout,omitempty"`
-	TCPFastOpen    bool           `json:"tcp_fast_open,omitempty"`
-	DomainStrategy DomainStrategy `json:"domain_strategy,omitempty"`
-	FallbackDelay  Duration       `json:"fallback_delay,omitempty"`
+	Detour             string         `json:"detour,omitempty"`
+	BindInterface      string         `json:"bind_interface,omitempty"`
+	BindAddress        *ListenAddress `json:"bind_address,omitempty"`
+	ProtectPath        string         `json:"protect_path,omitempty"`
+	RoutingMark        int            `json:"routing_mark,omitempty"`
+	ReuseAddr          bool           `json:"reuse_addr,omitempty"`
+	ConnectTimeout     Duration       `json:"connect_timeout,omitempty"`
+	TCPFastOpen        bool           `json:"tcp_fast_open,omitempty"`
+	UDPFragment        *bool          `json:"udp_fragment,omitempty"`
+	UDPFragmentDefault bool           `json:"-"`
+	DomainStrategy     DomainStrategy `json:"domain_strategy,omitempty"`
+	FallbackDelay      Duration       `json:"fallback_delay,omitempty"`
 }
 
 type ServerOptions struct {

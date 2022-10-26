@@ -107,15 +107,18 @@ func (h *Inbound) UnmarshalJSON(bytes []byte) error {
 type InboundOptions struct {
 	SniffEnabled             bool           `json:"sniff,omitempty"`
 	SniffOverrideDestination bool           `json:"sniff_override_destination,omitempty"`
+	SniffTimeout             Duration       `json:"sniff_timeout,omitempty"`
 	DomainStrategy           DomainStrategy `json:"domain_strategy,omitempty"`
 }
 
 type ListenOptions struct {
-	Listen        ListenAddress `json:"listen"`
-	ListenPort    uint16        `json:"listen_port,omitempty"`
-	TCPFastOpen   bool          `json:"tcp_fast_open,omitempty"`
-	UDPTimeout    int64         `json:"udp_timeout,omitempty"`
-	ProxyProtocol bool          `json:"proxy_protocol,omitempty"`
-	Detour        string        `json:"detour,omitempty"`
+	Listen                      ListenAddress `json:"listen"`
+	ListenPort                  uint16        `json:"listen_port,omitempty"`
+	TCPFastOpen                 bool          `json:"tcp_fast_open,omitempty"`
+	UDPFragment                 bool          `json:"udp_fragment,omitempty"`
+	UDPTimeout                  int64         `json:"udp_timeout,omitempty"`
+	ProxyProtocol               bool          `json:"proxy_protocol,omitempty"`
+	ProxyProtocolAcceptNoHeader bool          `json:"proxy_protocol_accept_no_header,omitempty"`
+	Detour                      string        `json:"detour,omitempty"`
 	InboundOptions
 }

@@ -14,6 +14,8 @@ import (
 	"github.com/sagernet/sing-box/common/json"
 	"github.com/sagernet/sing-box/common/urltest"
 	C "github.com/sagernet/sing-box/constant"
+	"github.com/sagernet/sing-box/experimental"
+	"github.com/sagernet/sing-box/experimental/clashapi/cachefile"
 	"github.com/sagernet/sing-box/experimental/clashapi/trafficontrol"
 	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-box/option"
@@ -28,6 +30,10 @@ import (
 	"github.com/go-chi/render"
 )
 
+func init() {
+	experimental.RegisterClashServerConstructor(NewServer)
+}
+
 var _ adapter.ClashServer = (*Server)(nil)
 
 type Server struct {
@@ -37,9 +43,13 @@ type Server struct {
 	trafficManager *trafficontrol.Manager
 	urlTestHistory *urltest.HistoryStorage
 	tcpListener    net.Listener
+	directIO       bool
+	mode           string
+	storeSelected  bool
+	cacheFile      adapter.ClashCacheFile
 }
 
-func NewServer(router adapter.Router, logFactory log.ObservableFactory, options option.ClashAPIOptions) *Server {
+func NewServer(router adapter.Router, logFactory log.ObservableFactory, options option.ClashAPIOptions) (adapter.ClashServer, error) {
 	trafficManager := trafficontrol.NewManager()
 	chiRouter := chi.NewRouter()
 	server := &Server{
@@ -51,6 +61,23 @@ func NewServer(router adapter.Router, logFactory log.ObservableFactory, options 
 		},
 		trafficManager: trafficManager,
 		urlTestHistory: urltest.NewHistoryStorage(),
+		directIO:       options.DirectIO,
+		mode:           strings.ToLower(options.DefaultMode),
+	}
+	if server.mode == "" {
+		server.mode = "rule"
+	}
+	if options.StoreSelected {
+		server.storeSelected = true
+		cachePath := os.ExpandEnv(options.CacheFile)
+		if cachePath == "" {
+			cachePath = "cache.db"
+		}
+		cacheFile, err := cachefile.Open(cachePath)
+		if err != nil {
+			return nil, E.Cause(err, "open cache file")
+		}
+		server.cacheFile = cacheFile
 	}
 	cors := cors.New(cors.Options{
 		AllowedOrigins: []string{"*"},
@@ -61,11 +88,11 @@ func NewServer(router adapter.Router, logFactory log.ObservableFactory, options 
 	chiRouter.Use(cors.Handler)
 	chiRouter.Group(func(r chi.Router) {
 		r.Use(authentication(options.Secret))
-		r.Get("/", hello)
+		r.Get("/", hello(options.ExternalUI != ""))
 		r.Get("/logs", getLogs(logFactory))
 		r.Get("/traffic", traffic(trafficManager))
 		r.Get("/version", version)
-		r.Mount("/configs", configRouter(logFactory))
+		r.Mount("/configs", configRouter(server, logFactory, server.logger))
 		r.Mount("/proxies", proxyRouter(server, router))
 		r.Mount("/rules", ruleRouter(router))
 		r.Mount("/connections", connectionRouter(trafficManager))
@@ -84,7 +111,7 @@ func NewServer(router adapter.Router, logFactory log.ObservableFactory, options 
 			})
 		})
 	}
-	return server
+	return server, nil
 }
 
 func (s *Server) Start() error {
@@ -108,11 +135,28 @@ func (s *Server) Close() error {
 		common.PtrOrNil(s.httpServer),
 		s.tcpListener,
 		s.trafficManager,
+		s.cacheFile,
 	)
 }
 
+func (s *Server) Mode() string {
+	return s.mode
+}
+
+func (s *Server) StoreSelected() bool {
+	return s.storeSelected
+}
+
+func (s *Server) CacheFile() adapter.ClashCacheFile {
+	return s.cacheFile
+}
+
+func (s *Server) HistoryStorage() *urltest.HistoryStorage {
+	return s.urlTestHistory
+}
+
 func (s *Server) RoutedConnection(ctx context.Context, conn net.Conn, metadata adapter.InboundContext, matchedRule adapter.Rule) (net.Conn, adapter.Tracker) {
-	tracker := trafficontrol.NewTCPTracker(conn, s.trafficManager, castMetadata(metadata), s.router, matchedRule)
+	tracker := trafficontrol.NewTCPTracker(conn, s.trafficManager, castMetadata(metadata), s.router, matchedRule, s.directIO)
 	return tracker, tracker
 }
 
@@ -200,8 +244,14 @@ func authentication(serverSecret string) func(next http.Handler) http.Handler {
 	}
 }
 
-func hello(w http.ResponseWriter, r *http.Request) {
-	render.JSON(w, r, render.M{"hello": "clash"})
+func hello(redirect bool) func(w http.ResponseWriter, r *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if redirect {
+			http.Redirect(w, r, "/ui/", http.StatusTemporaryRedirect)
+		} else {
+			render.JSON(w, r, render.M{"hello": "clash"})
+		}
+	}
 }
 
 var upgrader = websocket.Upgrader{

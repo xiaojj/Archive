@@ -12,7 +12,6 @@ import (
 	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-box/option"
-	"github.com/sagernet/sing-dns"
 	"github.com/sagernet/sing-tun"
 	"github.com/sagernet/sing/common"
 	E "github.com/sagernet/sing/common/exceptions"
@@ -40,11 +39,11 @@ type Tun struct {
 func NewTun(ctx context.Context, router adapter.Router, logger log.ContextLogger, tag string, options option.TunInboundOptions) (*Tun, error) {
 	tunName := options.InterfaceName
 	if tunName == "" {
-		tunName = tun.DefaultInterfaceName()
+		tunName = tun.CalculateInterfaceName("")
 	}
 	tunMTU := options.MTU
 	if tunMTU == 0 {
-		tunMTU = 1500
+		tunMTU = 9000
 	}
 	var udpTimeout int64
 	if options.UDPTimeout != 0 {
@@ -77,15 +76,19 @@ func NewTun(ctx context.Context, router adapter.Router, logger log.ContextLogger
 		tunOptions: tun.Options{
 			Name:               tunName,
 			MTU:                tunMTU,
-			Inet4Address:       options.Inet4Address.Build(),
-			Inet6Address:       options.Inet6Address.Build(),
+			Inet4Address:       common.Map(options.Inet4Address, option.ListenPrefix.Build),
+			Inet6Address:       common.Map(options.Inet6Address, option.ListenPrefix.Build),
 			AutoRoute:          options.AutoRoute,
 			StrictRoute:        options.StrictRoute,
+			Inet4RouteAddress:  common.Map(options.Inet4RouteAddress, option.ListenPrefix.Build),
+			Inet6RouteAddress:  common.Map(options.Inet6RouteAddress, option.ListenPrefix.Build),
 			IncludeUID:         includeUID,
 			ExcludeUID:         excludeUID,
 			IncludeAndroidUser: options.IncludeAndroidUser,
 			IncludePackage:     options.IncludePackage,
 			ExcludePackage:     options.ExcludePackage,
+			InterfaceMonitor:   router.InterfaceMonitor(),
+			TableIndex:         2022,
 		},
 		endpointIndependentNat: options.EndpointIndependentNat,
 		udpTimeout:             udpTimeout,
@@ -142,7 +145,18 @@ func (t *Tun) Start() error {
 		return E.Cause(err, "configure tun interface")
 	}
 	t.tunIf = tunIf
-	t.tunStack, err = tun.NewStack(t.ctx, t.stack, tunIf, t.tunOptions.MTU, t.endpointIndependentNat, t.udpTimeout, t)
+	t.tunStack, err = tun.NewStack(t.stack, tun.StackOptions{
+		Context:                t.ctx,
+		Tun:                    tunIf,
+		MTU:                    t.tunOptions.MTU,
+		Name:                   t.tunOptions.Name,
+		Inet4Address:           t.tunOptions.Inet4Address,
+		Inet6Address:           t.tunOptions.Inet6Address,
+		EndpointIndependentNat: t.endpointIndependentNat,
+		UDPTimeout:             t.udpTimeout,
+		Handler:                t,
+		Logger:                 t.logger,
+	})
 	if err != nil {
 		return err
 	}
@@ -168,16 +182,14 @@ func (t *Tun) NewConnection(ctx context.Context, conn net.Conn, upstreamMetadata
 	metadata.InboundType = C.TypeTun
 	metadata.Source = upstreamMetadata.Source
 	metadata.Destination = upstreamMetadata.Destination
-	metadata.SniffEnabled = t.inboundOptions.SniffEnabled
-	metadata.SniffOverrideDestination = t.inboundOptions.SniffOverrideDestination
-	metadata.DomainStrategy = dns.DomainStrategy(t.inboundOptions.DomainStrategy)
+	metadata.InboundOptions = t.inboundOptions
 	t.logger.InfoContext(ctx, "inbound connection from ", metadata.Source)
 	t.logger.InfoContext(ctx, "inbound connection to ", metadata.Destination)
 	err := t.router.RouteConnection(ctx, conn, metadata)
 	if err != nil {
 		t.NewError(ctx, err)
 	}
-	return err
+	return nil
 }
 
 func (t *Tun) NewPacketConnection(ctx context.Context, conn N.PacketConn, upstreamMetadata M.Metadata) error {
@@ -190,16 +202,14 @@ func (t *Tun) NewPacketConnection(ctx context.Context, conn N.PacketConn, upstre
 	metadata.InboundType = C.TypeTun
 	metadata.Source = upstreamMetadata.Source
 	metadata.Destination = upstreamMetadata.Destination
-	metadata.SniffEnabled = t.inboundOptions.SniffEnabled
-	metadata.SniffOverrideDestination = t.inboundOptions.SniffOverrideDestination
-	metadata.DomainStrategy = dns.DomainStrategy(t.inboundOptions.DomainStrategy)
+	metadata.InboundOptions = t.inboundOptions
 	t.logger.InfoContext(ctx, "inbound packet connection from ", metadata.Source)
 	t.logger.InfoContext(ctx, "inbound packet connection to ", metadata.Destination)
 	err := t.router.RoutePacketConnection(ctx, conn, metadata)
 	if err != nil {
 		t.NewError(ctx, err)
 	}
-	return err
+	return nil
 }
 
 func (t *Tun) NewError(ctx context.Context, err error) {

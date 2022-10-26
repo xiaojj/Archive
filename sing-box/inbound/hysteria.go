@@ -10,11 +10,11 @@ import (
 	"github.com/sagernet/quic-go"
 	"github.com/sagernet/quic-go/congestion"
 	"github.com/sagernet/sing-box/adapter"
+	"github.com/sagernet/sing-box/common/tls"
 	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-box/option"
 	"github.com/sagernet/sing-box/transport/hysteria"
-	"github.com/sagernet/sing-dns"
 	"github.com/sagernet/sing/common"
 	E "github.com/sagernet/sing/common/exceptions"
 	M "github.com/sagernet/sing/common/metadata"
@@ -26,7 +26,7 @@ var _ adapter.Inbound = (*Hysteria)(nil)
 type Hysteria struct {
 	myInboundAdapter
 	quicConfig   *quic.Config
-	tlsConfig    *TLSConfig
+	tlsConfig    tls.ServerConfig
 	authKey      []byte
 	xplusKey     []byte
 	sendBPS      uint64
@@ -116,7 +116,7 @@ func NewHysteria(ctx context.Context, router adapter.Router, logger log.ContextL
 	if len(options.TLS.ALPN) == 0 {
 		options.TLS.ALPN = []string{hysteria.DefaultALPN}
 	}
-	tlsConfig, err := NewTLSConfig(ctx, logger, common.PtrValueOrDefault(options.TLS))
+	tlsConfig, err := tls.NewServer(ctx, logger, common.PtrValueOrDefault(options.TLS))
 	if err != nil {
 		return nil, err
 	}
@@ -137,7 +137,11 @@ func (h *Hysteria) Start() error {
 	if err != nil {
 		return err
 	}
-	listener, err := quic.Listen(packetConn, h.tlsConfig.Config(), h.quicConfig)
+	rawConfig, err := h.tlsConfig.Config()
+	if err != nil {
+		return err
+	}
+	listener, err := quic.Listen(packetConn, rawConfig, h.quicConfig)
 	if err != nil {
 		return err
 	}
@@ -253,12 +257,10 @@ func (h *Hysteria) acceptStream(ctx context.Context, conn quic.Connection, strea
 	var metadata adapter.InboundContext
 	metadata.Inbound = h.tag
 	metadata.InboundType = C.TypeHysteria
-	metadata.SniffEnabled = h.listenOptions.SniffEnabled
-	metadata.SniffOverrideDestination = h.listenOptions.SniffOverrideDestination
-	metadata.DomainStrategy = dns.DomainStrategy(h.listenOptions.DomainStrategy)
-	metadata.Source = M.SocksaddrFromNet(conn.RemoteAddr())
-	metadata.OriginDestination = M.SocksaddrFromNet(conn.LocalAddr())
-	metadata.Destination = M.ParseSocksaddrHostPort(request.Host, request.Port)
+	metadata.InboundOptions = h.listenOptions.InboundOptions
+	metadata.Source = M.SocksaddrFromNet(conn.RemoteAddr()).Unwrap()
+	metadata.OriginDestination = M.SocksaddrFromNet(conn.LocalAddr()).Unwrap()
+	metadata.Destination = M.ParseSocksaddrHostPort(request.Host, request.Port).Unwrap()
 
 	if !request.UDP {
 		err = hysteria.WriteServerResponse(stream, hysteria.ServerResponse{
@@ -268,7 +270,7 @@ func (h *Hysteria) acceptStream(ctx context.Context, conn quic.Connection, strea
 			return err
 		}
 		h.logger.InfoContext(ctx, "inbound connection to ", metadata.Destination)
-		return h.router.RouteConnection(ctx, hysteria.NewConn(stream, metadata.Destination), metadata)
+		return h.router.RouteConnection(ctx, hysteria.NewConn(stream, metadata.Destination, false), metadata)
 	} else {
 		h.logger.InfoContext(ctx, "inbound packet connection to ", metadata.Destination)
 		var id uint32
@@ -309,6 +311,6 @@ func (h *Hysteria) Close() error {
 	return common.Close(
 		&h.myInboundAdapter,
 		h.listener,
-		common.PtrOrNil(h.tlsConfig),
+		h.tlsConfig,
 	)
 }

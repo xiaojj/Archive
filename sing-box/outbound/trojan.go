@@ -2,12 +2,12 @@ package outbound
 
 import (
 	"context"
-	"crypto/tls"
 	"net"
 
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/common/dialer"
 	"github.com/sagernet/sing-box/common/mux"
+	"github.com/sagernet/sing-box/common/tls"
 	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-box/option"
@@ -28,7 +28,7 @@ type Trojan struct {
 	serverAddr      M.Socksaddr
 	key             [56]byte
 	multiplexDialer N.Dialer
-	tlsConfig       *tls.Config
+	tlsConfig       tls.Config
 	transport       adapter.V2RayClientTransport
 }
 
@@ -47,7 +47,7 @@ func NewTrojan(ctx context.Context, router adapter.Router, logger log.ContextLog
 	}
 	var err error
 	if options.TLS != nil {
-		outbound.tlsConfig, err = dialer.TLSConfig(options.Server, common.PtrValueOrDefault(options.TLS))
+		outbound.tlsConfig, err = tls.NewClient(router, options.Server, common.PtrValueOrDefault(options.TLS))
 		if err != nil {
 			return nil, err
 		}
@@ -103,6 +103,10 @@ func (h *Trojan) NewPacketConnection(ctx context.Context, conn N.PacketConn, met
 	return NewPacketConnection(ctx, h, conn, metadata)
 }
 
+func (h *Trojan) Close() error {
+	return common.Close(h.multiplexDialer, h.transport)
+}
+
 type trojanDialer Trojan
 
 func (h *trojanDialer) DialContext(ctx context.Context, network string, destination M.Socksaddr) (net.Conn, error) {
@@ -116,7 +120,7 @@ func (h *trojanDialer) DialContext(ctx context.Context, network string, destinat
 	} else {
 		conn, err = h.dialer.DialContext(ctx, N.NetworkTCP, h.serverAddr)
 		if err == nil && h.tlsConfig != nil {
-			conn, err = dialer.TLSClient(ctx, conn, h.tlsConfig)
+			conn, err = tls.ClientHandshake(ctx, conn, h.tlsConfig)
 		}
 	}
 	if err != nil {

@@ -15,7 +15,7 @@ import (
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
 
-	"github.com/database64128/tfo-go"
+	"github.com/database64128/tfo-go/v2"
 )
 
 var warnBindInterfaceOnUnsupportedPlatform = warning.New(
@@ -65,25 +65,23 @@ func NewDefault(router adapter.Router, options option.DialerOptions) *DefaultDia
 	var listener net.ListenConfig
 	if options.BindInterface != "" {
 		warnBindInterfaceOnUnsupportedPlatform.Check()
-		bindFunc := control.BindToInterface(router.InterfaceBindManager(), options.BindInterface)
+		bindFunc := control.BindToInterface(router.InterfaceFinder(), options.BindInterface, -1)
 		dialer.Control = control.Append(dialer.Control, bindFunc)
 		listener.Control = control.Append(listener.Control, bindFunc)
 	} else if router.AutoDetectInterface() {
-		if C.IsWindows {
-			bindFunc := control.BindToInterfaceIndexFunc(func(network, address string) int {
-				return router.InterfaceMonitor().DefaultInterfaceIndex(M.ParseSocksaddr(address).Addr)
-			})
-			dialer.Control = control.Append(dialer.Control, bindFunc)
-			listener.Control = control.Append(listener.Control, bindFunc)
-		} else {
-			bindFunc := control.BindToInterfaceFunc(router.InterfaceBindManager(), func(network, address string) string {
-				return router.InterfaceMonitor().DefaultInterfaceName(M.ParseSocksaddr(address).Addr)
-			})
-			dialer.Control = control.Append(dialer.Control, bindFunc)
-			listener.Control = control.Append(listener.Control, bindFunc)
-		}
+		const useInterfaceName = C.IsLinux
+		bindFunc := control.BindToInterfaceFunc(router.InterfaceFinder(), func(network string, address string) (interfaceName string, interfaceIndex int) {
+			remoteAddr := M.ParseSocksaddr(address).Addr
+			if C.IsLinux {
+				return router.InterfaceMonitor().DefaultInterfaceName(remoteAddr), -1
+			} else {
+				return "", router.InterfaceMonitor().DefaultInterfaceIndex(remoteAddr)
+			}
+		})
+		dialer.Control = control.Append(dialer.Control, bindFunc)
+		listener.Control = control.Append(listener.Control, bindFunc)
 	} else if router.DefaultInterface() != "" {
-		bindFunc := control.BindToInterface(router.InterfaceBindManager(), router.DefaultInterface())
+		bindFunc := control.BindToInterface(router.InterfaceFinder(), router.DefaultInterface(), -1)
 		dialer.Control = control.Append(dialer.Control, bindFunc)
 		listener.Control = control.Append(listener.Control, bindFunc)
 	}
@@ -112,6 +110,16 @@ func NewDefault(router adapter.Router, options option.DialerOptions) *DefaultDia
 	if options.TCPFastOpen {
 		warnTFOOnUnsupportedPlatform.Check()
 	}
+	var udpFragment bool
+	if options.UDPFragment != nil {
+		udpFragment = *options.UDPFragment
+	} else {
+		udpFragment = options.UDPFragmentDefault
+	}
+	if !udpFragment {
+		dialer.Control = control.Append(dialer.Control, control.DisableUDPFragment())
+		listener.Control = control.Append(listener.Control, control.DisableUDPFragment())
+	}
 	var bindUDPAddr string
 	udpDialer := dialer
 	var bindAddress netip.Addr
@@ -138,7 +146,7 @@ func (d *DefaultDialer) DialContext(ctx context.Context, network string, address
 	case N.NetworkUDP:
 		return d.udpDialer.DialContext(ctx, network, address.String())
 	}
-	return d.dialer.DialContext(ctx, network, address.Unwrap().String())
+	return DialSlowContext(&d.dialer, ctx, network, address)
 }
 
 func (d *DefaultDialer) ListenPacket(ctx context.Context, destination M.Socksaddr) (net.PacketConn, error) {

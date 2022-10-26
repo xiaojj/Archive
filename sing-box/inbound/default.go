@@ -9,7 +9,6 @@ import (
 	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-box/option"
-	"github.com/sagernet/sing-dns"
 	"github.com/sagernet/sing/common"
 	E "github.com/sagernet/sing/common/exceptions"
 	M "github.com/sagernet/sing/common/metadata"
@@ -137,17 +136,15 @@ func (a *myInboundAdapter) createMetadata(conn net.Conn, metadata adapter.Inboun
 	metadata.Inbound = a.tag
 	metadata.InboundType = a.protocol
 	metadata.InboundDetour = a.listenOptions.Detour
-	metadata.SniffEnabled = a.listenOptions.SniffEnabled
-	metadata.SniffOverrideDestination = a.listenOptions.SniffOverrideDestination
-	metadata.DomainStrategy = dns.DomainStrategy(a.listenOptions.DomainStrategy)
+	metadata.InboundOptions = a.listenOptions.InboundOptions
 	if !metadata.Source.IsValid() {
-		metadata.Source = M.SocksaddrFromNet(conn.RemoteAddr())
+		metadata.Source = M.SocksaddrFromNet(conn.RemoteAddr()).Unwrap()
 	}
 	if !metadata.Destination.IsValid() {
-		metadata.Destination = M.SocksaddrFromNet(conn.LocalAddr())
+		metadata.Destination = M.SocksaddrFromNet(conn.LocalAddr()).Unwrap()
 	}
 	if tcpConn, isTCP := common.Cast[*net.TCPConn](conn); isTCP {
-		metadata.OriginDestination = M.SocksaddrFromNet(tcpConn.LocalAddr())
+		metadata.OriginDestination = M.SocksaddrFromNet(tcpConn.LocalAddr()).Unwrap()
 	}
 	return metadata
 }

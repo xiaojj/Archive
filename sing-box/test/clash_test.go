@@ -7,7 +7,6 @@ import (
 	"errors"
 	"io"
 	"net"
-	"net/http"
 	_ "net/http/pprof"
 	"net/netip"
 	"sync"
@@ -37,6 +36,9 @@ const (
 	ImageHysteria              = "tobyxdd/hysteria:latest"
 	ImageNginx                 = "nginx:stable"
 	ImageShadowTLS             = "ghcr.io/ihciah/shadow-tls:latest"
+	ImageShadowsocksR          = "teddysun/shadowsocks-r:latest"
+	ImageXRayCore              = "teddysun/xray:latest"
+	ImageShadowsocksLegacy     = "mritd/shadowsocks:latest"
 )
 
 var allImages = []string{
@@ -49,6 +51,9 @@ var allImages = []string{
 	ImageHysteria,
 	ImageNginx,
 	ImageShadowTLS,
+	ImageShadowsocksR,
+	ImageXRayCore,
+	ImageShadowsocksLegacy,
 }
 
 var localIP = netip.MustParseAddr("127.0.0.1")
@@ -97,12 +102,6 @@ func init() {
 
 		io.Copy(io.Discard, imageStream)
 	}
-	go func() {
-		err = http.ListenAndServe("0.0.0.0:8965", nil)
-		if err != nil {
-			log.Debug(err)
-		}
-	}()
 }
 
 func newPingPongPair() (chan []byte, chan []byte, func(t *testing.T) error) {

@@ -12,7 +12,7 @@ import (
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
 
-	"github.com/database64128/tfo-go"
+	"github.com/database64128/tfo-go/v2"
 )
 
 func (a *myInboundAdapter) ListenTCP() (net.Listener, error) {
@@ -29,7 +29,7 @@ func (a *myInboundAdapter) ListenTCP() (net.Listener, error) {
 	}
 	if a.listenOptions.ProxyProtocol {
 		a.logger.Debug("proxy protocol enabled")
-		tcpListener = &proxyproto.Listener{Listener: tcpListener}
+		tcpListener = &proxyproto.Listener{Listener: tcpListener, AcceptNoHeader: a.listenOptions.ProxyProtocolAcceptNoHeader}
 	}
 	a.tcpListener = tcpListener
 	return tcpListener, err

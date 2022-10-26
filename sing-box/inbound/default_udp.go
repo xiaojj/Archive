@@ -7,9 +7,9 @@ import (
 	"time"
 
 	"github.com/sagernet/sing-box/adapter"
-	"github.com/sagernet/sing-dns"
 	"github.com/sagernet/sing/common"
 	"github.com/sagernet/sing/common/buf"
+	"github.com/sagernet/sing/common/control"
 	E "github.com/sagernet/sing/common/exceptions"
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
@@ -17,11 +17,15 @@ import (
 
 func (a *myInboundAdapter) ListenUDP() (net.PacketConn, error) {
 	bindAddr := M.SocksaddrFrom(netip.Addr(a.listenOptions.Listen), a.listenOptions.ListenPort)
-	udpConn, err := net.ListenUDP(M.NetworkFromNetAddr(N.NetworkUDP, bindAddr.Addr), bindAddr.UDPAddr())
+	var lc net.ListenConfig
+	if !a.listenOptions.UDPFragment {
+		lc.Control = control.Append(lc.Control, control.DisableUDPFragment())
+	}
+	udpConn, err := lc.ListenPacket(a.ctx, M.NetworkFromNetAddr(N.NetworkUDP, bindAddr.Addr), bindAddr.String())
 	if err != nil {
 		return nil, err
 	}
-	a.udpConn = udpConn
+	a.udpConn = udpConn.(*net.UDPConn)
 	a.udpAddr = bindAddr
 	a.logger.Info("udp server started at ", udpConn.LocalAddr())
 	return udpConn, err
@@ -46,10 +50,8 @@ func (a *myInboundAdapter) loopUDPIn() {
 		var metadata adapter.InboundContext
 		metadata.Inbound = a.tag
 		metadata.InboundType = a.protocol
-		metadata.SniffEnabled = a.listenOptions.SniffEnabled
-		metadata.SniffOverrideDestination = a.listenOptions.SniffOverrideDestination
-		metadata.DomainStrategy = dns.DomainStrategy(a.listenOptions.DomainStrategy)
-		metadata.Source = M.SocksaddrFromNetIP(addr)
+		metadata.InboundOptions = a.listenOptions.InboundOptions
+		metadata.Source = M.SocksaddrFromNetIP(addr).Unwrap()
 		metadata.OriginDestination = a.udpAddr
 		err = a.packetHandler.NewPacket(a.ctx, packetService, buffer, metadata)
 		if err != nil {
@@ -78,10 +80,8 @@ func (a *myInboundAdapter) loopUDPOOBIn() {
 		var metadata adapter.InboundContext
 		metadata.Inbound = a.tag
 		metadata.InboundType = a.protocol
-		metadata.SniffEnabled = a.listenOptions.SniffEnabled
-		metadata.SniffOverrideDestination = a.listenOptions.SniffOverrideDestination
-		metadata.DomainStrategy = dns.DomainStrategy(a.listenOptions.DomainStrategy)
-		metadata.Source = M.SocksaddrFromNetIP(addr)
+		metadata.InboundOptions = a.listenOptions.InboundOptions
+		metadata.Source = M.SocksaddrFromNetIP(addr).Unwrap()
 		metadata.OriginDestination = a.udpAddr
 		err = a.oobPacketHandler.NewPacket(a.ctx, packetService, buffer, oob[:oobN], metadata)
 		if err != nil {
@@ -104,10 +104,8 @@ func (a *myInboundAdapter) loopUDPInThreadSafe() {
 		var metadata adapter.InboundContext
 		metadata.Inbound = a.tag
 		metadata.InboundType = a.protocol
-		metadata.SniffEnabled = a.listenOptions.SniffEnabled
-		metadata.SniffOverrideDestination = a.listenOptions.SniffOverrideDestination
-		metadata.DomainStrategy = dns.DomainStrategy(a.listenOptions.DomainStrategy)
-		metadata.Source = M.SocksaddrFromNetIP(addr)
+		metadata.InboundOptions = a.listenOptions.InboundOptions
+		metadata.Source = M.SocksaddrFromNetIP(addr).Unwrap()
 		metadata.OriginDestination = a.udpAddr
 		err = a.packetHandler.NewPacket(a.ctx, packetService, buffer, metadata)
 		if err != nil {
@@ -132,10 +130,8 @@ func (a *myInboundAdapter) loopUDPOOBInThreadSafe() {
 		var metadata adapter.InboundContext
 		metadata.Inbound = a.tag
 		metadata.InboundType = a.protocol
-		metadata.SniffEnabled = a.listenOptions.SniffEnabled
-		metadata.SniffOverrideDestination = a.listenOptions.SniffOverrideDestination
-		metadata.DomainStrategy = dns.DomainStrategy(a.listenOptions.DomainStrategy)
-		metadata.Source = M.SocksaddrFromNetIP(addr)
+		metadata.InboundOptions = a.listenOptions.InboundOptions
+		metadata.Source = M.SocksaddrFromNetIP(addr).Unwrap()
 		metadata.OriginDestination = a.udpAddr
 		err = a.oobPacketHandler.NewPacket(a.ctx, packetService, buffer, oob[:oobN], metadata)
 		if err != nil {
