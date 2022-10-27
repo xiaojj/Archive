@@ -6,7 +6,7 @@ use crate::config::enhance_config;
 use crate::data::*;
 use crate::log_if_err;
 use anyhow::{bail, Result};
-use once_cell::sync::Lazy;
+use once_cell::sync::OnceCell;
 use parking_lot::Mutex;
 use serde_yaml::{Mapping, Value};
 use std::sync::Arc;
@@ -16,17 +16,9 @@ mod hotkey;
 mod service;
 mod sysopt;
 mod timer;
+pub mod tray;
 
 pub use self::service::*;
-
-static CORE: Lazy<Core> = Lazy::new(|| Core {
-  service: Arc::new(Mutex::new(Service::new())),
-  sysopt: Arc::new(Mutex::new(Sysopt::new())),
-  timer: Arc::new(Mutex::new(Timer::new())),
-  hotkey: Arc::new(Mutex::new(Hotkey::new())),
-  runtime: Arc::new(Mutex::new(RuntimeResult::default())),
-  handle: Arc::new(Mutex::new(Handle::default())),
-});
 
 #[derive(Clone)]
 pub struct Core {
@@ -39,8 +31,17 @@ pub struct Core {
 }
 
 impl Core {
-  pub fn global() -> Core {
-    CORE.clone()
+  pub fn global() -> &'static Core {
+    static CORE: OnceCell<Core> = OnceCell::new();
+
+    CORE.get_or_init(|| Core {
+      service: Arc::new(Mutex::new(Service::new())),
+      sysopt: Arc::new(Mutex::new(Sysopt::new())),
+      timer: Arc::new(Mutex::new(Timer::new())),
+      hotkey: Arc::new(Mutex::new(Hotkey::new())),
+      runtime: Arc::new(Mutex::new(RuntimeResult::default())),
+      handle: Arc::new(Mutex::new(Handle::default())),
+    })
   }
 
   /// initialize the core state
@@ -64,8 +65,7 @@ impl Core {
     drop(sysopt);
 
     let handle = self.handle.lock();
-    log_if_err!(handle.update_systray());
-    log_if_err!(handle.update_systray_clash());
+    log_if_err!(handle.update_systray_part());
     drop(handle);
 
     let mut hotkey = self.hotkey.lock();
@@ -136,7 +136,7 @@ impl Core {
 
     if has_mode {
       let handle = self.handle.lock();
-      handle.update_systray_clash()?;
+      handle.update_systray_part()?;
     }
 
     Ok(())
@@ -155,6 +155,7 @@ impl Core {
     let system_proxy = patch.enable_system_proxy;
     let proxy_bypass = patch.system_proxy_bypass;
     let proxy_guard = patch.enable_proxy_guard;
+    let language = patch.language;
 
     #[cfg(target_os = "windows")]
     {
@@ -197,9 +198,13 @@ impl Core {
       sysopt.guard_proxy();
     }
 
-    if system_proxy.is_some() || tun_mode.is_some() {
+    // 更新tray
+    if language.is_some() {
       let handle = self.handle.lock();
       handle.update_systray()?;
+    } else if system_proxy.is_some() || tun_mode.is_some() {
+      let handle = self.handle.lock();
+      handle.update_systray_part()?;
     }
 
     if patch.hotkeys.is_some() {
@@ -232,7 +237,7 @@ impl Core {
       // update tray
       let handle = handle.lock();
       handle.refresh_clash();
-      log_if_err!(handle.update_systray_clash());
+      log_if_err!(handle.update_systray_part());
     });
 
     Ok(())
