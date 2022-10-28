@@ -37,6 +37,7 @@ import (
 	"github.com/enfein/mieru/pkg/tcpsession"
 	"github.com/enfein/mieru/pkg/udpsession"
 	"google.golang.org/grpc"
+	"google.golang.org/protobuf/proto"
 )
 
 // RegisterServerCommands registers all the server side CLI commands.
@@ -208,16 +209,16 @@ var serverRunFunc = func(s []string) error {
 		rpcAddr := appctl.ServerUDS
 		if err := syscall.Unlink(rpcAddr); err != nil {
 			// Unlink() fails when the file path doesn't exist, which is not a big problem.
-			if log.IsLevelEnabled(log.DebugLevel) {
-				log.Debugf("syscall.Unlink(%q) failed: %v", rpcAddr, err)
-			}
+			log.Debugf("syscall.Unlink(%q) failed: %v", rpcAddr, err)
 		}
 		rpcListener, err := net.Listen("unix", rpcAddr)
 		if err != nil {
 			log.Fatalf("listen on RPC address %q failed: %v", rpcAddr, err)
 		}
-		if err = updateServerUDSPermission(); err != nil {
-			log.Fatalf("update server unix domain socket permission failed: %v", err)
+		if _, found := os.LookupEnv("MITA_INSECURE_UDS"); !found {
+			if err = updateServerUDSPermission(); err != nil {
+				log.Fatalf("update server unix domain socket permission failed: %v", err)
+			}
 		}
 		grpcServer := grpc.NewServer()
 		appctl.SetServerRPCServerRef(grpcServer)
@@ -525,7 +526,7 @@ var serverGetHeapProfileFunc = func(s []string) error {
 	}
 	timedctx, cancelFunc := context.WithTimeout(context.Background(), appctl.RPCTimeout())
 	defer cancelFunc()
-	if _, err := client.GetHeapProfile(timedctx, &appctlpb.ProfileSavePath{FilePath: s[3]}); err != nil {
+	if _, err := client.GetHeapProfile(timedctx, &appctlpb.ProfileSavePath{FilePath: proto.String(s[3])}); err != nil {
 		return fmt.Errorf(stderror.GetHeapProfileFailedErr, err)
 	}
 	log.Infof("heap profile is saved to %q", s[3])
@@ -547,7 +548,7 @@ var serverStartCPUProfileFunc = func(s []string) error {
 	}
 	timedctx, cancelFunc := context.WithTimeout(context.Background(), appctl.RPCTimeout())
 	defer cancelFunc()
-	if _, err := client.StartCPUProfile(timedctx, &appctlpb.ProfileSavePath{FilePath: s[4]}); err != nil {
+	if _, err := client.StartCPUProfile(timedctx, &appctlpb.ProfileSavePath{FilePath: proto.String(s[4])}); err != nil {
 		return fmt.Errorf(stderror.StartCPUProfileFailedErr, err)
 	}
 	log.Infof("CPU profile will be saved to %q", s[4])

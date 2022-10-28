@@ -18,8 +18,8 @@
 # Make sure this script has executable permission:
 # git update-index --chmod=+x <file>
 
-# Move to working dir and load test library.
-cd /test && source ./libtest.sh
+# Load test library.
+source ./libtest.sh
 
 # Update mieru server with TCP config.
 ./mita apply config server_tcp.json
@@ -59,7 +59,7 @@ fi
 sleep 1
 ./sockshttpclient -dst_host=127.0.0.1 -dst_port=8080 \
   -local_proxy_host=127.0.0.1 -local_proxy_port=1080 \
-  -test_case=new_conn -num_request=7200
+  -test_case=new_conn -num_request=3000
 if [ "$?" -ne "0" ]; then
     print_mieru_client_log
     print_mieru_client_thread_dump
@@ -71,7 +71,7 @@ fi
 sleep 1
 ./sockshttpclient -dst_host=127.0.0.1 -dst_port=8080 \
   -local_proxy_host=127.0.0.1 -local_proxy_port=1080 \
-  -test_case=reuse_conn -num_request=7200
+  -test_case=reuse_conn -num_request=3000
 if [ "$?" -ne "0" ]; then
     print_mieru_client_log
     print_mieru_client_thread_dump

@@ -26,9 +26,9 @@ PROJECT_NAME=$(shell basename "${ROOT}")
 # - build/package/mita/amd64/rpm/mita.spec
 # - build/package/mita/arm64/debian/DEBIAN/control
 # - build/package/mita/arm64/rpm/mita.spec
-# - docs/client-install.md
 # - docs/server-install.md
-VERSION="1.7.0"
+# - docs/server-install.zh_CN.md
+VERSION="1.8.0"
 
 # Build binaries and installation packages.
 .PHONY: build
@@ -268,6 +268,13 @@ test-container:
 		CGO_ENABLED=0 go build test/cmd/udpserver/udpserver.go;\
 		docker build -t mieru_httptest:${SHORT_SHA} -f test/deploy/httptest/Dockerfile .;\
 		rm mieru mita httpserver sockshttpclient socksudpclient udpserver;\
+	fi
+
+# Run docker integration tests.
+.PHONY: run-container-test
+run-container-test: test-container
+	if [ ! -z $$(command -v docker) ]; then\
+		docker run mieru_httptest:${SHORT_SHA};\
 	fi
 
 # Format source code.

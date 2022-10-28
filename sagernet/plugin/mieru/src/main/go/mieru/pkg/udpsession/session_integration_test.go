@@ -26,28 +26,28 @@ import (
 
 	"github.com/enfein/mieru/pkg/appctl/appctlpb"
 	"github.com/enfein/mieru/pkg/cipher"
-	"github.com/enfein/mieru/pkg/kcp"
 	"github.com/enfein/mieru/pkg/rng"
 	"github.com/enfein/mieru/pkg/testtool"
 	"github.com/enfein/mieru/pkg/udpsession"
+	"google.golang.org/protobuf/proto"
 )
 
 var users = map[string]*appctlpb.User{
 	"dengxiaoping": {
-		Name:     "dengxiaoping",
-		Password: "19890604",
+		Name:     proto.String("dengxiaoping"),
+		Password: proto.String("19890604"),
 	},
 	"jiangzemin": {
-		Name:     "jiangzemin",
-		Password: "20001027",
+		Name:     proto.String("jiangzemin"),
+		Password: proto.String("20001027"),
 	},
 	"hujintao": {
-		Name:     "hujintao",
-		Password: "20080512",
+		Name:     proto.String("hujintao"),
+		Password: proto.String("20080512"),
 	},
 	"xijinping": {
-		Name:     "xijinping",
-		Password: "20200630",
+		Name:     proto.String("xijinping"),
+		Password: proto.String("20200630"),
 	},
 }
 
@@ -106,7 +106,6 @@ func runClient(t *testing.T, laddr, serverAddr string, username, password []byte
 // some data (in format [A-Za-z]+) to the listener. The listener returns the
 // ROT13 (rotate by 13 places) of the data back to the client.
 func TestKCPSessionsIPv4(t *testing.T) {
-	kcp.TestOnlySegmentDropRate = "5"
 	rng.InitSeed()
 	party, err := udpsession.ListenWithOptions("127.0.0.1:12315", users)
 	if err != nil {
@@ -152,7 +151,6 @@ func TestKCPSessionsIPv4(t *testing.T) {
 
 // TestKCPSessionsIPv6 is similar to TestKCPSessionsIPv4 but running in IPv6.
 func TestKCPSessionsIPv6(t *testing.T) {
-	kcp.TestOnlySegmentDropRate = "5"
 	rng.InitSeed()
 	party, err := udpsession.ListenWithOptions("[::1]:12318", users)
 	if err != nil {

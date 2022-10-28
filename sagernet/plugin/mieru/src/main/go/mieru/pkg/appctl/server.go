@@ -55,19 +55,11 @@ var (
 	serverIOLock sync.Mutex
 
 	// serverRPCServerRef holds a pointer to server RPC server.
-	serverRPCServerRef atomic.Value
+	serverRPCServerRef atomic.Pointer[grpc.Server]
 
 	// socks5ServerGroup is a collection of server socks5 servers.
 	socks5ServerGroup = socks5.NewGroup()
 )
-
-func GetServerRPCServerRef() *grpc.Server {
-	s, ok := serverRPCServerRef.Load().(*grpc.Server)
-	if !ok {
-		return nil
-	}
-	return s
-}
 
 func SetServerRPCServerRef(server *grpc.Server) {
 	serverRPCServerRef.Store(server)
@@ -85,7 +77,7 @@ type serverLifecycleService struct {
 func (s *serverLifecycleService) GetStatus(ctx context.Context, req *pb.Empty) (*pb.AppStatusMsg, error) {
 	status := GetAppStatus()
 	log.Infof("return app status %s back to RPC caller", status.String())
-	return &pb.AppStatusMsg{Status: status}, nil
+	return &pb.AppStatusMsg{Status: &status}, nil
 }
 
 func (s *serverLifecycleService) Start(ctx context.Context, req *pb.Empty) (*pb.Empty, error) {
@@ -195,7 +187,7 @@ func (s *serverLifecycleService) Exit(ctx context.Context, req *pb.Empty) (*pb.E
 	}
 	SetAppStatus(pb.AppStatus_IDLE)
 
-	grpcServer := GetServerRPCServerRef()
+	grpcServer := serverRPCServerRef.Load()
 	if grpcServer != nil {
 		log.Infof("stopping RPC server")
 		go grpcServer.GracefulStop()
@@ -207,7 +199,7 @@ func (s *serverLifecycleService) Exit(ctx context.Context, req *pb.Empty) (*pb.E
 }
 
 func (s *serverLifecycleService) GetThreadDump(ctx context.Context, req *pb.Empty) (*pb.ThreadDump, error) {
-	return &pb.ThreadDump{ThreadDump: string(getThreadDump())}, nil
+	return &pb.ThreadDump{ThreadDump: proto.String(string(getThreadDump()))}, nil
 }
 
 func (s *serverLifecycleService) StartCPUProfile(ctx context.Context, req *pb.ProfileSavePath) (*pb.Empty, error) {
@@ -346,9 +338,7 @@ func LoadServerConfig() (*pb.ServerConfig, error) {
 		return nil, fmt.Errorf("checkServerConfigDir() failed: %w", err)
 	}
 
-	if log.IsLevelEnabled(log.DebugLevel) {
-		log.Debugf("loading server config from %q", fileName)
-	}
+	log.Debugf("loading server config from %q", fileName)
 	f, err := os.Open(fileName)
 	if err != nil && os.IsNotExist(err) {
 		return nil, stderror.ErrFileNotExist
@@ -560,19 +550,19 @@ func mergeServerConfig(dst, src *pb.ServerConfig) error {
 	}
 
 	var advancedSettings *pb.ServerAdvancedSettings
-	if src.GetAdvancedSettings() != nil {
+	if src.AdvancedSettings != nil {
 		advancedSettings = src.GetAdvancedSettings()
 	} else {
 		advancedSettings = dst.GetAdvancedSettings()
 	}
 	var loggingLevel pb.LoggingLevel
-	if src.GetLoggingLevel() != pb.LoggingLevel_DEFAULT {
+	if src.LoggingLevel != nil {
 		loggingLevel = src.GetLoggingLevel()
 	} else {
 		loggingLevel = dst.GetLoggingLevel()
 	}
 	var mtu int32
-	if src.GetMtu() != 0 {
+	if src.Mtu != nil {
 		mtu = src.GetMtu()
 	} else {
 		mtu = dst.GetMtu()
@@ -582,8 +572,8 @@ func mergeServerConfig(dst, src *pb.ServerConfig) error {
 	dst.PortBindings = mergedPortBindings
 	dst.Users = mergedUsers
 	dst.AdvancedSettings = advancedSettings
-	dst.LoggingLevel = loggingLevel
-	dst.Mtu = mtu
+	dst.LoggingLevel = &loggingLevel
+	dst.Mtu = proto.Int32(mtu)
 	return nil
 }
 
