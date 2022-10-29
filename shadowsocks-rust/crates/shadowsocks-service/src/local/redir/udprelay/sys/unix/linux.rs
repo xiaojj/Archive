@@ -9,7 +9,7 @@ use std::{
 
 use cfg_if::cfg_if;
 use futures::{future::poll_fn, ready};
-use log::warn;
+use log::{error, trace, warn};
 use shadowsocks::net::is_dual_stack_addr;
 use socket2::{Domain, Protocol, SockAddr, Socket, Type};
 use tokio::io::unix::AsyncFd;
@@ -72,7 +72,23 @@ impl UdpRedirSocket {
         socket.set_nonblocking(true)?;
         socket.set_reuse_address(true)?;
         if reuse_port {
-            socket.set_reuse_port(true)?;
+            if let Err(err) = socket.set_reuse_port(true) {
+                if let Some(errno) = err.raw_os_error() {
+                    match errno {
+                        libc::ENOPROTOOPT => {
+                            // SO_REUSEPORT is supported after 3.9
+                            trace!("failed to set SO_REUSEPORT, error: {}", err);
+                        }
+                        _ => {
+                            error!("failed to set SO_REUSEPORT, error: {}", err);
+                            return Err(err);
+                        }
+                    }
+                } else {
+                    error!("failed to set SO_REUSEPORT, error: {}", err);
+                    return Err(err);
+                }
+            }
         }
 
         let sock_addr = SockAddr::from(addr);

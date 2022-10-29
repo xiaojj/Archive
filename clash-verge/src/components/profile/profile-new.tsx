@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { useLockFn, useSetState } from "ahooks";
 import {
   Button,
+  Collapse,
   Dialog,
   DialogActions,
   DialogContent,
@@ -138,7 +139,11 @@ const ProfileNew = (props: Props) => {
           <FileInput onChange={(val) => (fileDataRef.current = val)} />
         )}
 
-        {showOpt && (
+        <Collapse
+          in={form.type === "remote" && showOpt}
+          timeout="auto"
+          unmountOnExit
+        >
           <TextField
             {...textFieldProps}
             label="User Agent"
@@ -146,9 +151,6 @@ const ProfileNew = (props: Props) => {
             value={option.user_agent}
             onChange={(e) => setOption({ user_agent: e.target.value })}
           />
-        )}
-
-        {form.type === "remote" && showOpt && (
           <FormControlLabel
             label={t("Use System Proxy")}
             labelPlacement="start"
@@ -166,9 +168,6 @@ const ProfileNew = (props: Props) => {
               />
             }
           />
-        )}
-
-        {form.type === "remote" && showOpt && (
           <FormControlLabel
             label={t("Use Clash Proxy")}
             labelPlacement="start"
@@ -186,7 +185,7 @@ const ProfileNew = (props: Props) => {
               />
             }
           />
-        )}
+        </Collapse>
       </DialogContent>
 
       <DialogActions sx={{ px: 2, pb: 2, position: "relative" }}>
