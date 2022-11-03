@@ -76,7 +76,7 @@ class NaiveProxy {
 
   std::unique_ptr<StreamSocket> accepted_socket_;
 
-  std::vector<NetworkIsolationKey> network_isolation_keys_;
+  std::vector<NetworkAnonymizationKey> network_anonymization_keys_;
 
   std::map<unsigned int, std::unique_ptr<NaiveConnection>> connection_by_id_;
 

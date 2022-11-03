@@ -9,6 +9,7 @@
 ^base
 ^build
 ^build_overrides/build.gni
+^build_overrides/partition_alloc.gni
 ^buildtools/deps_revisions.gni
 ^buildtools/third_party/eu-strip/bin/eu-strip
 ^buildtools/third_party/libc++/BUILD.gn
@@ -25,9 +26,7 @@
 ^chrome/app/theme/chromium/BRANDING
 ^chrome/build/*.txt
 ^chrome/version.gni
-^components/cronet
-^components/grpc_support
-^components/prefs
+^components/nacl/toolchain.gni
 ^components/version_info
 ^crypto
 ^ipc/ipc_param_traits.h

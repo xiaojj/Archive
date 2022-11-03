@@ -70,7 +70,7 @@ NaiveProxy::NaiveProxy(std::unique_ptr<ServerSocket> listen_socket,
   server_ssl_config_.early_data_enabled = session_->params().enable_early_data;
 
   for (int i = 0; i < concurrency_; i++) {
-    network_isolation_keys_.push_back(NetworkIsolationKey::CreateTransient());
+    network_anonymization_keys_.push_back(NetworkAnonymizationKey::CreateTransient());
   }
 
   DCHECK(listen_socket_);
@@ -134,10 +134,10 @@ void NaiveProxy::DoConnect() {
   }
 
   last_id_++;
-  const auto& nik = network_isolation_keys_[last_id_ % concurrency_];
+  const auto& nak = network_anonymization_keys_[last_id_ % concurrency_];
   auto connection_ptr = std::make_unique<NaiveConnection>(
       last_id_, protocol_, std::move(padding_detector_delegate), proxy_info_,
-      server_ssl_config_, proxy_ssl_config_, resolver_, session_, nik, net_log_,
+      server_ssl_config_, proxy_ssl_config_, resolver_, session_, nak, net_log_,
       std::move(socket), traffic_annotation_);
   auto* connection = connection_ptr.get();
   connection_by_id_[connection->id()] = std::move(connection_ptr);

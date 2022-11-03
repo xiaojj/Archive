@@ -80,8 +80,3 @@ export DEPOT_TOOLS_WIN_TOOLCHAIN=0
 ./gn/out/gn gen "$out" --args="$flags $EXTRA_FLAGS" --script-executable=$PYTHON
 
 ninja -C "$out" naive
-
-if echo "$EXTRA_FLAGS" | grep -vq 'build_static=true\|target_os="ios"'; then
-  ninja -C "$out" cronet cronet_static
-  ./make-cronet-cgo-sdk.sh
-fi

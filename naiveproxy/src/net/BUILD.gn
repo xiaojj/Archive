@@ -1,4 +1,4 @@
-# Copyright (c) 2013 The Chromium Authors. All rights reserved.
+# Copyright 2013 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -432,16 +432,8 @@ component("net") {
     "cookies/cookie_store.h",
     "cookies/cookie_util.cc",
     "cookies/cookie_util.h",
-    "cookies/first_party_set_entry.cc",
-    "cookies/first_party_set_entry.h",
-    "cookies/first_party_set_metadata.cc",
-    "cookies/first_party_set_metadata.h",
-    "cookies/first_party_sets_context_config.cc",
-    "cookies/first_party_sets_context_config.h",
     "cookies/parsed_cookie.cc",
     "cookies/parsed_cookie.h",
-    "cookies/same_party_context.cc",
-    "cookies/same_party_context.h",
     "cookies/site_for_cookies.cc",
     "cookies/site_for_cookies.h",
     "cookies/static_cookie_policy.cc",
@@ -544,6 +536,16 @@ component("net") {
     "filter/gzip_source_stream.h",
     "filter/source_stream.cc",
     "filter/source_stream.h",
+    "first_party_sets/first_party_set_entry.cc",
+    "first_party_sets/first_party_set_entry.h",
+    "first_party_sets/first_party_set_metadata.cc",
+    "first_party_sets/first_party_set_metadata.h",
+    "first_party_sets/first_party_sets_context_config.cc",
+    "first_party_sets/first_party_sets_context_config.h",
+    "first_party_sets/public_sets.cc",
+    "first_party_sets/public_sets.h",
+    "first_party_sets/same_party_context.cc",
+    "first_party_sets/same_party_context.h",
     "http/alternative_service.cc",
     "http/alternative_service.h",
     "http/bidirectional_stream.cc",
@@ -1012,8 +1014,6 @@ component("net") {
     "url_request/url_request_context_getter.cc",
     "url_request/url_request_context_getter.h",
     "url_request/url_request_context_getter_observer.h",
-    "url_request/url_request_context_storage.cc",
-    "url_request/url_request_context_storage.h",
     "url_request/url_request_error_job.cc",
     "url_request/url_request_error_job.h",
     "url_request/url_request_filter.cc",
@@ -1178,6 +1178,10 @@ component("net") {
       "base/platform_mime_util_linux.cc",
       "cert/test_root_certs_builtin.cc",
     ]
+  }
+
+  if (is_chromeos) {
+    deps += [ "//third_party/xdg_shared_mime_info" ]
   }
 
   if (is_mac) {

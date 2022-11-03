@@ -828,6 +828,13 @@ void QuicSpdyStream::OnDataAvailable() {
     QuicByteCount processed_bytes = decoder_.ProcessInput(
         reinterpret_cast<const char*>(iov.iov_base), iov.iov_len);
     is_decoder_processing_input_ = false;
+    if (GetQuicReloadableFlag(
+            quic_spdy_stream_check_connected_after_process_input) &&
+        !session()->connection()->connected()) {
+      QUIC_RELOADABLE_FLAG_COUNT(
+          quic_spdy_stream_check_connected_after_process_input);
+      return;
+    }
     sequencer_offset_ += processed_bytes;
     if (blocked_on_decoding_headers_) {
       return;
@@ -1126,9 +1133,11 @@ bool QuicSpdyStream::OnUnknownFrameStart(uint64_t frame_type,
     spdy_session_->debug_visitor()->OnUnknownFrameReceived(id(), frame_type,
                                                            payload_length);
   }
+  spdy_session_->OnUnknownFrameStart(id(), frame_type, header_length,
+                                     payload_length);
 
-  // Ignore unknown frames, but consume frame header.
-  QUIC_DVLOG(1) << ENDPOINT << "Discarding " << header_length
+  // Consume the frame header.
+  QUIC_DVLOG(1) << ENDPOINT << "Consuming " << header_length
                 << " byte long frame header of frame of unknown type "
                 << frame_type << ".";
   sequencer()->MarkConsumed(body_manager_.OnNonBody(header_length));
@@ -1136,8 +1145,10 @@ bool QuicSpdyStream::OnUnknownFrameStart(uint64_t frame_type,
 }
 
 bool QuicSpdyStream::OnUnknownFramePayload(absl::string_view payload) {
-  // Ignore unknown frames, but consume frame payload.
-  QUIC_DVLOG(1) << ENDPOINT << "Discarding " << payload.size()
+  spdy_session_->OnUnknownFramePayload(id(), payload);
+
+  // Consume the frame payload.
+  QUIC_DVLOG(1) << ENDPOINT << "Consuming " << payload.size()
                 << " bytes of payload of frame of unknown type.";
   sequencer()->MarkConsumed(body_manager_.OnNonBody(payload.size()));
   return true;

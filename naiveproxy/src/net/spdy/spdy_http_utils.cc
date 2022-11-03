@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -111,10 +111,6 @@ void CreateSpdyHeadersFromHttpRequest(const HttpRequestInfo& info,
   HttpRequestHeaders::Iterator it(request_headers);
   while (it.GetNext()) {
     std::string name = base::ToLowerASCII(it.name());
-    if (info.method == "CONNECT" && name == "-connect-authority") {
-      (*headers)[spdy::kHttp2AuthorityHeader] = it.value();
-      continue;
-    }
     if (name.empty() || name[0] == ':' || name == "connection" ||
         name == "proxy-connection" || name == "transfer-encoding" ||
         name == "host") {

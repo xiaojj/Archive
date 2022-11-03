@@ -1,4 +1,4 @@
-# Copyright (c) 2020 The Chromium Authors. All rights reserved.
+# Copyright 2020 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -27,6 +27,11 @@
 import("//build/config/chromeos/ui_mode.gni")
 import("//third_party/protobuf/proto_library.gni")
 
+# TODO(crbug.com/1344231): Set this to always true. At which point, this
+# variable can go away and the conditionals below that depends on it can be
+# simplified.
+_no_shadow_is_internal = is_linux || is_mac || is_win
+
 config("quiche_internal_config") {
   cflags = []
   if (is_clang) {
@@ -34,6 +39,10 @@ config("quiche_internal_config") {
       "-Wno-unused-private-field",
       "-Wno-sign-compare",
     ]
+  }
+
+  if (_no_shadow_is_internal) {
+    cflags += [ "-Wno-shadow" ]
   }
 }
 
@@ -46,7 +55,9 @@ config("quiche_config") {
     "src",
   ]
 
-  cflags = [ "-Wno-shadow" ]
+  if (!_no_shadow_is_internal) {
+    cflags = [ "-Wno-shadow" ]
+  }
 }
 
 component("quiche") {
@@ -103,6 +114,10 @@ component("quiche") {
     "src/quiche/common/quiche_data_writer.cc",
     "src/quiche/common/quiche_data_writer.h",
     "src/quiche/common/quiche_endian.h",
+    "src/quiche/common/quiche_ip_address.cc",
+    "src/quiche/common/quiche_ip_address.h",
+    "src/quiche/common/quiche_ip_address_family.cc",
+    "src/quiche/common/quiche_ip_address_family.h",
     "src/quiche/common/quiche_linked_hash_map.h",
     "src/quiche/common/quiche_mem_slice_storage.cc",
     "src/quiche/common/quiche_mem_slice_storage.h",
@@ -259,6 +274,7 @@ component("quiche") {
     "src/quiche/quic/core/congestion_control/uber_loss_algorithm.cc",
     "src/quiche/quic/core/congestion_control/uber_loss_algorithm.h",
     "src/quiche/quic/core/congestion_control/windowed_filter.h",
+    "src/quiche/quic/core/connection_id_generator.h",
     "src/quiche/quic/core/crypto/aead_base_decrypter.cc",
     "src/quiche/quic/core/crypto/aead_base_decrypter.h",
     "src/quiche/quic/core/crypto/aead_base_encrypter.cc",
@@ -359,6 +375,8 @@ component("quiche") {
     "src/quiche/quic/core/crypto/transport_parameters.h",
     "src/quiche/quic/core/crypto/web_transport_fingerprint_proof_verifier.cc",
     "src/quiche/quic/core/crypto/web_transport_fingerprint_proof_verifier.h",
+    "src/quiche/quic/core/deterministic_connection_id_generator.cc",
+    "src/quiche/quic/core/deterministic_connection_id_generator.h",
     "src/quiche/quic/core/frames/quic_ack_frame.cc",
     "src/quiche/quic/core/frames/quic_ack_frame.h",
     "src/quiche/quic/core/frames/quic_ack_frequency_frame.cc",
@@ -642,10 +660,6 @@ component("quiche") {
     "src/quiche/quic/platform/api/quic_flag_utils.h",
     "src/quiche/quic/platform/api/quic_flags.h",
     "src/quiche/quic/platform/api/quic_hostname_utils.h",
-    "src/quiche/quic/platform/api/quic_ip_address.cc",
-    "src/quiche/quic/platform/api/quic_ip_address.h",
-    "src/quiche/quic/platform/api/quic_ip_address_family.cc",
-    "src/quiche/quic/platform/api/quic_ip_address_family.h",
     "src/quiche/quic/platform/api/quic_logging.h",
     "src/quiche/quic/platform/api/quic_mutex.h",
     "src/quiche/quic/platform/api/quic_server_stats.h",
