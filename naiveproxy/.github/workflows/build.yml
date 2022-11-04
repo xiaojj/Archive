@@ -483,15 +483,11 @@ jobs:
           - arch: mipsel_24kc
             openwrt: 'target=ramips subtarget=rt305x'
             target_cpu: mipsel
-            extra: 'mips_arch_variant="r2" mips_float_abi="soft" mips_tune="24kc"'
+            extra: 'mips_arch_variant="r2" mips_float_abi="soft"'
           - arch: mipsel_24kc-static
             openwrt: 'target=ramips subtarget=rt305x'
             target_cpu: mipsel
-            extra: 'mips_arch_variant="r2" mips_float_abi="soft" mips_tune="24kc" build_static=true'
-          - arch: mipsel_74kc
-            openwrt: 'target=ramips subtarget=rt3883'
-            target_cpu: mipsel
-            extra: 'mips_arch_variant="r2" mips_float_abi="soft" mips_tune="74kc"'
+            extra: 'mips_arch_variant="r2" mips_float_abi="soft" build_static=true'
           - arch: mipsel_mips32
             openwrt: 'target=bcm47xx subtarget=generic'
             target_cpu: mipsel
