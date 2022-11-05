@@ -18,9 +18,9 @@ jobs:
   cache-toolchains-posix:
     runs-on: ubuntu-20.04
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - name: Cache toolchains (Linux, OpenWrt, Android)
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         with:
           path: |
             src/third_party/llvm-build/Release+Asserts/
@@ -28,17 +28,17 @@ jobs:
             src/qemu-user-static*.deb
           key: toolchains-posix-${{ hashFiles('CHROMIUM_VERSION') }}-v${{ env.CACHE_EPOCH }}
       - name: Cache PGO (Linux, OpenWrt)
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         with:
           path: src/chrome/build/pgo_profiles/
           key: pgo-linux-openwrt-${{ hashFiles('CHROMIUM_VERSION') }}-v${{ env.CACHE_EPOCH }}
       - name: Cache AFDO (Android)
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         with:
           path: src/chrome/android/profiles/
           key: afdo-${{ hashFiles('CHROMIUM_VERSION') }}-v${{ env.CACHE_EPOCH }}
       - name: Cache Android NDK (Android)
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         with:
           path: src/third_party/android_ndk/
           key: android-ndk-${{ hashFiles('CHROMIUM_VERSION') }}-v${{ env.CACHE_EPOCH }}
@@ -51,9 +51,9 @@ jobs:
   cache-toolchains-win:
     runs-on: windows-2019
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - name: Cache toolchains
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         with:
           path: |
             src/third_party/llvm-build/Release+Asserts/
@@ -62,12 +62,12 @@ jobs:
             ~/bin/ninja.exe
           key: toolchains-win-${{ hashFiles('CHROMIUM_VERSION') }}-v${{ env.CACHE_EPOCH }}
       - name: Cache PGO (win64)
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         with:
           path: src/chrome/build/pgo_profiles/chrome-win64-*
           key: pgo-win64-${{ hashFiles('CHROMIUM_VERSION') }}-v${{ env.CACHE_EPOCH }}
       - name: Cache PGO (win32)
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         with:
           path: src/chrome/build/pgo_profiles/chrome-win32-*
           key: pgo-win32-arm64-${{ hashFiles('CHROMIUM_VERSION') }}-v${{ env.CACHE_EPOCH }}
@@ -81,8 +81,8 @@ jobs:
   cache-toolchains-mac:
     runs-on: macos-11
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions/cache@v2
+      - uses: actions/checkout@v3
+      - uses: actions/cache@v3
         with:
           path: |
             src/third_party/llvm-build/Release+Asserts/
@@ -101,14 +101,13 @@ jobs:
     env:
       EXTRA_FLAGS: 'target_cpu="${{ matrix.arch }}"'
       BUNDLE: naiveproxy-${{ github.event.release.tag_name }}-${{ github.job }}-${{ matrix.arch }}
-      CRONET_BUNDLE: cronet-${{ github.event.release.tag_name }}-${{ github.job }}-${{ matrix.arch }}
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - uses: actions/setup-go@v3
         with:
           go-version: '^1.18.1'
       - name: Cache toolchains (Linux, OpenWrt, Android)
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         with:
           path: |
             src/third_party/llvm-build/Release+Asserts/
@@ -116,19 +115,19 @@ jobs:
             src/qemu-user-static*.deb
           key: toolchains-posix-${{ hashFiles('CHROMIUM_VERSION') }}-v${{ env.CACHE_EPOCH }}
       - name: Cache PGO (Linux, OpenWrt)
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         with:
           path: src/chrome/build/pgo_profiles/
           key: pgo-linux-openwrt-${{ hashFiles('CHROMIUM_VERSION') }}-v${{ env.CACHE_EPOCH }}
       - name: Cache sysroot
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         with:
           path: src/out/sysroot-build/bullseye/bullseye_*
           key: sysroot-linux-${{ matrix.arch }}-${{ hashFiles('CHROMIUM_VERSION') }}-v${{ env.CACHE_EPOCH }}
       - id: ccache-timestamp
         run: echo "::set-output name=date::$(date +%s)"
       - name: Cache ccache files
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         with:
           path: ~/.ccache
           key: ccache-linux-${{ matrix.arch }}-${{ hashFiles('CHROMIUM_VERSION') }}-${{ steps.ccache-timestamp.outputs.date }}
@@ -145,8 +144,6 @@ jobs:
       - run: ccache -z
       - run: ./build.sh
       - run: ccache -s
-      - run: CCACHE_DISABLE=1 ./go-build.sh
-        working-directory: src/out/Release/cronet
       - run: ../tests/basic.sh out/Release/naive
       - name: Pack naiveproxy assets
         run: |
@@ -155,30 +152,13 @@ jobs:
           tar cJf ${{ env.BUNDLE }}.tar.xz ${{ env.BUNDLE }}
           openssl sha256 out/Release/naive >sha256sum.txt
           echo "SHA256SUM=$(cut -d' ' -f2 sha256sum.txt)" >>$GITHUB_ENV
-      - uses: actions/upload-artifact@v2
+      - uses: actions/upload-artifact@v3
         with:
           name: ${{ env.BUNDLE }}.tar.xz naive executable sha256 ${{ env.SHA256SUM }}
           path: src/sha256sum.txt
       - name: Upload naiveproxy assets
         if: ${{ github.event_name == 'release' }}
         run: hub release edit -a ${{ env.BUNDLE }}.tar.xz -m "" "${GITHUB_REF##*/}"
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - name: Pack cronet assets
-        if: ${{ github.event_name == 'release' }}
-        run: |
-          mv out/Release/cronet ${{ env.CRONET_BUNDLE }}
-          tar cJf ${{ env.CRONET_BUNDLE }}.tar.xz ${{ env.CRONET_BUNDLE }}
-          openssl sha256 ${{ env.CRONET_BUNDLE }}.tar.xz >sha256sum.txt
-          echo "SHA256SUM=$(cut -d' ' -f2 sha256sum.txt)" >>$GITHUB_ENV
-      - uses: actions/upload-artifact@v2
-        if: ${{ github.event_name == 'release' }}
-        with:
-          name: ${{ env.CRONET_BUNDLE }}.tar.xz sha256 ${{ env.SHA256SUM }}
-          path: src/sha256sum.txt
-      - name: Upload cronet assets
-        if: ${{ github.event_name == 'release' }}
-        run: hub release edit -a ${{ env.CRONET_BUNDLE }}.tar.xz -m "" "${GITHUB_REF##*/}"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   android:
@@ -191,14 +171,13 @@ jobs:
     env:
       EXTRA_FLAGS: 'target_cpu="${{ matrix.arch }}" target_os="android"'
       BUNDLE: naiveproxy-${{ github.event.release.tag_name }}-${{ github.job }}-${{ matrix.arch }}
-      CRONET_BUNDLE: cronet-${{ github.event.release.tag_name }}-${{ github.job }}-${{ matrix.arch }}
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - uses: actions/setup-go@v3
         with:
           go-version: '^1.18.1'
       - name: Cache toolchains (Linux, OpenWrt, Android)
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         with:
           path: |
             src/third_party/llvm-build/Release+Asserts/
@@ -206,24 +185,24 @@ jobs:
             src/qemu-user-static*.deb
           key: toolchains-posix-${{ hashFiles('CHROMIUM_VERSION') }}-v${{ env.CACHE_EPOCH }}
       - name: Cache AFDO (Android)
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         with:
           path: src/chrome/android/profiles/
           key: afdo-${{ hashFiles('CHROMIUM_VERSION') }}-v${{ env.CACHE_EPOCH }}
       - name: Cache Android NDK (Android)
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         with:
           path: src/third_party/android_ndk/
           key: android-ndk-${{ hashFiles('CHROMIUM_VERSION') }}-v${{ env.CACHE_EPOCH }}
       - name: Cache sysroot
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         with:
           path: src/out/sysroot-build/android/
           key: sysroot-android-${{ matrix.arch }}-${{ hashFiles('CHROMIUM_VERSION') }}-v${{ env.CACHE_EPOCH }}
       - id: ccache-timestamp
         run: echo "::set-output name=date::$(date +%s)"
       - name: Cache ccache files
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         with:
           path: ~/.ccache
           key: ccache-android-${{ matrix.arch }}-${{ hashFiles('CHROMIUM_VERSION') }}-${{ steps.ccache-timestamp.outputs.date }}
@@ -241,8 +220,6 @@ jobs:
       - run: ./build.sh
       - run: ccache -s
       - run: ./get-android-sys.sh
-      - run: CCACHE_DISABLE=1 ./go-build.sh
-        working-directory: src/out/Release/cronet
       - run: ../tests/basic.sh out/Release/naive
       - name: Pack naiveproxy assets
         run: |
@@ -251,30 +228,13 @@ jobs:
           tar cJf ${{ env.BUNDLE }}.tar.xz ${{ env.BUNDLE }}
           openssl sha256 out/Release/naive >sha256sum.txt
           echo "SHA256SUM=$(cut -d' ' -f2 sha256sum.txt)" >>$GITHUB_ENV
-      - uses: actions/upload-artifact@v2
+      - uses: actions/upload-artifact@v3
         with:
           name: ${{ env.BUNDLE }}.tar.xz naive executable sha256 ${{ env.SHA256SUM }}
           path: src/sha256sum.txt
       - name: Upload naiveproxy assets
         if: ${{ github.event_name == 'release' }}
         run: hub release edit -a ${{ env.BUNDLE }}.tar.xz -m "" "${GITHUB_REF##*/}"
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - name: Pack cronet assets
-        if: ${{ github.event_name == 'release' }}
-        run: |
-          mv out/Release/cronet ${{ env.CRONET_BUNDLE }}
-          tar cJf ${{ env.CRONET_BUNDLE }}.tar.xz ${{ env.CRONET_BUNDLE }}
-          openssl sha256 ${{ env.CRONET_BUNDLE }}.tar.xz >sha256sum.txt
-          echo "SHA256SUM=$(cut -d' ' -f2 sha256sum.txt)" >>$GITHUB_ENV
-      - uses: actions/upload-artifact@v2
-        if: ${{ github.event_name == 'release' }}
-        with:
-          name: ${{ env.CRONET_BUNDLE }}.tar.xz sha256 ${{ env.SHA256SUM }}
-          path: src/sha256sum.txt
-      - name: Upload cronet assets
-        if: ${{ github.event_name == 'release' }}
-        run: hub release edit -a ${{ env.CRONET_BUNDLE }}.tar.xz -m "" "${GITHUB_REF##*/}"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   win:
@@ -287,14 +247,13 @@ jobs:
     env:
       EXTRA_FLAGS: 'target_cpu="${{ matrix.arch }}"'
       BUNDLE: naiveproxy-${{ github.event.release.tag_name }}-${{ github.job }}-${{ matrix.arch }}
-      CRONET_BUNDLE: cronet-${{ github.event.release.tag_name }}-${{ github.job }}-${{ matrix.arch }}
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - uses: actions/setup-go@v3
         with:
           go-version: '^1.18.1'
       - name: Cache toolchains
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         with:
           path: |
             src/third_party/llvm-build/Release+Asserts/
@@ -304,20 +263,20 @@ jobs:
           key: toolchains-win-${{ hashFiles('CHROMIUM_VERSION') }}-v${{ env.CACHE_EPOCH }}
       - name: Cache PGO (win64)
         if: ${{ matrix.arch == 'x64' }}
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         with:
           path: src/chrome/build/pgo_profiles/chrome-win64-*
           key: pgo-win64-${{ hashFiles('CHROMIUM_VERSION') }}-v${{ env.CACHE_EPOCH }}
       - name: Cache PGO (win32)
         if: ${{ matrix.arch != 'x64' }}
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         with:
           path: src/chrome/build/pgo_profiles/chrome-win32-*
           key: pgo-win32-arm64-${{ hashFiles('CHROMIUM_VERSION') }}-v${{ env.CACHE_EPOCH }}
       - id: ccache-timestamp
         run: echo "::set-output name=date::$(date +%s)"
       - name: Cache ccache files
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         with:
           path: ~/AppData/Local/Mozilla/sccache
           key: ccache-win-${{ matrix.arch }}-${{ hashFiles('CHROMIUM_VERSION') }}-${{ steps.ccache-timestamp.outputs.date }}
@@ -326,8 +285,6 @@ jobs:
       - run: ~/.cargo/bin/sccache -z
       - run: ./build.sh
       - run: ~/.cargo/bin/sccache -s
-      - run: CCACHE_DISABLE=1 ./go-build.sh
-        working-directory: src/out/Release/cronet
       - run: ../tests/basic.sh out/Release/naive
         # No real or emulated environment is available to test this.
         if: ${{ matrix.arch != 'arm64' }}
@@ -338,30 +295,13 @@ jobs:
           7z a ${{ env.BUNDLE }}.zip ${{ env.BUNDLE }}
           openssl sha256 out/Release/naive.exe >sha256sum.txt
           echo "SHA256SUM=$(cut -d' ' -f2 sha256sum.txt)" >>$GITHUB_ENV
-      - uses: actions/upload-artifact@v2
+      - uses: actions/upload-artifact@v3
         with:
           name: ${{ env.BUNDLE }}.zip naive executable sha256 ${{ env.SHA256SUM }}
           path: src/sha256sum.txt
       - name: Upload naiveproxy assets
         if: ${{ github.event_name == 'release' }}
         run: hub release edit -a ${{ env.BUNDLE }}.zip -m "" "${GITHUB_REF##*/}"
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - name: Pack cronet assets
-        if: ${{ github.event_name == 'release' }}
-        run: |
-          mv out/Release/cronet ${{ env.CRONET_BUNDLE }}
-          7z a ${{ env.CRONET_BUNDLE }}.zip ${{ env.CRONET_BUNDLE }}
-          openssl sha256 ${{ env.CRONET_BUNDLE }}.zip >sha256sum.txt
-          echo "SHA256SUM=$(cut -d' ' -f2 sha256sum.txt)" >>$GITHUB_ENV
-      - uses: actions/upload-artifact@v2
-        if: ${{ github.event_name == 'release' }}
-        with:
-          name: ${{ env.CRONET_BUNDLE }}.zip sha256 ${{ env.SHA256SUM }}
-          path: src/sha256sum.txt
-      - name: Upload cronet assets
-        if: ${{ github.event_name == 'release' }}
-        run: hub release edit -a ${{ env.CRONET_BUNDLE }}.zip -m "" "${GITHUB_REF##*/}"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   mac:
@@ -374,14 +314,13 @@ jobs:
     env:
       EXTRA_FLAGS: 'target_cpu="${{ matrix.arch }}"'
       BUNDLE: naiveproxy-${{ github.event.release.tag_name }}-${{ github.job }}-${{ matrix.arch }}
-      CRONET_BUNDLE: cronet-${{ github.event.release.tag_name }}-${{ github.job }}-${{ matrix.arch }}
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - uses: actions/setup-go@v3
         with:
           go-version: '^1.18.1'
       - name: Cache toolchains and PGO
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         with:
           path: |
             src/third_party/llvm-build/Release+Asserts/
@@ -391,7 +330,7 @@ jobs:
       - id: ccache-timestamp
         run: echo "::set-output name=date::$(date +%s)"
       - name: Cache ccache files
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         with:
           path: ~/Library/Caches/ccache
           key: ccache-mac-${{ matrix.arch }}-${{ hashFiles('CHROMIUM_VERSION') }}-${{ steps.ccache-timestamp.outputs.date }}
@@ -401,8 +340,6 @@ jobs:
       - run: ccache -z
       - run: ./build.sh
       - run: ccache -s
-      - run: CCACHE_DISABLE=1 ./go-build.sh
-        working-directory: src/out/Release/cronet
       - run: ../tests/basic.sh out/Release/naive
         # No real or emulated environment is available to test this.
         if: ${{ matrix.arch != 'arm64' }}
@@ -413,30 +350,13 @@ jobs:
           tar cJf ${{ env.BUNDLE }}.tar.xz ${{ env.BUNDLE }}
           openssl sha256 out/Release/naive >sha256sum.txt
           echo "SHA256SUM=$(cut -d' ' -f2 sha256sum.txt)" >>$GITHUB_ENV
-      - uses: actions/upload-artifact@v2
+      - uses: actions/upload-artifact@v3
         with:
           name: ${{ env.BUNDLE }}.tar.xz naive executable sha256 ${{ env.SHA256SUM }}
           path: src/sha256sum.txt
       - name: Upload naiveproxy assets
         if: ${{ github.event_name == 'release' }}
         run: hub release edit -a ${{ env.BUNDLE }}.tar.xz -m "" "${GITHUB_REF##*/}"
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - name: Pack cronet assets
-        if: ${{ github.event_name == 'release' }}
-        run: |
-          mv out/Release/cronet ${{ env.CRONET_BUNDLE }}
-          tar cJf ${{ env.CRONET_BUNDLE }}.tar.xz ${{ env.CRONET_BUNDLE }}
-          openssl sha256 ${{ env.CRONET_BUNDLE }}.tar.xz >sha256sum.txt
-          echo "SHA256SUM=$(cut -d' ' -f2 sha256sum.txt)" >>$GITHUB_ENV
-      - uses: actions/upload-artifact@v2
-        if: ${{ github.event_name == 'release' }}
-        with:
-          name: ${{ env.CRONET_BUNDLE }}.tar.xz sha256 ${{ env.SHA256SUM }}
-          path: src/sha256sum.txt
-      - name: Upload cronet assets
-        if: ${{ github.event_name == 'release' }}
-        run: hub release edit -a ${{ env.CRONET_BUNDLE }}.tar.xz -m "" "${GITHUB_REF##*/}"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   ios:
@@ -450,9 +370,9 @@ jobs:
       EXTRA_FLAGS: 'target_cpu="${{ matrix.arch }}" target_os="ios" ios_enable_code_signing=false'
       BUNDLE: naiveproxy-${{ github.event.release.tag_name }}-${{ github.job }}-${{ matrix.arch }}
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - name: Cache toolchains and PGO
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         with:
           path: |
             src/third_party/llvm-build/Release+Asserts/
@@ -462,7 +382,7 @@ jobs:
       - id: ccache-timestamp
         run: echo "::set-output name=date::$(date +%s)"
       - name: Cache ccache files
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         with:
           path: ~/Library/Caches/ccache
           key: ccache-ios-${{ matrix.arch }}-${{ hashFiles('CHROMIUM_VERSION') }}-${{ steps.ccache-timestamp.outputs.date }}
@@ -524,6 +444,10 @@ jobs:
             openwrt: 'target=sunxi subtarget=cortexa7'
             target_cpu: arm
             extra: 'arm_version=0 arm_cpu="cortex-a7" arm_fpu="neon-vfpv4" arm_float_abi="hard" arm_use_neon=true'
+          - arch: arm_cortex-a7_vfpv4
+            openwrt: 'target=at91 subtarget=sama7'
+            target_cpu: arm
+            extra: 'arm_version=0 arm_cpu="cortex-a7" arm_fpu="vfpv4" arm_float_abi="hard" arm_use_neon=false'
           - arch: arm_cortex-a7_neon-vfpv4-static
             openwrt: 'target=sunxi subtarget=cortexa7'
             target_cpu: arm
@@ -541,7 +465,7 @@ jobs:
             target_cpu: arm
             extra: 'arm_version=0 arm_cpu="cortex-a9" arm_float_abi="soft" arm_use_neon=false build_static=true'
           - arch: arm_cortex-a9_neon
-            openwrt: 'target=imx6'
+            openwrt: 'target=zynq'
             target_cpu: arm
             extra: 'arm_version=0 arm_cpu="cortex-a9" arm_fpu="neon" arm_float_abi="hard" arm_use_neon=true'
           - arch: arm_cortex-a9_vfpv3-d16
@@ -559,27 +483,26 @@ jobs:
           - arch: mipsel_24kc
             openwrt: 'target=ramips subtarget=rt305x'
             target_cpu: mipsel
-            extra: 'mips_arch_variant="r2" mips_float_abi="soft" mips_tune="24kc"'
-          - arch: mipsel_74kc
-            openwrt: 'target=ramips subtarget=rt3883'
+            extra: 'mips_arch_variant="r2" mips_float_abi="soft"'
+          - arch: mipsel_24kc-static
+            openwrt: 'target=ramips subtarget=rt305x'
             target_cpu: mipsel
-            extra: 'mips_arch_variant="r2" mips_float_abi="soft" mips_tune="74kc"'
+            extra: 'mips_arch_variant="r2" mips_float_abi="soft" build_static=true'
           - arch: mipsel_mips32
             openwrt: 'target=bcm47xx subtarget=generic'
             target_cpu: mipsel
             extra: 'mips_arch_variant="r1" mips_float_abi="soft"'
     env:
       EXTRA_FLAGS: target_cpu="${{ matrix.target_cpu }}" target_os="openwrt" use_allocator="none" use_allocator_shim=false use_partition_alloc=false ${{ matrix.extra }}
-      OPENWRT_FLAGS: arch=${{ matrix.arch }} release=21.02.2 gcc_ver=8.4.0 ${{ matrix.openwrt }}
+      OPENWRT_FLAGS: arch=${{ matrix.arch }} release=22.03.0 gcc_ver=11.2.0 ${{ matrix.openwrt }}
       BUNDLE: naiveproxy-${{ github.event.release.tag_name }}-${{ github.job }}-${{ matrix.arch }}
-      CRONET_BUNDLE: cronet-${{ github.event.release.tag_name }}-${{ github.job }}-${{ matrix.arch }}
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - uses: actions/setup-go@v3
         with:
           go-version: '^1.18.1'
       - name: Cache toolchains (Linux, OpenWrt, Android)
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         with:
           path: |
             src/third_party/llvm-build/Release+Asserts/
@@ -587,19 +510,19 @@ jobs:
             src/qemu-user-static*.deb
           key: toolchains-posix-${{ hashFiles('CHROMIUM_VERSION') }}-v${{ env.CACHE_EPOCH }}
       - name: Cache PGO (Linux, OpenWrt)
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         with:
           path: src/chrome/build/pgo_profiles/
           key: pgo-linux-openwrt-${{ hashFiles('CHROMIUM_VERSION') }}-v${{ env.CACHE_EPOCH }}
       - name: Cache sysroot
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         with:
           path: src/out/sysroot-build/openwrt
-          key: sysroot-openwrt-21.02.2-${{ matrix.arch }}-v${{ env.CACHE_EPOCH }}
+          key: sysroot-openwrt-22.03.0-${{ matrix.arch }}-v${{ env.CACHE_EPOCH }}
       - id: ccache-timestamp
         run: echo "::set-output name=date::$(date +%s)"
       - name: Cache ccache files
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         with:
           path: ~/.ccache
           key: ccache-openwrt-${{ matrix.arch }}-${{ hashFiles('CHROMIUM_VERSION') }}-${{ steps.ccache-timestamp.outputs.date }}
@@ -616,9 +539,6 @@ jobs:
       - run: ccache -z
       - run: ./build.sh
       - run: ccache -s
-      - run: CCACHE_DISABLE=1 ./go-build.sh
-        working-directory: src/out/Release/cronet
-        if: ${{ ! contains(matrix.extra, 'build_static=true') }}
       - run: ../tests/basic.sh out/Release/naive
       - name: Pack naiveproxy assets
         run: |
@@ -627,29 +547,12 @@ jobs:
           tar cJf ${{ env.BUNDLE }}.tar.xz ${{ env.BUNDLE }}
           openssl sha256 out/Release/naive >sha256sum.txt
           echo "SHA256SUM=$(cut -d' ' -f2 sha256sum.txt)" >>$GITHUB_ENV
-      - uses: actions/upload-artifact@v2
+      - uses: actions/upload-artifact@v3
         with:
           name: ${{ env.BUNDLE }}.tar.xz naive executable sha256 ${{ env.SHA256SUM }}
           path: src/sha256sum.txt
       - name: Upload naiveproxy assets
         if: ${{ github.event_name == 'release' }}
         run: hub release edit -a ${{ env.BUNDLE }}.tar.xz -m "" "${GITHUB_REF##*/}"
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - name: Pack cronet assets
-        if: ${{ github.event_name == 'release' && ! contains(matrix.extra, 'build_static=true') }}
-        run: |
-          mv out/Release/cronet ${{ env.CRONET_BUNDLE }}
-          tar cJf ${{ env.CRONET_BUNDLE }}.tar.xz ${{ env.CRONET_BUNDLE }}
-          openssl sha256 ${{ env.CRONET_BUNDLE }}.tar.xz >sha256sum.txt
-          echo "SHA256SUM=$(cut -d' ' -f2 sha256sum.txt)" >>$GITHUB_ENV
-      - uses: actions/upload-artifact@v2
-        if: ${{ github.event_name == 'release' && ! contains(matrix.extra, 'build_static=true') }}
-        with:
-          name: ${{ env.CRONET_BUNDLE }}.tar.xz sha256 ${{ env.SHA256SUM }}
-          path: src/sha256sum.txt
-      - name: Upload cronet assets
-        if: ${{ github.event_name == 'release' && ! contains(matrix.extra, 'build_static=true') }}
-        run: hub release edit -a ${{ env.CRONET_BUNDLE }}.tar.xz -m "" "${GITHUB_REF##*/}"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

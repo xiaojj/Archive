@@ -16,7 +16,7 @@ else
     is_official_build=true
     exclude_unwind_tables=true
     enable_resource_allowlist_generation=false
-    symbol_level=0"
+    symbol_level=2"
 fi
 
 . ./get-sysroot.sh

@@ -1,4 +1,4 @@
-# Copyright 2018 The Chromium Authors. All rights reserved.
+# Copyright 2018 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -57,7 +57,6 @@ source_set("dns") {
     "host_resolver_mdns_task.h",
     "host_resolver_proc.cc",
     "host_resolver_proc.h",
-    "host_resolver_results.cc",
     "https_record_rdata.cc",
     "httpssvc_metrics.cc",
     "httpssvc_metrics.h",
@@ -186,7 +185,6 @@ source_set("host_resolver") {
     "dns_config.h",
     "host_cache.h",
     "host_resolver.h",
-    "host_resolver_results.h",
     "mapped_host_resolver.h",
   ]
   public = []

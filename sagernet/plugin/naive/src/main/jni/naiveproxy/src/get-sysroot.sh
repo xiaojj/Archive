@@ -1,7 +1,11 @@
 ARCH=$(uname)
 
 PYTHON=$(which python3 2>/dev/null || which python 2>/dev/null)
-CLANG_REVISION=$($PYTHON tools/clang/scripts/update.py --print-revision)
+mkdir -p third_party/llvm-build/Release+Asserts
+cd tools/clang/scripts
+CLANG_REVISION=$($PYTHON -c 'import update; print(update.PACKAGE_VERSION)')
+cd -
+echo $CLANG_REVISION >third_party/llvm-build/Release+Asserts/cr_build_revision
 
 eval "$EXTRA_FLAGS"
 case "$ARCH" in

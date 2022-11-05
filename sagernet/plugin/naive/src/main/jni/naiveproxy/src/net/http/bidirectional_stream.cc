@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -205,14 +205,6 @@ void BidirectionalStream::StartRequest(const SSLConfig& ssl_config) {
   HttpRequestInfo http_request_info;
   http_request_info.url = request_info_->url;
   http_request_info.method = request_info_->method;
-  std::string network_isolation_key_header;
-  if (request_info_->extra_headers.GetHeader("-network-isolation-key",
-                                             &network_isolation_key_header)) {
-    request_info_->extra_headers.RemoveHeader("-network-isolation-key");
-    net::SchemefulSite site(GURL{network_isolation_key_header});
-    CHECK(!site.opaque());
-    http_request_info.network_isolation_key = NetworkIsolationKey(site, site);
-  }
   http_request_info.extra_headers = request_info_->extra_headers;
   http_request_info.socket_tag = request_info_->socket_tag;
   stream_request_ =
@@ -267,7 +259,7 @@ void BidirectionalStream::OnHeadersReceived(
   load_timing_info_.receive_headers_end = base::TimeTicks::Now();
   read_end_time_ = load_timing_info_.receive_headers_end;
   session_->http_stream_factory()->ProcessAlternativeServices(
-      session_, net::NetworkIsolationKey(), response_info.headers.get(),
+      session_, net::NetworkAnonymizationKey(), response_info.headers.get(),
       url::SchemeHostPort(request_info_->url));
   delegate_->OnHeadersReceived(response_headers);
 }

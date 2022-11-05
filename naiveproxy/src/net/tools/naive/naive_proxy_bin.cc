@@ -68,7 +68,7 @@
 #include "url/scheme_host_port.h"
 #include "url/url_util.h"
 
-#if defined(OS_MACOSX)
+#if BUILDFLAG(IS_APPLE)
 #include "base/mac/scoped_nsautorelease_pool.h"
 #endif
 
@@ -246,7 +246,7 @@ bool ParseCommandLine(const CommandLine& cmdline, Params* params) {
       params->protocol = net::ClientProtocol::kHttp;
       params->listen_port = 8080;
     } else if (url.scheme() == "redir") {
-#if defined(OS_LINUX)
+#if BUILDFLAG(IS_LINUX)
       params->protocol = net::ClientProtocol::kRedir;
       params->listen_port = 1080;
 #else
@@ -467,14 +467,20 @@ int main(int argc, char* argv[]) {
                          url::SCHEME_WITH_HOST_PORT_AND_USER_INFORMATION);
   base::FeatureList::InitializeInstance(
       "PartitionConnectionsByNetworkIsolationKey", std::string());
-  base::SingleThreadTaskExecutor io_task_executor(base::MessagePumpType::IO);
-  base::ThreadPoolInstance::CreateAndStartWithDefaultParams("naive");
-  base::AtExitManager exit_manager;
+  net::ClientSocketPoolManager::set_max_sockets_per_pool(
+      net::HttpNetworkSession::NORMAL_SOCKET_POOL,
+      kDefaultMaxSocketsPerPool * kExpectedMaxUsers);
+  net::ClientSocketPoolManager::set_max_sockets_per_proxy_server(
+      net::HttpNetworkSession::NORMAL_SOCKET_POOL,
+      kDefaultMaxSocketsPerPool * kExpectedMaxUsers);
+  net::ClientSocketPoolManager::set_max_sockets_per_group(
+      net::HttpNetworkSession::NORMAL_SOCKET_POOL,
+      kDefaultMaxSocketsPerGroup * kExpectedMaxUsers);
 
-#if defined(OS_MACOSX)
+#if BUILDFLAG(IS_APPLE)
   base::mac::ScopedNSAutoreleasePool pool;
 #endif
-
+  base::AtExitManager exit_manager;
   base::CommandLine::Init(argc, argv);
 
   CommandLine cmdline;
@@ -495,18 +501,10 @@ int main(int argc, char* argv[]) {
   if (!ParseCommandLine(cmdline, &params)) {
     return EXIT_FAILURE;
   }
-
-  net::ClientSocketPoolManager::set_max_sockets_per_pool(
-      net::HttpNetworkSession::NORMAL_SOCKET_POOL,
-      kDefaultMaxSocketsPerPool * kExpectedMaxUsers);
-  net::ClientSocketPoolManager::set_max_sockets_per_proxy_server(
-      net::HttpNetworkSession::NORMAL_SOCKET_POOL,
-      kDefaultMaxSocketsPerPool * kExpectedMaxUsers);
-  net::ClientSocketPoolManager::set_max_sockets_per_group(
-      net::HttpNetworkSession::NORMAL_SOCKET_POOL,
-      kDefaultMaxSocketsPerGroup * kExpectedMaxUsers);
-
   CHECK(logging::InitLogging(params.log_settings));
+
+  base::SingleThreadTaskExecutor io_task_executor(base::MessagePumpType::IO);
+  base::ThreadPoolInstance::CreateAndStartWithDefaultParams("naive");
 
   if (!params.ssl_key_path.empty()) {
     net::SSLClientSocket::SetSSLKeyLogger(
@@ -537,8 +535,8 @@ int main(int argc, char* argv[]) {
   scoped_refptr<net::CertNetFetcherURLRequest> cert_net_fetcher;
   // The builtin verifier is supported but not enabled by default on Mac,
   // falling back to CreateSystemVerifyProc() which drops the net fetcher.
-  // Skips defined(OS_MAC) for now, until it is enabled by default.
-#if defined(OS_LINUX) || defined(OS_ANDROID)
+  // Skips BUILDFLAG(IS_MAC) for now, until it is enabled by default.
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_ANDROID)
   cert_net_fetcher = base::MakeRefCounted<net::CertNetFetcherURLRequest>();
   cert_net_fetcher->SetURLRequestContext(cert_context.get());
 #endif

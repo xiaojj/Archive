@@ -1,8 +1,6 @@
-# NaïveProxy and Cronet ![build workflow](https://github.com/klzgrad/naiveproxy/actions/workflows/build.yml/badge.svg)
+# NaïveProxy ![build workflow](https://github.com/klzgrad/naiveproxy/actions/workflows/build.yml/badge.svg)
 
 NaïveProxy uses Chromium's network stack to camouflage traffic with strong censorship resistence and low detectablility. Reusing Chrome's stack also ensures best practices in performance and security.
-
-Cronet is a library similarly derived from Chromium's network stack, but its official releases are limited to Android and iOS. NaïveProxy's fork of Cronet provides binary releases of its native API, support for multiple platforms, and support for creating Go apps with cgo and the [cronet-go](https://github.com/SagerNet/cronet-go) bindings.
 
 The following traffic attacks are mitigated by using Chromium's network stack:
 
@@ -21,7 +19,7 @@ The frontend server can be any well-known reverse proxy that is able to route HT
 
 The Naïve server here works as a forward proxy and a packet length padding layer. Caddy forwardproxy is also a forward proxy but it lacks a padding layer. A [fork](https://github.com/klzgrad/forwardproxy) adds the NaïveProxy padding layer to forwardproxy, combining both in one.
 
-## Download NaïveProxy and Cronet binaries
+## Download NaïveProxy
 
 [Download here](https://github.com/klzgrad/naiveproxy/releases/latest). Supported platforms include: Windows, Android (with [SagerNet](https://github.com/SagerNet/SagerNet)), Linux, Mac OS, and OpenWrt ([support status](https://github.com/klzgrad/naiveproxy/wiki/OpenWrt-Support)).
 
@@ -52,7 +50,9 @@ Example Caddyfile (replace `user` and `pass` accordingly):
     hide_via
     probe_resistance
   }
-  file_server { root /var/www/html }
+  file_server {
+    root /var/www/html
+  }
 }
 ```
 `:443` must appear first for this Caddyfile to work. For more advanced usage consider using [JSON for Caddy 2's config](https://caddyserver.com/docs/json/).
@@ -145,9 +145,12 @@ The first CONNECT request to a server cannot use "Fast Open" to send payload bef
 - Force tunneling for all sockets
 - Support HTTP/2 and HTTP/3 CONNECT tunnel Fast Open using the `fastopen` header
 - Pad RST_STREAM frames
-- (Cronet) Allow passing in `-connect-authority` header to override the CONNECT authority field
-- (Cronet) Disable system proxy resolution and use fixed proxy resolution specified by experimental option `proxy_server`
-- (Cronet) Support setting base::FeatureList by experimental option `feature_list`
-- (Cronet) Support setting the network isolation key of a stream with `-network-isolation-key` header
-- (Cronet) Add certificate net fetcher
-- (Cronet) Support setting socket limits by experimental option `socket_limits`
+
+## Known weaknesses
+
+* HTTP CONNECT Fast Open creates back to back h2 packets consistently, which should not appear so often. This could be fixed with a little bit of corking but it would require surgical change deep in Chromium h2 stack, not very easy to do.
+* TLS over TLS requires more handshake round trips than needed by common h2 requests, that is, no h2 requests need these many back and forth handshakes. There is no simple way to avoid this besides doing MITM proxying, breaking E2E encryption.
+* TLS over TLS overhead causes visible packet length enlargement and lack of small packets. Removing this overhead also requires MITM proxying.
+* TLS over TLS overhead also causes packets to consistently exceed MTU limits, which should not happen for an originating user agent. Fixing this requires re-segmentation and it is not easy to do.
+* Packet length obfuscation partly relies on h2 multiplexing, which does not work if there is only one connection, a scenario not uncommon. It is not clear how to create covering co-connections organically (i.e. not hard coded).
+* Multiplexing requires use of a few long-lived tunnel connections. It is not clearly how long is appropriate for parroting and how to convincingly rotate the connections if there is an age limit or how to detect and recover stuck tunnel connections convincingly.

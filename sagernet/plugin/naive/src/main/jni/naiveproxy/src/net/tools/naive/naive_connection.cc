@@ -58,7 +58,7 @@ NaiveConnection::NaiveConnection(
     const SSLConfig& proxy_ssl_config,
     RedirectResolver* resolver,
     HttpNetworkSession* session,
-    const NetworkIsolationKey& network_isolation_key,
+    const NetworkAnonymizationKey& network_anonymization_key,
     const NetLogWithSource& net_log,
     std::unique_ptr<StreamSocket> accepted_socket,
     const NetworkTrafficAnnotationTag& traffic_annotation)
@@ -70,7 +70,7 @@ NaiveConnection::NaiveConnection(
       proxy_ssl_config_(proxy_ssl_config),
       resolver_(resolver),
       session_(session),
-      network_isolation_key_(network_isolation_key),
+      network_anonymization_key_(network_anonymization_key),
       net_log_(net_log),
       next_state_(STATE_NONE),
       client_socket_(std::move(accepted_socket)),
@@ -273,9 +273,9 @@ int NaiveConnection::DoConnectServer() {
 
   // Ignores socket limit set by socket pool for this type of socket.
   return InitSocketHandleForRawConnect2(
-      std::move(endpoint), session_, LOAD_IGNORE_LIMITS, MAXIMUM_PRIORITY,
+      std::move(endpoint), LOAD_IGNORE_LIMITS, MAXIMUM_PRIORITY, session_,
       proxy_info_, server_ssl_config_, proxy_ssl_config_, PRIVACY_MODE_DISABLED,
-      network_isolation_key_, net_log_, server_socket_handle_.get(),
+      network_anonymization_key_, net_log_, server_socket_handle_.get(),
       io_callback_);
 }
 

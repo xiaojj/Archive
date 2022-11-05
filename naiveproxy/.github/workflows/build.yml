@@ -16,6 +16,7 @@ env:
   SCCACHE_CACHE_SIZE: 200M
 jobs:
   cache-toolchains-posix:
+    if: ${{ false }}  # disable for now
     runs-on: ubuntu-20.04
     steps:
       - uses: actions/checkout@v3
@@ -49,6 +50,7 @@ jobs:
             wget https://snapshot.debian.org/archive/debian/20220515T152741Z/pool/main/q/qemu/qemu-user-static_7.0%2Bdfsg-6_amd64.deb
           fi
   cache-toolchains-win:
+    if: ${{ false }}  # disable for now
     runs-on: windows-2019
     steps:
       - uses: actions/checkout@v3
@@ -125,12 +127,12 @@ jobs:
           path: src/out/sysroot-build/bullseye/bullseye_*
           key: sysroot-linux-${{ matrix.arch }}-${{ hashFiles('CHROMIUM_VERSION') }}-v${{ env.CACHE_EPOCH }}
       - id: ccache-timestamp
-        run: echo "::set-output name=date::$(date +%s)"
+        run: echo "CCACHE_TIMESTAMP=$(date +%s)" >>$GITHUB_OUTPUT
       - name: Cache ccache files
         uses: actions/cache@v3
         with:
           path: ~/.ccache
-          key: ccache-linux-${{ matrix.arch }}-${{ hashFiles('CHROMIUM_VERSION') }}-${{ steps.ccache-timestamp.outputs.date }}
+          key: ccache-linux-${{ matrix.arch }}-${{ hashFiles('CHROMIUM_VERSION') }}-${{ steps.ccache-timestamp.outputs.CCACHE_TIMESTAMP }}
           restore-keys: ccache-linux-${{ matrix.arch }}-${{ hashFiles('CHROMIUM_VERSION') }}-
       - name: Install APT packages
         run: |
@@ -200,12 +202,12 @@ jobs:
           path: src/out/sysroot-build/android/
           key: sysroot-android-${{ matrix.arch }}-${{ hashFiles('CHROMIUM_VERSION') }}-v${{ env.CACHE_EPOCH }}
       - id: ccache-timestamp
-        run: echo "::set-output name=date::$(date +%s)"
+        run: echo "CCACHE_TIMESTAMP=$(date +%s)" >>$GITHUB_OUTPUT
       - name: Cache ccache files
         uses: actions/cache@v3
         with:
           path: ~/.ccache
-          key: ccache-android-${{ matrix.arch }}-${{ hashFiles('CHROMIUM_VERSION') }}-${{ steps.ccache-timestamp.outputs.date }}
+          key: ccache-android-${{ matrix.arch }}-${{ hashFiles('CHROMIUM_VERSION') }}-${{ steps.ccache-timestamp.outputs.CCACHE_TIMESTAMP }}
           restore-keys: ccache-android-${{ matrix.arch }}-${{ hashFiles('CHROMIUM_VERSION') }}-
       - name: Install APT packages
         run: |
@@ -274,12 +276,12 @@ jobs:
           path: src/chrome/build/pgo_profiles/chrome-win32-*
           key: pgo-win32-arm64-${{ hashFiles('CHROMIUM_VERSION') }}-v${{ env.CACHE_EPOCH }}
       - id: ccache-timestamp
-        run: echo "::set-output name=date::$(date +%s)"
+        run: echo "CCACHE_TIMESTAMP=$(date +%s)" >>$GITHUB_OUTPUT
       - name: Cache ccache files
         uses: actions/cache@v3
         with:
           path: ~/AppData/Local/Mozilla/sccache
-          key: ccache-win-${{ matrix.arch }}-${{ hashFiles('CHROMIUM_VERSION') }}-${{ steps.ccache-timestamp.outputs.date }}
+          key: ccache-win-${{ matrix.arch }}-${{ hashFiles('CHROMIUM_VERSION') }}-${{ steps.ccache-timestamp.outputs.CCACHE_TIMESTAMP }}
           restore-keys: ccache-win-${{ matrix.arch }}-${{ hashFiles('CHROMIUM_VERSION') }}-
       - run: ./get-clang.sh
       - run: ~/.cargo/bin/sccache -z
@@ -312,7 +314,7 @@ jobs:
       matrix:
         arch: [x64, arm64]
     env:
-      EXTRA_FLAGS: 'target_cpu="${{ matrix.arch }}"'
+      EXTRA_FLAGS: 'target_cpu="${{ matrix.arch }}" enable_stripping=false'
       BUNDLE: naiveproxy-${{ github.event.release.tag_name }}-${{ github.job }}-${{ matrix.arch }}
     steps:
       - uses: actions/checkout@v3
@@ -328,12 +330,12 @@ jobs:
             src/gn/
           key: toolchains-pgo-mac-${{ hashFiles('CHROMIUM_VERSION') }}-v${{ env.CACHE_EPOCH }}
       - id: ccache-timestamp
-        run: echo "::set-output name=date::$(date +%s)"
+        run: echo "CCACHE_TIMESTAMP=$(date +%s)" >>$GITHUB_OUTPUT
       - name: Cache ccache files
         uses: actions/cache@v3
         with:
           path: ~/Library/Caches/ccache
-          key: ccache-mac-${{ matrix.arch }}-${{ hashFiles('CHROMIUM_VERSION') }}-${{ steps.ccache-timestamp.outputs.date }}
+          key: ccache-mac-${{ matrix.arch }}-${{ hashFiles('CHROMIUM_VERSION') }}-${{ steps.ccache-timestamp.outputs.CCACHE_TIMESTAMP }}
           restore-keys: ccache-mac-${{ matrix.arch }}-${{ hashFiles('CHROMIUM_VERSION') }}-
       - run: brew install ninja ccache
       - run: ./get-clang.sh
@@ -354,6 +356,10 @@ jobs:
         with:
           name: ${{ env.BUNDLE }}.tar.xz naive executable sha256 ${{ env.SHA256SUM }}
           path: src/sha256sum.txt
+      - uses: actions/upload-artifact@v3
+        with:
+          name: naive-executable-${{ matrix.arch }}
+          path: src/out/Release/naive
       - name: Upload naiveproxy assets
         if: ${{ github.event_name == 'release' }}
         run: hub release edit -a ${{ env.BUNDLE }}.tar.xz -m "" "${GITHUB_REF##*/}"
@@ -365,7 +371,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        arch: [x64, arm64]
+        arch: [arm64]
     env:
       EXTRA_FLAGS: 'target_cpu="${{ matrix.arch }}" target_os="ios" ios_enable_code_signing=false'
       BUNDLE: naiveproxy-${{ github.event.release.tag_name }}-${{ github.job }}-${{ matrix.arch }}
@@ -380,12 +386,12 @@ jobs:
             src/gn/
           key: toolchains-pgo-mac-${{ hashFiles('CHROMIUM_VERSION') }}-v${{ env.CACHE_EPOCH }}
       - id: ccache-timestamp
-        run: echo "::set-output name=date::$(date +%s)"
+        run: echo "CCACHE_TIMESTAMP=$(date +%s)" >>$GITHUB_OUTPUT
       - name: Cache ccache files
         uses: actions/cache@v3
         with:
           path: ~/Library/Caches/ccache
-          key: ccache-ios-${{ matrix.arch }}-${{ hashFiles('CHROMIUM_VERSION') }}-${{ steps.ccache-timestamp.outputs.date }}
+          key: ccache-ios-${{ matrix.arch }}-${{ hashFiles('CHROMIUM_VERSION') }}-${{ steps.ccache-timestamp.outputs.CCACHE_TIMESTAMP }}
           restore-keys: ccache-ios-${{ matrix.arch }}-${{ hashFiles('CHROMIUM_VERSION') }}-
       - run: brew install ninja ccache
       - run: ./get-clang.sh
@@ -520,12 +526,12 @@ jobs:
           path: src/out/sysroot-build/openwrt
           key: sysroot-openwrt-22.03.0-${{ matrix.arch }}-v${{ env.CACHE_EPOCH }}
       - id: ccache-timestamp
-        run: echo "::set-output name=date::$(date +%s)"
+        run: echo "CCACHE_TIMESTAMP=$(date +%s)" >>$GITHUB_OUTPUT
       - name: Cache ccache files
         uses: actions/cache@v3
         with:
           path: ~/.ccache
-          key: ccache-openwrt-${{ matrix.arch }}-${{ hashFiles('CHROMIUM_VERSION') }}-${{ steps.ccache-timestamp.outputs.date }}
+          key: ccache-openwrt-${{ matrix.arch }}-${{ hashFiles('CHROMIUM_VERSION') }}-${{ steps.ccache-timestamp.outputs.CCACHE_TIMESTAMP }}
           restore-keys: ccache-openwrt-${{ matrix.arch }}-${{ hashFiles('CHROMIUM_VERSION') }}-
       - name: Install APT packages
         run: |

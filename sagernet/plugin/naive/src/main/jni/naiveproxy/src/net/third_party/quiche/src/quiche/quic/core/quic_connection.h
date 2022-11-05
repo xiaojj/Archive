@@ -238,6 +238,10 @@ class QUIC_EXPORT_PRIVATE QuicConnectionVisitorInterface {
 
   // When bandwidth update alarms.
   virtual void OnBandwidthUpdateTimeout() = 0;
+
+  // Returns context needed for the connection to probe on the alternative path.
+  virtual std::unique_ptr<QuicPathValidationContext>
+  CreateContextForMultiPortPath() = 0;
 };
 
 // Interface which gets callbacks from the QuicConnection at interesting
@@ -471,7 +475,8 @@ class QUIC_EXPORT_PRIVATE QuicConnection
                  QuicConnectionHelperInterface* helper,
                  QuicAlarmFactory* alarm_factory, QuicPacketWriter* writer,
                  bool owns_writer, Perspective perspective,
-                 const ParsedQuicVersionVector& supported_versions);
+                 const ParsedQuicVersionVector& supported_versions,
+                 ConnectionIdGeneratorInterface& generator);
   QuicConnection(const QuicConnection&) = delete;
   QuicConnection& operator=(const QuicConnection&) = delete;
   ~QuicConnection() override;
@@ -737,6 +742,18 @@ class QUIC_EXPORT_PRIVATE QuicConnection
   // TODO(fayang): Add a guard that this only gets called once.
   void OnHandshakeComplete();
 
+  // Creates and probes an multi-port path if none exists.
+  void MaybeCreateMultiPortPath();
+
+  // Called in multi-port QUIC when the alternative path validation succeeds.
+  // Stores the path validation context and prepares for the next validation.
+  void OnMultiPortPathProbingSuccess(
+      std::unique_ptr<QuicPathValidationContext> context);
+
+  // Probe the existing alternative path. Does not create a new alternative
+  // path. This method is the callback for |multi_port_probing_alarm_|.
+  void ProbeMultiPortPath();
+
   // Accessors
   void set_visitor(QuicConnectionVisitorInterface* visitor) {
     visitor_ = visitor;
@@ -778,6 +795,7 @@ class QUIC_EXPORT_PRIVATE QuicConnection
   QuicByteCount max_packet_length() const;
   void SetMaxPacketLength(QuicByteCount length);
 
+  bool multi_port_enabled() const { return multi_port_enabled_; }
   size_t mtu_probe_count() const { return mtu_probe_count_; }
 
   bool connected() const { return connected_; }
@@ -798,6 +816,10 @@ class QUIC_EXPORT_PRIVATE QuicConnection
   // Sets the handshake and idle state connection timeouts.
   void SetNetworkTimeouts(QuicTime::Delta handshake_timeout,
                           QuicTime::Delta idle_timeout);
+
+  void SetMultiPortProbingInterval(QuicTime::Delta probing_interval) {
+    multi_port_probing_interval_ = probing_interval;
+  }
 
   // Called when the ping alarm fires. Causes a ping frame to be sent only
   // if the retransmission alarm is not running.
@@ -1227,14 +1249,6 @@ class QUIC_EXPORT_PRIVATE QuicConnection
     context_.bug_listener.swap(bug_listener);
   }
 
-  absl::optional<QuicWallTime> quic_bug_10511_43_timestamp() const {
-    return quic_bug_10511_43_timestamp_;
-  }
-
-  const std::string& quic_bug_10511_43_error_detail() const {
-    return quic_bug_10511_43_error_detail_;
-  }
-
   // Ensures the network blackhole delay is longer than path degrading delay.
   static QuicTime::Delta CalculateNetworkBlackholeDelay(
       QuicTime::Delta blackhole_delay, QuicTime::Delta path_degrading_delay,
@@ -1327,6 +1341,14 @@ class QUIC_EXPORT_PRIVATE QuicConnection
 
   void set_validate_client_addresses(bool value) {
     validate_client_addresses_ = value;
+  }
+
+  bool defer_send_in_response_to_packets() const {
+    return defer_send_in_response_to_packets_;
+  }
+
+  ConnectionIdGeneratorInterface& connection_id_generator() const {
+    return connection_id_generator_;
   }
 
  private:
@@ -1481,6 +1503,24 @@ class QUIC_EXPORT_PRIVATE QuicConnection
     QuicSocketAddress peer_address_default_path_;
     QuicSocketAddress peer_address_alternative_path_;
     AddressChangeType active_effective_peer_migration_type_;
+  };
+
+  // Keeps an ongoing alternative path. The connection will not migrate upon
+  // validation success.
+  class MultiPortPathValidationResultDelegate
+      : public QuicPathValidator::ResultDelegate {
+   public:
+    MultiPortPathValidationResultDelegate(QuicConnection* connection);
+
+    void OnPathValidationSuccess(
+        std::unique_ptr<QuicPathValidationContext> context,
+        QuicTime start_time) override;
+
+    void OnPathValidationFailure(
+        std::unique_ptr<QuicPathValidationContext> context) override;
+
+   private:
+    QuicConnection* connection_;
   };
 
   // A class which sets and clears in_on_retransmission_time_out_ when entering
@@ -2024,6 +2064,8 @@ class QUIC_EXPORT_PRIVATE QuicConnection
   // first 1-RTT packet has been decrypted. Only used on server connections with
   // TLS handshaker.
   QuicArenaScopedPtr<QuicAlarm> discard_zero_rtt_decryption_keys_alarm_;
+  // An alarm that fires to keep probing the multi-port path.
+  QuicArenaScopedPtr<QuicAlarm> multi_port_probing_alarm_;
   // Neither visitor is owned by this class.
   QuicConnectionVisitorInterface* visitor_;
   QuicConnectionDebugVisitor* debug_visitor_;
@@ -2238,12 +2280,13 @@ class QUIC_EXPORT_PRIVATE QuicConnection
   // Records first serialized 1-RTT packet.
   std::unique_ptr<BufferedPacket> first_serialized_one_rtt_packet_;
 
-  RetransmittableOnWireBehavior retransmittable_on_wire_behavior_ = DEFAULT;
+  std::unique_ptr<QuicPathValidationContext> multi_port_path_context_;
 
-  // TODO(b/205023946) Debug-only fields, to be deprecated after the bug is
-  // fixed.
-  absl::optional<QuicWallTime> quic_bug_10511_43_timestamp_;
-  std::string quic_bug_10511_43_error_detail_;
+  bool multi_port_enabled_ = false;
+
+  QuicTime::Delta multi_port_probing_interval_;
+
+  RetransmittableOnWireBehavior retransmittable_on_wire_behavior_ = DEFAULT;
 
   bool only_send_probing_frames_on_alternative_path_ =
       GetQuicReloadableFlag(quic_not_bundle_ack_on_alternative_path);
@@ -2252,6 +2295,8 @@ class QUIC_EXPORT_PRIVATE QuicConnection
   // limit.
   const bool enforce_strict_amplification_factor_ =
       GetQuicFlag(FLAGS_quic_enforce_strict_amplification_factor);
+
+  ConnectionIdGeneratorInterface& connection_id_generator_;
 };
 
 }  // namespace quic
