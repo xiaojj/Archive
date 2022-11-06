@@ -22,6 +22,11 @@ Function Compress-File([ValidateScript({Test-Path $_})][string]$File){
     }
 }
 
+Invoke-Expression "& {$(Invoke-RestMethod get.scoop.sh)} -RunAsAdmin"
+scoop bucket add versions
+scoop install nodejs16
+scoop install yarn go
+
 yarn --cwd gui --check-files
 yarn --cwd gui build
 
