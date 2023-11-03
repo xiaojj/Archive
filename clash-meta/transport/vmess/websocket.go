@@ -1,8 +1,10 @@
 package vmess
 
 import (
+	"bufio"
 	"bytes"
 	"context"
+	"crypto/sha1"
 	"crypto/tls"
 	"encoding/base64"
 	"encoding/binary"
@@ -19,6 +21,7 @@ import (
 	"github.com/Dreamacro/clash/common/buf"
 	N "github.com/Dreamacro/clash/common/net"
 	tlsC "github.com/Dreamacro/clash/component/tls"
+	"github.com/Dreamacro/clash/log"
 
 	"github.com/gobwas/ws"
 	"github.com/gobwas/ws/wsutil"
@@ -317,88 +320,80 @@ func streamWebsocketWithEarlyDataConn(conn net.Conn, c *WebsocketConfig) (net.Co
 }
 
 func streamWebsocketConn(ctx context.Context, conn net.Conn, c *WebsocketConfig, earlyData *bytes.Buffer) (net.Conn, error) {
-	dialer := ws.Dialer{
-		NetDial: func(ctx context.Context, network, addr string) (net.Conn, error) {
-			return conn, nil
-		},
-		TLSConfig: c.TLSConfig,
-	}
-	scheme := "ws"
-	if c.TLS {
-		scheme = "wss"
-		if len(c.ClientFingerprint) != 0 {
-			if fingerprint, exists := tlsC.GetFingerprint(c.ClientFingerprint); exists {
-				utlsConn := tlsC.UClient(conn, c.TLSConfig, fingerprint)
-
-				if err := utlsConn.BuildWebsocketHandshakeState(); err != nil {
-					return nil, fmt.Errorf("parse url %s error: %w", c.Path, err)
-				}
-
-				dialer.TLSClient = func(conn net.Conn, hostname string) net.Conn {
-					return utlsConn
-				}
-			}
-		}
-	}
-
 	u, err := url.Parse(c.Path)
 	if err != nil {
 		return nil, fmt.Errorf("parse url %s error: %w", c.Path, err)
 	}
 
 	uri := url.URL{
-		Scheme:   scheme,
+		Scheme:   "ws",
 		Host:     net.JoinHostPort(c.Host, c.Port),
 		Path:     u.Path,
 		RawQuery: u.RawQuery,
 	}
 
-	if c.V2rayHttpUpgrade {
-		if c.TLS {
-			if dialer.TLSClient != nil {
-				conn = dialer.TLSClient(conn, uri.Host)
-			} else {
-				conn = tls.Client(conn, dialer.TLSConfig)
-			}
-			if tlsConn, ok := conn.(interface {
-				HandshakeContext(ctx context.Context) error
-			}); ok {
-				if err = tlsConn.HandshakeContext(ctx); err != nil {
-					return nil, err
+	if c.TLS {
+		uri.Scheme = "wss"
+		config := c.TLSConfig
+		if config == nil { // The config cannot be nil
+			config = &tls.Config{NextProtos: []string{"http/1.1"}}
+		}
+		if config.ServerName == "" && !config.InsecureSkipVerify { // users must set either ServerName or InsecureSkipVerify in the config.
+			config = config.Clone()
+			config.ServerName = uri.Host
+		}
+
+		if len(c.ClientFingerprint) != 0 {
+			if fingerprint, exists := tlsC.GetFingerprint(c.ClientFingerprint); exists {
+				utlsConn := tlsC.UClient(conn, config, fingerprint)
+				if err = utlsConn.BuildWebsocketHandshakeState(); err != nil {
+					return nil, fmt.Errorf("parse url %s error: %w", c.Path, err)
 				}
+				conn = utlsConn
+			}
+		} else {
+			conn = tls.Client(conn, config)
+		}
+
+		if tlsConn, ok := conn.(interface {
+			HandshakeContext(ctx context.Context) error
+		}); ok {
+			if err = tlsConn.HandshakeContext(ctx); err != nil {
+				return nil, err
 			}
 		}
-		request := &http.Request{
-			Method: http.MethodGet,
-			URL:    &uri,
-			Header: c.Headers.Clone(),
-			Host:   c.Host,
-		}
-		request.Header.Set("Connection", "Upgrade")
-		request.Header.Set("Upgrade", "websocket")
-		err = request.Write(conn)
-		if err != nil {
-			return nil, err
-		}
-		bufferedConn := N.NewBufferedConn(conn)
-		response, err := http.ReadResponse(bufferedConn.Reader(), request)
-		if err != nil {
-			return nil, err
-		}
-		if response.StatusCode != 101 ||
-			!strings.EqualFold(response.Header.Get("Connection"), "upgrade") ||
-			!strings.EqualFold(response.Header.Get("Upgrade"), "websocket") {
-			return nil, fmt.Errorf("unexpected status: %s", response.Status)
-		}
-		return bufferedConn, nil
 	}
 
-	headers := http.Header{}
-	headers.Set("User-Agent", "Go-http-client/1.1") // match golang's net/http
-	if c.Headers != nil {
-		for k := range c.Headers {
-			headers.Add(k, c.Headers.Get(k))
+	request := &http.Request{
+		Method: http.MethodGet,
+		URL:    &uri,
+		Header: c.Headers.Clone(),
+		Host:   c.Host,
+	}
+
+	request.Header.Set("Connection", "Upgrade")
+	request.Header.Set("Upgrade", "websocket")
+
+	if host := request.Header.Get("Host"); host != "" {
+		// For client requests, Host optionally overrides the Host
+		// header to send. If empty, the Request.Write method uses
+		// the value of URL.Host. Host may contain an international
+		// domain name.
+		request.Host = host
+	}
+	request.Header.Del("Host")
+
+	var secKey string
+	if !c.V2rayHttpUpgrade {
+		const nonceKeySize = 16
+		// NOTE: bts does not escape.
+		bts := make([]byte, nonceKeySize)
+		if _, err = fastrand.Read(bts); err != nil {
+			return nil, fmt.Errorf("rand read error: %w", err)
 		}
+		secKey = base64.StdEncoding.EncodeToString(bts)
+		request.Header.Set("Sec-WebSocket-Version", "13")
+		request.Header.Set("Sec-WebSocket-Key", secKey)
 	}
 
 	if earlyData != nil {
@@ -406,41 +401,59 @@ func streamWebsocketConn(ctx context.Context, conn net.Conn, c *WebsocketConfig,
 		if c.EarlyDataHeaderName == "" {
 			uri.Path += earlyDataString
 		} else {
-			headers.Set(c.EarlyDataHeaderName, earlyDataString)
+			request.Header.Set(c.EarlyDataHeaderName, earlyDataString)
 		}
 	}
 
-	// gobwas/ws will check server's response "Sec-Websocket-Protocol" so must add Protocols to ws.Dialer
-	// if not will cause ws.ErrHandshakeBadSubProtocol
-	if secProtocol := headers.Get("Sec-WebSocket-Protocol"); len(secProtocol) > 0 {
-		// gobwas/ws will set "Sec-Websocket-Protocol" according dialer.Protocols
-		// to avoid send repeatedly don't set it to headers
-		headers.Del("Sec-WebSocket-Protocol")
-		dialer.Protocols = []string{secProtocol}
+	if ctx.Done() != nil {
+		done := N.SetupContextForConn(ctx, conn)
+		defer done(&err)
 	}
 
-	// gobwas/ws send "Host" directly in Upgrade() by `httpWriteHeader(bw, headerHost, u.Host)`
-	// if headers has "Host" will send repeatedly
-	if host := headers.Get("Host"); host != "" {
-		headers.Del("Host")
-		uri.Host = host
-	}
-
-	dialer.Header = ws.HandshakeHeaderHTTP(headers)
-
-	conn, reader, _, err := dialer.Dial(ctx, uri.String())
+	err = request.Write(conn)
 	if err != nil {
-		return nil, fmt.Errorf("dial %s error: %w", uri.Host, err)
+		return nil, err
+	}
+	bufferedConn := N.NewBufferedConn(conn)
+	response, err := http.ReadResponse(bufferedConn.Reader(), request)
+	if err != nil {
+		return nil, err
+	}
+	if response.StatusCode != http.StatusSwitchingProtocols ||
+		!strings.EqualFold(response.Header.Get("Connection"), "upgrade") ||
+		!strings.EqualFold(response.Header.Get("Upgrade"), "websocket") {
+		return nil, fmt.Errorf("unexpected status: %s", response.Status)
 	}
 
-	// some bytes which could be written by the peer right after response and be caught by us during buffered read,
-	// so we need warp Conn with bio.Reader
-	conn = N.WarpConnWithBioReader(conn, reader)
+	if c.V2rayHttpUpgrade {
+		return bufferedConn, nil
+	}
+
+	if log.Level() == log.DEBUG { // we might not check this for performance
+		secAccept := response.Header.Get("Sec-Websocket-Accept")
+		const acceptSize = 28 // base64.StdEncoding.EncodedLen(sha1.Size)
+		if lenSecAccept := len(secAccept); lenSecAccept != acceptSize {
+			return nil, fmt.Errorf("unexpected Sec-Websocket-Accept length: %d", lenSecAccept)
+		}
+		if getSecAccept(secKey) != secAccept {
+			return nil, errors.New("unexpected Sec-Websocket-Accept")
+		}
+	}
 
 	conn = newWebsocketConn(conn, ws.StateClientSide)
 	// websocketConn can't correct handle ReadDeadline
 	// so call N.NewDeadlineConn to add a safe wrapper
 	return N.NewDeadlineConn(conn), nil
+}
+
+func getSecAccept(secKey string) string {
+	const magic = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
+	const nonceSize = 24 // base64.StdEncoding.EncodedLen(nonceKeySize)
+	p := make([]byte, nonceSize+len(magic))
+	copy(p[:nonceSize], secKey)
+	copy(p[nonceSize:], magic)
+	sum := sha1.Sum(p)
+	return base64.StdEncoding.EncodeToString(sum[:])
 }
 
 func StreamWebsocketConn(ctx context.Context, conn net.Conn, c *WebsocketConfig) (net.Conn, error) {
@@ -496,27 +509,53 @@ func decodeXray0rtt(requestHeader http.Header) []byte {
 	return nil
 }
 
+func IsWebSocketUpgrade(r *http.Request) bool {
+	return r.Header.Get("Upgrade") == "websocket"
+}
+
+func IsV2rayHttpUpdate(r *http.Request) bool {
+	return IsWebSocketUpgrade(r) && r.Header.Get("Sec-WebSocket-Key") == ""
+}
+
 func StreamUpgradedWebsocketConn(w http.ResponseWriter, r *http.Request) (net.Conn, error) {
-	wsConn, rw, _, err := ws.UpgradeHTTP(r, w)
+	var conn net.Conn
+	var rw *bufio.ReadWriter
+	var err error
+	isRaw := IsV2rayHttpUpdate(r)
+	w.Header().Set("Connection", "upgrade")
+	w.Header().Set("Upgrade", "websocket")
+	if !isRaw {
+		w.Header().Set("Sec-Websocket-Accept", getSecAccept(r.Header.Get("Sec-WebSocket-Key")))
+	}
+	w.WriteHeader(http.StatusSwitchingProtocols)
+	if flusher, isFlusher := w.(interface{ FlushError() error }); isFlusher {
+		err = flusher.FlushError()
+		if err != nil {
+			return nil, fmt.Errorf("flush response: %w", err)
+		}
+	}
+	hijacker, canHijack := w.(http.Hijacker)
+	if !canHijack {
+		return nil, errors.New("invalid connection, maybe HTTP/2")
+	}
+	conn, rw, err = hijacker.Hijack()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("hijack failed: %w", err)
 	}
 
-	// gobwas/ws will flush rw.Writer, so we only need warp rw.Reader
-	wsConn = N.WarpConnWithBioReader(wsConn, rw.Reader)
+	// rw.Writer was flushed, so we only need warp rw.Reader
+	conn = N.WarpConnWithBioReader(conn, rw.Reader)
 
-	conn := newWebsocketConn(wsConn, ws.StateServerSide)
+	if !isRaw {
+		conn = newWebsocketConn(conn, ws.StateServerSide)
+		// websocketConn can't correct handle ReadDeadline
+		// so call N.NewDeadlineConn to add a safe wrapper
+		conn = N.NewDeadlineConn(conn)
+	}
+
 	if edBuf := decodeXray0rtt(r.Header); len(edBuf) > 0 {
-		return N.NewDeadlineConn(&websocketWithReaderConn{conn, io.MultiReader(bytes.NewReader(edBuf), conn)}), nil
+		conn = N.NewCachedConn(conn, edBuf)
 	}
-	return N.NewDeadlineConn(conn), nil
-}
 
-type websocketWithReaderConn struct {
-	*websocketConn
-	reader io.Reader
-}
-
-func (ws *websocketWithReaderConn) Read(b []byte) (n int, err error) {
-	return ws.reader.Read(b)
+	return conn, nil
 }

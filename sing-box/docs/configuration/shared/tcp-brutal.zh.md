@@ -3,7 +3,7 @@
 * Linux
 * `brutal` 拥塞控制算法内核模块已安装
 
-参阅 (link not ready yet)。
+参阅 [tcp-brutal](https://github.com/apernet/tcp-brutal)。
 
 ### 结构
 

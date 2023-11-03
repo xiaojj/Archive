@@ -3,7 +3,7 @@
 * Linux
 * `brutal` congestion control algorithm kernel module installed
 
-See (link not ready yet) for details.
+See [tcp-brutal](https://github.com/apernet/tcp-brutal) for details.
 
 ### Structure
 
