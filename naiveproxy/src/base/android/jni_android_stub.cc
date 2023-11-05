@@ -11,12 +11,6 @@
 
 namespace base {
 namespace android {
-namespace {
-#if BUILDFLAG(CAN_UNWIND_WITH_FRAME_POINTERS)
-ABSL_CONST_INIT thread_local void* stack_frame_pointer = nullptr;
-#endif
-}  // namespace
-
 JNIEnv* AttachCurrentThread() {
   return nullptr;
 }
@@ -35,13 +29,19 @@ bool IsVMInitialized() {
   return false;
 }
 
-void InitReplacementClassLoader(JNIEnv* env,
-                                const JavaRef<jobject>& class_loader) {
+JavaVM* GetVM() {
+  return nullptr;
+}
+
+void DisableJvmForTesting() {
+}
+
+void InitGlobalClassLoader(JNIEnv* env) {
 }
 
 ScopedJavaLocalRef<jclass> GetClass(JNIEnv* env,
                                     const char* class_name,
-                                    const std::string& split_name) {
+                                    const char* split_name) {
   return nullptr;
 }
 
@@ -53,7 +53,7 @@ ScopedJavaLocalRef<jclass> GetClass(JNIEnv* env, const char* class_name) {
 // sensitive.
 jclass LazyGetClass(JNIEnv* env,
                     const char* class_name,
-                    const std::string& split_name,
+                    const char* split_name,
                     std::atomic<jclass>* atomic_class_id) {
   return nullptr;
 }
@@ -114,22 +114,14 @@ bool ClearException(JNIEnv* env) {
 void CheckException(JNIEnv* env) {
 }
 
-std::string GetJavaExceptionInfo(JNIEnv* env, jthrowable java_throwable) {
+std::string GetJavaExceptionInfo(JNIEnv* env,
+                                 const JavaRef<jthrowable>& java_throwable) {
   return {};
 }
 
-#if BUILDFLAG(CAN_UNWIND_WITH_FRAME_POINTERS)
-
-JNIStackFrameSaver::JNIStackFrameSaver(void* current_fp)
-    : resetter_(&stack_frame_pointer, current_fp) {}
-
-JNIStackFrameSaver::~JNIStackFrameSaver() = default;
-
-void* JNIStackFrameSaver::SavedFrame() {
-  return stack_frame_pointer;
+std::string GetJavaStackTraceIfPresent() {
+  return {};
 }
-
-#endif  // BUILDFLAG(CAN_UNWIND_WITH_FRAME_POINTERS)
 
 }  // namespace android
 }  // namespace base

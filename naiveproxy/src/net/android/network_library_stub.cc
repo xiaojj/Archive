@@ -23,7 +23,7 @@ void AddTestRootCertificate(const uint8_t* cert, size_t len) {
 void ClearTestRootCertificates() {
 }
 
-bool IsCleartextPermitted(const std::string& host) {
+bool IsCleartextPermitted(base::StringPiece host) {
   return true;
 }
 
@@ -31,7 +31,7 @@ bool HaveOnlyLoopbackAddresses() {
   return false;
 }
 
-bool GetMimeTypeFromExtension(const std::string& extension,
+bool GetMimeTypeFromExtension(base::StringPiece extension,
                               std::string* result) {
   return false;
 }

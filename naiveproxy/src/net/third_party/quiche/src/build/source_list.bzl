@@ -11,6 +11,8 @@ protobuf_test_support = [
 quiche_core_hdrs = [
     "common/btree_scheduler.h",
     "common/capsule.h",
+    "common/http/http_header_block.h",
+    "common/http/http_header_storage.h",
     "common/masque/connect_udp_datagram_payload.h",
     "common/platform/api/quiche_bug_tracker.h",
     "common/platform/api/quiche_client_stats.h",
@@ -47,6 +49,7 @@ quiche_core_hdrs = [
     "common/quiche_mem_slice_storage.h",
     "common/quiche_protocol_flags_list.h",
     "common/quiche_random.h",
+    "common/quiche_simple_arena.h",
     "common/quiche_status_utils.h",
     "common/quiche_stream.h",
     "common/quiche_text_utils.h",
@@ -347,6 +350,7 @@ quiche_core_hdrs = [
     "quic/core/uber_quic_stream_id_manager.h",
     "quic/core/uber_received_packet_manager.h",
     "quic/core/web_transport_interface.h",
+    "quic/core/web_transport_stats.h",
     "quic/platform/api/quic_bug_tracker.h",
     "quic/platform/api/quic_client_stats.h",
     "quic/platform/api/quic_export.h",
@@ -375,7 +379,6 @@ quiche_core_hdrs = [
     "spdy/core/http2_frame_decoder_adapter.h",
     "spdy/core/http2_header_block.h",
     "spdy/core/http2_header_block_hpack_listener.h",
-    "spdy/core/http2_header_storage.h",
     "spdy/core/metadata_extension.h",
     "spdy/core/no_op_headers_handler.h",
     "spdy/core/recording_headers_handler.h",
@@ -389,13 +392,14 @@ quiche_core_hdrs = [
     "spdy/core/spdy_pinnable_buffer_piece.h",
     "spdy/core/spdy_prefixed_buffer_reader.h",
     "spdy/core/spdy_protocol.h",
-    "spdy/core/spdy_simple_arena.h",
     "spdy/core/zero_copy_output_buffer.h",
     "web_transport/complete_buffer_visitor.h",
     "web_transport/web_transport.h",
 ]
 quiche_core_srcs = [
     "common/capsule.cc",
+    "common/http/http_header_block.cc",
+    "common/http/http_header_storage.cc",
     "common/masque/connect_udp_datagram_payload.cc",
     "common/platform/api/quiche_hostname_utils.cc",
     "common/platform/api/quiche_mutex.cc",
@@ -407,6 +411,7 @@ quiche_core_srcs = [
     "common/quiche_ip_address_family.cc",
     "common/quiche_mem_slice_storage.cc",
     "common/quiche_random.cc",
+    "common/quiche_simple_arena.cc",
     "common/quiche_text_utils.cc",
     "common/simple_buffer_allocator.cc",
     "common/structured_headers.cc",
@@ -659,6 +664,7 @@ quiche_core_srcs = [
     "quic/core/tls_server_handshaker.cc",
     "quic/core/uber_quic_stream_id_manager.cc",
     "quic/core/uber_received_packet_manager.cc",
+    "quic/core/web_transport_stats.cc",
     "quic/platform/api/quic_socket_address.cc",
     "spdy/core/array_output_buffer.cc",
     "spdy/core/hpack/hpack_constants.cc",
@@ -669,8 +675,6 @@ quiche_core_srcs = [
     "spdy/core/hpack/hpack_output_stream.cc",
     "spdy/core/hpack/hpack_static_table.cc",
     "spdy/core/http2_frame_decoder_adapter.cc",
-    "spdy/core/http2_header_block.cc",
-    "spdy/core/http2_header_storage.cc",
     "spdy/core/metadata_extension.cc",
     "spdy/core/recording_headers_handler.cc",
     "spdy/core/spdy_alt_svc_wire_format.cc",
@@ -680,7 +684,6 @@ quiche_core_srcs = [
     "spdy/core/spdy_pinnable_buffer_piece.cc",
     "spdy/core/spdy_prefixed_buffer_reader.cc",
     "spdy/core/spdy_protocol.cc",
-    "spdy/core/spdy_simple_arena.cc",
     "web_transport/complete_buffer_visitor.cc",
 ]
 quiche_tool_support_hdrs = [
@@ -697,6 +700,7 @@ quiche_tool_support_hdrs = [
     "quic/tools/fake_proof_verifier.h",
     "quic/tools/quic_backend_response.h",
     "quic/tools/quic_client_base.h",
+    "quic/tools/quic_client_factory.h",
     "quic/tools/quic_memory_cache_backend.h",
     "quic/tools/quic_name_lookup.h",
     "quic/tools/quic_simple_client_session.h",
@@ -760,6 +764,7 @@ quiche_test_support_hdrs = [
     "http2/test_tools/http2_random.h",
     "http2/test_tools/http2_structure_decoder_test_util.h",
     "http2/test_tools/http2_structures_test_util.h",
+    "http2/test_tools/http2_trace_printer.h",
     "http2/test_tools/payload_decoder_base_test_util.h",
     "http2/test_tools/random_decoder_test_base.h",
     "http2/test_tools/random_util.h",
@@ -866,6 +871,7 @@ quiche_test_support_srcs = [
     "http2/test_tools/http2_random.cc",
     "http2/test_tools/http2_structure_decoder_test_util.cc",
     "http2/test_tools/http2_structures_test_util.cc",
+    "http2/test_tools/http2_trace_printer.cc",
     "http2/test_tools/payload_decoder_base_test_util.cc",
     "http2/test_tools/random_decoder_test_base.cc",
     "http2/test_tools/random_util.cc",
@@ -987,7 +993,6 @@ io_tool_support_hdrs = [
     "quic/masque/masque_utils.h",
     "quic/platform/api/quic_udp_socket_platform_api.h",
     "quic/tools/quic_client_default_network_helper.h",
-    "quic/tools/quic_client_factory.h",
     "quic/tools/quic_default_client.h",
     "quic/tools/quic_epoll_client_factory.h",
     "quic/tools/quic_server.h",
@@ -1046,6 +1051,8 @@ quiche_tests_srcs = [
     "binary_http/binary_http_message_test.cc",
     "common/btree_scheduler_test.cc",
     "common/capsule_test.cc",
+    "common/http/http_header_block_test.cc",
+    "common/http/http_header_storage_test.cc",
     "common/masque/connect_udp_datagram_payload_test.cc",
     "common/platform/api/quiche_file_utils_test.cc",
     "common/platform/api/quiche_hostname_utils_test.cc",
@@ -1066,6 +1073,7 @@ quiche_tests_srcs = [
     "common/quiche_linked_hash_map_test.cc",
     "common/quiche_mem_slice_storage_test.cc",
     "common/quiche_random_test.cc",
+    "common/quiche_simple_arena_test.cc",
     "common/quiche_text_utils_test.cc",
     "common/simple_buffer_allocator_test.cc",
     "common/structured_headers_generated_test.cc",
@@ -1075,6 +1083,7 @@ quiche_tests_srcs = [
     "http2/adapter/event_forwarder_test.cc",
     "http2/adapter/header_validator_test.cc",
     "http2/adapter/noop_header_validator_test.cc",
+    "http2/adapter/oghttp2_adapter_metadata_test.cc",
     "http2/adapter/oghttp2_adapter_test.cc",
     "http2/adapter/oghttp2_session_test.cc",
     "http2/adapter/oghttp2_util_test.cc",
@@ -1294,8 +1303,6 @@ quiche_tests_srcs = [
     "spdy/core/hpack/hpack_output_stream_test.cc",
     "spdy/core/hpack/hpack_round_trip_test.cc",
     "spdy/core/hpack/hpack_static_table_test.cc",
-    "spdy/core/http2_header_block_test.cc",
-    "spdy/core/http2_header_storage_test.cc",
     "spdy/core/metadata_extension_test.cc",
     "spdy/core/spdy_alt_svc_wire_format_test.cc",
     "spdy/core/spdy_frame_builder_test.cc",
@@ -1304,7 +1311,6 @@ quiche_tests_srcs = [
     "spdy/core/spdy_pinnable_buffer_piece_test.cc",
     "spdy/core/spdy_prefixed_buffer_reader_test.cc",
     "spdy/core/spdy_protocol_test.cc",
-    "spdy/core/spdy_simple_arena_test.cc",
 ]
 io_tests_hdrs = [
 ]
@@ -1469,6 +1475,19 @@ load_balancer_srcs = [
     "quic/load_balancer/load_balancer_server_id_map_test.cc",
     "quic/load_balancer/load_balancer_server_id_test.cc",
 ]
+moqt_hdrs = [
+    "quic/moqt/moqt_framer.h",
+    "quic/moqt/moqt_messages.h",
+    "quic/moqt/moqt_parser.h",
+    "quic/moqt/test_tools/moqt_test_message.h",
+]
+moqt_srcs = [
+    "quic/moqt/moqt_framer.cc",
+    "quic/moqt/moqt_framer_test.cc",
+    "quic/moqt/moqt_messages.cc",
+    "quic/moqt/moqt_parser.cc",
+    "quic/moqt/moqt_parser_test.cc",
+]
 binary_http_hdrs = [
     "binary_http/binary_http_message.h",
 ]
@@ -1570,20 +1589,6 @@ qbone_srcs = [
     "quic/qbone/qbone_stream_test.cc",
 ]
 blind_sign_auth_hdrs = [
-    "blind_sign_auth/anonymous_tokens/cpp/client/anonymous_tokens_rsa_bssa_client.h",
-    "blind_sign_auth/anonymous_tokens/cpp/crypto/anonymous_tokens_pb_openssl_converters.h",
-    "blind_sign_auth/anonymous_tokens/cpp/crypto/blind_signer.h",
-    "blind_sign_auth/anonymous_tokens/cpp/crypto/blinder.h",
-    "blind_sign_auth/anonymous_tokens/cpp/crypto/constants.h",
-    "blind_sign_auth/anonymous_tokens/cpp/crypto/crypto_utils.h",
-    "blind_sign_auth/anonymous_tokens/cpp/crypto/rsa_blind_signer.h",
-    "blind_sign_auth/anonymous_tokens/cpp/crypto/rsa_blinder.h",
-    "blind_sign_auth/anonymous_tokens/cpp/crypto/rsa_ssa_pss_verifier.h",
-    "blind_sign_auth/anonymous_tokens/cpp/crypto/verifier.h",
-    "blind_sign_auth/anonymous_tokens/cpp/shared/proto_utils.h",
-    "blind_sign_auth/anonymous_tokens/cpp/shared/status_utils.h",
-    "blind_sign_auth/anonymous_tokens/cpp/testing/proto_utils.h",
-    "blind_sign_auth/anonymous_tokens/cpp/testing/utils.h",
     "blind_sign_auth/blind_sign_auth.h",
     "blind_sign_auth/blind_sign_auth_interface.h",
     "blind_sign_auth/blind_sign_auth_protos.h",
@@ -1594,41 +1599,24 @@ blind_sign_auth_hdrs = [
     "blind_sign_auth/test_tools/mock_blind_sign_http_interface.h",
 ]
 blind_sign_auth_srcs = [
-    "blind_sign_auth/anonymous_tokens/cpp/client/anonymous_tokens_rsa_bssa_client.cc",
-    "blind_sign_auth/anonymous_tokens/cpp/crypto/anonymous_tokens_pb_openssl_converters.cc",
-    "blind_sign_auth/anonymous_tokens/cpp/crypto/crypto_utils.cc",
-    "blind_sign_auth/anonymous_tokens/cpp/crypto/rsa_blind_signer.cc",
-    "blind_sign_auth/anonymous_tokens/cpp/crypto/rsa_blinder.cc",
-    "blind_sign_auth/anonymous_tokens/cpp/crypto/rsa_ssa_pss_verifier.cc",
-    "blind_sign_auth/anonymous_tokens/cpp/shared/proto_utils.cc",
-    "blind_sign_auth/anonymous_tokens/cpp/testing/proto_utils.cc",
-    "blind_sign_auth/anonymous_tokens/cpp/testing/utils.cc",
     "blind_sign_auth/blind_sign_auth.cc",
     "blind_sign_auth/cached_blind_sign_auth.cc",
 ]
 blind_sign_auth_tests_hdrs = [
 ]
 blind_sign_auth_tests_srcs = [
-    "blind_sign_auth/anonymous_tokens/cpp/client/anonymous_tokens_rsa_bssa_client_test.cc",
-    "blind_sign_auth/anonymous_tokens/cpp/crypto/anonymous_tokens_pb_openssl_converters_test.cc",
-    "blind_sign_auth/anonymous_tokens/cpp/crypto/at_crypto_utils_test.cc",
-    "blind_sign_auth/anonymous_tokens/cpp/crypto/rsa_blind_signer_test.cc",
-    "blind_sign_auth/anonymous_tokens/cpp/crypto/rsa_blinder_test.cc",
-    "blind_sign_auth/anonymous_tokens/cpp/crypto/rsa_ssa_pss_verifier_test.cc",
-    "blind_sign_auth/anonymous_tokens/cpp/shared/proto_utils_test.cc",
     "blind_sign_auth/blind_sign_auth_test.cc",
     "blind_sign_auth/cached_blind_sign_auth_test.cc",
 ]
 protobuf_blind_sign_auth = [
-    "blind_sign_auth/anonymous_tokens/proto/anonymous_tokens.proto",
     "blind_sign_auth/proto/any.proto",
     "blind_sign_auth/proto/attestation.proto",
     "blind_sign_auth/proto/auth_and_sign.proto",
+    "blind_sign_auth/proto/blind_sign_auth_options.proto",
     "blind_sign_auth/proto/get_initial_data.proto",
     "blind_sign_auth/proto/key_services.proto",
     "blind_sign_auth/proto/public_metadata.proto",
     "blind_sign_auth/proto/spend_token_data.proto",
-    "blind_sign_auth/proto/timestamp.proto",
 ]
 libevent_hdrs = [
     "quic/bindings/quic_libevent.h",

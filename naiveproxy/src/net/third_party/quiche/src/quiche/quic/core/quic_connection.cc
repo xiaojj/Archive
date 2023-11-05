@@ -2349,14 +2349,8 @@ void QuicConnection::MaybeSendInResponseToPacket() {
     return;
   }
 
-  if (GetQuicReloadableFlag(quic_do_not_write_when_no_client_cid_available)) {
-    QUIC_RELOADABLE_FLAG_COUNT_N(quic_do_not_write_when_no_client_cid_available,
-                                 1, 3);
-    if (IsMissingDestinationConnectionID()) {
-      QUICHE_RELOADABLE_FLAG_COUNT_N(
-          quic_do_not_write_when_no_client_cid_available, 2, 3);
-      return;
-    }
+  if (IsMissingDestinationConnectionID()) {
+    return;
   }
 
   // If the writer is blocked, don't attempt to send packets now or in the send
@@ -2843,14 +2837,8 @@ void QuicConnection::WriteIfNotBlocked() {
         << ENDPOINT << "Tried to write in mid of packet processing";
     return;
   }
-  if (GetQuicReloadableFlag(quic_write_is_blocked_when_cid_is_missing)) {
-    QUIC_RELOADABLE_FLAG_COUNT_N(quic_write_is_blocked_when_cid_is_missing, 1,
-                                 2);
-    if (IsMissingDestinationConnectionID()) {
-      QUIC_RELOADABLE_FLAG_COUNT_N(quic_write_is_blocked_when_cid_is_missing, 2,
-                                   2);
-      return;
-    }
+  if (IsMissingDestinationConnectionID()) {
+    return;
   }
   if (!HandleWriteBlocked()) {
     OnCanWrite();
@@ -3244,12 +3232,8 @@ bool QuicConnection::CanWrite(HasRetransmittableData retransmittable) {
     return false;
   }
 
-  if (GetQuicReloadableFlag(quic_do_not_write_when_no_client_cid_available)) {
-    if (IsMissingDestinationConnectionID()) {
-      QUIC_RELOADABLE_FLAG_COUNT_N(
-          quic_do_not_write_when_no_client_cid_available, 3, 3);
-      return false;
-    }
+  if (IsMissingDestinationConnectionID()) {
+    return false;
   }
 
   if (version().CanSendCoalescedPackets() &&
@@ -5856,12 +5840,14 @@ void QuicConnection::SendAllPendingAcks() {
     frames.push_back(uber_received_packet_manager_.GetUpdatedAckFrame(
         static_cast<PacketNumberSpace>(i), clock_->ApproximateNow()));
     const bool flushed = packet_creator_.FlushAckFrame(frames);
+    // Consider reset ack states even when flush is not successful.
     if (!flushed) {
       // Connection is write blocked.
       QUIC_BUG_IF(quic_bug_12714_33,
                   !writer_->IsWriteBlocked() &&
                       !LimitedByAmplificationFactor(
-                          packet_creator_.max_packet_length()))
+                          packet_creator_.max_packet_length()) &&
+                      !IsMissingDestinationConnectionID())
           << "Writer not blocked and not throttled by amplification factor, "
              "but ACK not flushed for packet space:"
           << PacketNumberSpaceToString(static_cast<PacketNumberSpace>(i))
@@ -6348,10 +6334,6 @@ void QuicConnection::OnIdleNetworkDetected() {
                   idle_timeout_connection_close_behavior_);
 }
 
-void QuicConnection::OnBandwidthUpdateTimeout() {
-  visitor_->OnBandwidthUpdateTimeout();
-}
-
 void QuicConnection::OnKeepAliveTimeout() {
   if (retransmission_alarm_->IsSet() ||
       !visitor_->ShouldKeepConnectionAlive()) {
@@ -6642,8 +6624,13 @@ bool QuicConnection::SendPathChallenge(
         packet_creator_.SerializePathChallengeConnectivityProbingPacket(
             data_buffer);
     QUICHE_DCHECK_EQ(IsRetransmittable(*probing_packet),
-                     NO_RETRANSMITTABLE_DATA);
-    QUICHE_DCHECK_EQ(self_address, alternative_path_.self_address);
+                     NO_RETRANSMITTABLE_DATA)
+        << ENDPOINT << "Probing Packet contains retransmittable frames";
+    QUICHE_DCHECK_EQ(self_address, alternative_path_.self_address)
+        << ENDPOINT
+        << "Send PATH_CHALLENGE from self_address: " << self_address.ToString()
+        << " which is different from alt_path self address: "
+        << alternative_path_.self_address.ToString();
     WritePacketUsingWriter(std::move(probing_packet), writer, self_address,
                            peer_address, /*measure_rtt=*/false);
   } else {

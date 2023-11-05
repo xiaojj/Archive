@@ -46,11 +46,6 @@ if (is_mac) {
   import("//third_party/protobuf/proto_library.gni")
 }
 
-if (is_apple) {
-  # Buildflags to control time behavior on iOS in file shared with mac.
-  import("//base/time/buildflags/buildflags.gni")
-}
-
 if (is_win) {
   import("//build/config/win/control_flow_guard.gni")
 }
@@ -91,14 +86,6 @@ assert(!is_nacl || is_nacl_saigo,
 assert(!is_win || is_clang,
        "only clang-cl is supported on Windows, see https://crbug.com/988071")
 
-if (is_apple) {
-  assert(!use_blink || enable_mach_absolute_time_ticks,
-         "use_blink requires mach absolute time ticks")
-
-  assert(!is_mac || enable_mach_absolute_time_ticks,
-         "mac requires mach absolute time ticks")
-}
-
 # Determines whether libevent should be dep.
 dep_libevent = !is_fuchsia && !is_win && !is_mac && !is_nacl
 
@@ -107,6 +94,7 @@ use_libevent = dep_libevent && !is_ios
 
 if (is_android || is_robolectric) {
   import("//build/config/android/rules.gni")
+  import("//third_party/jni_zero/jni_zero.gni")
 }
 
 if (is_fuchsia) {
@@ -339,6 +327,8 @@ component("base") {
     "features.cc",
     "features.h",
     "file_version_info.h",
+    "files/block_tests_writing_to_special_dirs.cc",
+    "files/block_tests_writing_to_special_dirs.h",
     "files/dir_reader_fallback.h",
     "files/file.cc",
     "files/file.h",
@@ -440,6 +430,7 @@ component("base") {
     "memory/ref_counted_memory.h",
     "memory/safe_ref.h",
     "memory/safe_ref_traits.h",
+    "memory/safety_checks.h",
     "memory/scoped_policy.h",
     "memory/scoped_refptr.h",
     "memory/shared_memory_hooks.h",
@@ -548,8 +539,6 @@ component("base") {
     "power_monitor/battery_level_provider.h",
     "power_monitor/battery_state_sampler.cc",
     "power_monitor/battery_state_sampler.h",
-    "power_monitor/moving_average.cc",
-    "power_monitor/moving_average.h",
     "power_monitor/power_monitor.cc",
     "power_monitor/power_monitor.h",
     "power_monitor/power_monitor_device_source.cc",
@@ -831,7 +820,6 @@ component("base") {
     "task/thread_pool/worker_thread_set.h",
     "task/updateable_sequenced_task_runner.h",
     "template_util.h",
-    "test/malloc_wrapper.h",
     "test/scoped_logging_settings.h",
     "test/spin_wait.h",
     "third_party/cityhash/city.cc",
@@ -898,8 +886,6 @@ component("base") {
     "time/time_delta_from_string.h",
     "time/time_override.cc",
     "time/time_override.h",
-    "time/time_to_iso8601.cc",
-    "time/time_to_iso8601.h",
     "timer/elapsed_timer.cc",
     "timer/elapsed_timer.h",
     "timer/hi_res_timer_manager.h",
@@ -929,6 +915,7 @@ component("base") {
     "types/expected.h",
     "types/expected_internal.h",
     "types/expected_macros.h",
+    "types/fixed_array.h",
     "types/id_type.h",
     "types/optional_ref.h",
     "types/optional_util.h",
@@ -964,6 +951,13 @@ component("base") {
     #"process/process_metrics_openbsd.cc",
     #"system/sys_info_openbsd.cc",
   ]
+
+  if (is_apple || current_os == "freebsd" || current_os == "openbsd") {
+    sources += [
+      "posix/sysctl.cc",
+      "posix/sysctl.h",
+    ]
+  }
 
   if (is_posix) {
     sources += [
@@ -1054,10 +1048,6 @@ component("base") {
   # Its gateway to being a component is through `//base`, so we have
   # to provide the appropriate `#define` here.
   defines += [ "IS_RAW_PTR_IMPL" ]
-
-  if (is_apple) {
-    deps += [ "//base/time/buildflags:buildflags" ]
-  }
 
   if (build_rust_json_reader) {
     deps += [ "//third_party/rust/serde_json_lenient/v0_1/wrapper" ]
@@ -1498,6 +1488,8 @@ component("base") {
       "files/important_file_writer_cleaner.h",
       "files/scoped_temp_dir.cc",
       "files/scoped_temp_dir.h",
+      "files/scoped_temp_file.cc",
+      "files/scoped_temp_file.h",
       "json/json_file_value_serializer.cc",
       "json/json_file_value_serializer.h",
       "memory/discardable_memory.cc",
@@ -1682,6 +1674,7 @@ component("base") {
       "memory/platform_shared_memory_region_win.cc",
       "message_loop/message_pump_win.cc",
       "message_loop/message_pump_win.h",
+      "moving_window.h",
       "native_library_win.cc",
       "power_monitor/battery_level_provider_win.cc",
       "power_monitor/power_monitor_device_source_win.cc",
@@ -1830,6 +1823,8 @@ component("base") {
       "win/win_util.cc",
       "win/win_util.h",
       "win/wincrypt_shim.h",
+      "win/window_enumerator.cc",
+      "win/window_enumerator.h",
       "win/windows_defines.inc",
       "win/windows_h_disallowed.h",
       "win/windows_types.h",
@@ -1911,8 +1906,8 @@ component("base") {
       "apple/scoped_mach_port.h",
       "apple/scoped_mach_vm.cc",
       "apple/scoped_mach_vm.h",
-      "apple/scoped_nsautorelease_pool.cc",
       "apple/scoped_nsautorelease_pool.h",
+      "apple/scoped_nsautorelease_pool.mm",
       "apple/scoped_nsobject.h",
       "apple/scoped_objc_class_swizzler.h",
       "apple/scoped_objc_class_swizzler.mm",
@@ -1976,7 +1971,6 @@ component("base") {
       "mac/scoped_mach_msg_destroy.h",
       "mac/scoped_sending_event.h",
       "mac/scoped_sending_event.mm",
-      "mac/wrap_cg_display.h",
       "message_loop/message_pump_kqueue.cc",
       "message_loop/message_pump_kqueue.h",
       "native_library_mac.mm",

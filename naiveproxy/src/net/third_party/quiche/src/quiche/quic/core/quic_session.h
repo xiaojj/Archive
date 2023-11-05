@@ -59,7 +59,7 @@ namespace test {
 class QuicSessionPeer;
 }  // namespace test
 
-class QUIC_EXPORT_PRIVATE QuicSession
+class QUICHE_EXPORT QuicSession
     : public QuicConnectionVisitorInterface,
       public SessionNotifierInterface,
       public QuicStreamFrameDataProducer,
@@ -74,7 +74,7 @@ class QUIC_EXPORT_PRIVATE QuicSession
   // TODO(danzh): split this visitor to separate visitors for client and server
   // respectively as not all methods in this class are interesting to both
   // perspectives.
-  class QUIC_EXPORT_PRIVATE Visitor {
+  class QUICHE_EXPORT Visitor {
    public:
     virtual ~Visitor() {}
 
@@ -181,7 +181,6 @@ class QUIC_EXPORT_PRIVATE QuicSession
   void BeforeConnectionCloseSent() override {}
   bool ValidateToken(absl::string_view token) override;
   bool MaybeSendAddressToken() override;
-  void OnBandwidthUpdateTimeout() override {}
   void CreateContextForMultiPortPath(
       std::unique_ptr<MultiPortPathContextObserver> /*context_observer*/)
       override {}
@@ -417,7 +416,7 @@ class QUIC_EXPORT_PRIVATE QuicSession
   // and ResultDelegate to react upon the validation result.
   // Example implementations of these for path validation for connection
   // migration could be:
-  //  class QUIC_EXPORT_PRIVATE PathMigrationContext
+  //  class QUICHE_EXPORT PathMigrationContext
   //      : public QuicPathValidationContext {
   //   public:
   //    PathMigrationContext(std::unique_ptr<QuicPacketWriter> writer,
@@ -655,6 +654,15 @@ class QUIC_EXPORT_PRIVATE QuicSession
   void SetForceFlushForDefaultQueue(bool force_flush) {
     datagram_queue_.SetForceFlush(force_flush);
   }
+
+  // Returns the total number of expired datagrams dropped in the default
+  // datagram queue.
+  uint64_t expired_datagrams_in_default_queue() const {
+    return datagram_queue_.expired_datagram_count();
+  }
+
+  // Returns the total datagrams ever declared lost within the session.
+  uint64_t total_datagrams_lost() const { return total_datagrams_lost_; }
 
   // Find stream with |id|, returns nullptr if the stream does not exist or
   // closed. static streams and zombie streams are not considered active
@@ -1004,6 +1012,9 @@ class QUIC_EXPORT_PRIVATE QuicSession
 
   // The buffer used to queue the DATAGRAM frames.
   QuicDatagramQueue datagram_queue_;
+
+  // Total number of datagram frames declared lost within the session.
+  uint64_t total_datagrams_lost_ = 0;
 
   // TODO(fayang): switch to linked_hash_set when chromium supports it. The bool
   // is not used here.

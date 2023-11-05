@@ -328,6 +328,7 @@ jobs:
           key: ccache-mac-${{ matrix.arch }}-${{ hashFiles('CHROMIUM_VERSION') }}-${{ steps.ccache-timestamp.outputs.CCACHE_TIMESTAMP }}
           restore-keys: ccache-mac-${{ matrix.arch }}-${{ hashFiles('CHROMIUM_VERSION') }}-
       - run: brew install ninja ccache
+      - run: pip install setuptools
       - run: ./get-clang.sh
       - run: ccache -z
       - run: ./build.sh
@@ -380,6 +381,7 @@ jobs:
           key: ccache-ios-${{ matrix.arch }}-${{ hashFiles('CHROMIUM_VERSION') }}-${{ steps.ccache-timestamp.outputs.CCACHE_TIMESTAMP }}
           restore-keys: ccache-ios-${{ matrix.arch }}-${{ hashFiles('CHROMIUM_VERSION') }}-
       - run: brew install ninja ccache
+      - run: pip install setuptools
       - run: ./get-clang.sh
       - run: ccache -z
       - run: ./build.sh
