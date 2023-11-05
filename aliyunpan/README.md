@@ -1,106 +1,191 @@
-# 阿里云盘小白羊版
+<p align="center">
+  <img src="https://github.com/gaozhangmin/staticResource/blob/master/images/icon.png" alt="NebulaGraph Data Intelligence Suite(ngdi)">
+</p>
+<p align="center">
+    <br> English | <a href="README-CN.md">中文</a>
+</p>
+<p align="center">
+    <em>小白羊网盘 - powered by 阿里云盘Open.</em>
+</p>
 
-#### 项目说明
+<p align="center">
+<!--   <a href="https://github.com/gaozhangmin/staticResource/blob/master/images/wechat_public_account.png" target="_blank">
+    <img src="https://img.shields.io/badge/-微信关注“小白羊网盘”公众号-orange.svg" alt="#" align="right">
+  </a> -->
+  <a href="LICENSE" target="_blank">
+    <img alt="MIT License" src="https://img.shields.io/github/license/gaozhangmin/aliyunpan?style=flat-square&logoColor=white" />
+  </a>
 
-基于阿里云盘网页版开发的PC客户端，支持win7-11，macOS，linux
+  <!-- TypeScript Badge -->
+  <img alt="TypeScript" src="https://img.shields.io/badge/-TypeScript-blue?style=flat-square&logo=typescript&logoColor=white" />
 
-> **04.14：[v2.12.14版已发布](https://github.com/liupan1890/aliyunpan/issues/639)，适配官网升级**
+  <!-- VUE Badge -->
+  <img alt="VUE" src="https://img.shields.io/badge/Vue.js-35495E?style=flat-square&logo=vuedotjs&logoColor=white" />
 
-> **2022-01-02:在憋大招，耐心等待v3版**
-  <br />
-  
-v1.6.29：[https://wwe.lanzoui.com/b01npsg8h](https://wwe.lanzoui.com/b01npsg8h)
+  <a href="https://github.com/gaozhangmin/aliyunpan/releases" target="_blank">
+    <img alt="macOS" src="https://img.shields.io/badge/-macOS-black?style=flat-square&logo=apple&logoColor=white" />
+  </a>
 
-v2.12.14：[https://wwe.lanzoui.com/b01nqc4gd](https://wwe.lanzoui.com/b01nqc4gd)
+  <a href="https://github.com/gaozhangmin/aliyunpan/releases" target="_blank">
+    <img alt="Windows" src="https://img.shields.io/badge/-Windows-blue?style=flat-square&logo=windows&logoColor=white" />
+  </a>
 
-MacOS：[https://www.macwk.com/soft/aliyun-drive-xiaobaiyang](https://www.macwk.com/soft/aliyun-drive-xiaobaiyang)
+  <a href="https://github.com/gaozhangmin/aliyunpan/releases" target="_blank">
+    <img alt="Linux" src="https://img.shields.io/badge/-Linux-yellow?style=flat-square&logo=linux&logoColor=white" />
+  </a>  
 
-Mac版由macwk.com使用自有签名打包dmg，可以简单点击安装了(不需要输入终端命令)，推荐下载此版本，已测MacOS10.12-11.4,兼容M1
-<br />
+  <a href="https://github.com/gaozhangmin/aliyunpan/stargazers" target="_blank">
+    <img alt="Star" src="https://img.shields.io/github/stars/gaozhangmin/aliyunpan?style=social" />
+  </a>
 
-已经发布在小众软件发现频道，大爱小众[meta.appinn.net](https://meta.appinn.net)
+  <a href="https://github.com/gaozhangmin/aliyunpan/releases/latest" target="_blank">
+    <img alt="Star" src="https://img.shields.io/github/downloads/gaozhangmin/aliyunpan/total?style=social" />
+  </a>
 
-<br />
-
-已发布了使用帮助文档 [https://www.yuque.com/liupan1890/xiaobaiyang](https://www.yuque.com/liupan1890/xiaobaiyang)
-
-``````
-2021年11月28日 已完成功能：
-多账号登录、常用文件操作（新建文件夹、收藏、重命名、复制、移动、删除、详情、视频雪碧图）、
-在线播放原始视频、在线播放转码视频、在线预览图片、在线预览文本、在线预览 word/excel/ppt/pdf、
-连接到远程 Aria2 下载、上传文件、上传文件夹、批量改名、在线解压、回收站、收藏夹、
-分享文件、导入阿里云分享链接、缩略图列表、网盘内文件搜索、视频文件洗码
-
-等待完成的功能：
-相册功能、网盘和相册间文件互相复制、文件同步盘、重复文件扫描、帐号间文件复制
-``````
-
-<br />
-
-#
-
-![Image](https://raw.githubusercontent.com/liupan1890/aliyunpan/main/doc/v2.10.19.png)
-
-#
-
-#### 为什么要用小白羊？
-
-#### 一：因为更快
-
-##### 上传和下载4.4万个json格式小文件（共24GB）:	
-
-| 程序 | 总用时 | 用时基准 |
-| --- | ---: | ---: |
-| 上传&小白羊版 v2.10 | 24分钟 | :zap:58% |
-| 上传&PC客户端 v2.2.6 | 41分钟 | 100% |
-|  ... |  |  |  |  |
-| 下载&小白羊版 v2.10 | 25分钟 | :zap:42% |
-| 下载&PC客户端 v2.2.6  | 59分钟 | 100% |
+</p>
 
 
-##### 上传和下载33个大文件（共90GB）:
-
-| 程序 | 总用时 | 用时基准 |
-| --- | ---: | ---: |
-| 上传&小白羊版 v2.10 | 1分10秒 | :zap:44% |
-| 上传&PC客户端 v2.2.6 | 2分40秒 | 100% |
-|  ... |  |  |  |  |
-| 下载&小白羊版 v2.10 | 38分钟 | :zap:52% |
-| 下载&PC客户端 v2.2.6 | 72分钟 | 100% |
-
-<br/>
-
-详情参阅 ：[v2.10.19性能测试](https://github.com/liupan1890/aliyunpan/blob/main/v2.10.19%E6%80%A7%E8%83%BD%E6%B5%8B%E8%AF%95.md) 的性能测试文档
-
-#### 二：因为更好
-
-小白羊支持同时登录多个账号管理
-
-小白羊特有文件夹树，可以快速方便的操作
-
-小白羊支持直接在线播放网盘里的各种格式的视频并且是高清原画，支持外挂字幕/音轨/播放速度调整，比官方的格式更多更清晰
-
-小白羊可以显示文件夹体积，可以文件夹和文件混合排序(文件名/体积/时间)，并且文件名排序时更准确！
-
-小白羊可以通过远程Aria2功能把文件直接下载到远程的VPS/NAS上
-
-小白羊可以批量的对 大量文件/多层嵌套的文件夹 一键重命名
-
-小白羊可以快速复制文件，可以直接预览视频的雪碧图，可以直接删除文件
-
-小白羊支持数万文件夹和数万文件的管理，支持一次性列出文件夹里包含的全部文件
-
-小白羊支持单次上传/下载 一百万 量级的文件/文件夹
-
-小白羊仍在努力开发新功能，让大家使用起来更方便！
+[![](https://img.shields.io/badge/-%E5%8A%9F%E8%83%BD-blue)](#功能-) [![](https://img.shields.io/badge/-%E7%95%8C%E9%9D%A2-blue)](#界面-) [![](https://img.shields.io/badge/-%E5%AE%89%E8%A3%85-blue)](#安装-) [![](https://img.shields.io/badge/-%E5%BE%AE%E4%BF%A1%E5%85%AC%E4%BC%97%E5%8F%B7-blue)](#小白羊公众号-) [![](https://img.shields.io/badge/-%E4%BA%A4%E6%B5%81%E7%A4%BE%E5%8C%BA-blue)](#交流社区-) [![](https://img.shields.io/badge/-%E9%B8%A3%E8%B0%A2-blue)](#鸣谢-) [![](https://img.shields.io/badge/-%E5%A3%B0%E6%98%8E-blue)](#免责声明-)
 
 
-#
+# 功能 [![](https://img.shields.io/badge/-%E5%8A%9F%E8%83%BD-blue)](#功能-)
+1.根据阿里云盘Open平台api开发的网盘客户端，支持win7-11，macOS，linux <br>
 
-#### 常见问题请参阅帮助文档
+2.支持同时登录多个账号管理。 <br>
+
+3.提供特有的文件夹树，方便快速操作。 <br>
+
+4.在线播放网盘中各种格式的高清原画视频，并支持外挂字幕、音轨和播放速度调整，播放列表。<br>
+
+5.显示文件夹体积，支持文件夹和文件的混合排序（文件名/体积/时间）。<br>
+
+6.可以通过远程Aria2功能将文件直接下载到远程的VPS/NAS。<br>
+
+7.支持批量重命名大量文件和多层嵌套的文件夹。<br>
+
+8.可以快速复制文件，预览视频的雪碧图，并直接删除文件。<br>
+
+9.能够管理数万文件夹和数万文件，并一次性列出文件夹中的全部文件。<br>
+
+10.支持一次性上传/下载百万级的文件/文件夹。<br>
+
+<a href="#readme">
+    <img src="https://img.shields.io/badge/-返回顶部-orange.svg" alt="#" align="right">
+</a>
+
+# 界面 [![](https://img.shields.io/badge/-%E7%95%8C%E9%9D%A2-blue)](#界面-)
+<img src="https://github.com/gaozhangmin/staticResource/blob/master/images/main_window.png" width="270"><img src="https://github.com/gaozhangmin/staticResource/blob/master/images/download_page.png" width="270"><img src="https://github.com/gaozhangmin/staticResource/blob/master/images/movie_page.png" width="270">
+<img src="https://github.com/gaozhangmin/staticResource/blob/master/images/plugin_page.png" width="270"><img src="https://github.com/gaozhangmin/staticResource/blob/master/images/settings_page.png" width="270"><img src="https://github.com/gaozhangmin/staticResource/blob/master/images/share_page.png" width="270">
+<a href="#readme">
+<img src="https://img.shields.io/badge/-返回顶部-orange.svg" alt="#" align="right">
+</a>
+
+# 安装 [![](https://img.shields.io/badge/-%E5%AE%89%E8%A3%85-blue)](#安装-)
+
+## Windows
+> * ia32：64位x86架构的处理器
+> * x64：Apple M1处理器版本
+> * portable.exe 免安装版本
+
+1. 在 [Latest Release](https://github.com/gaozhangmin/aliyunpan/releases/latest) 页面下载 `XBYDriver-Setup-*.exe` 的安装包
+2. 下载完成后双击安装包进行安装
+3. 如果提示不安全，可以点击 `更多信息` -> `仍要运行` 进行安装
+4. 开始使用吧！
 
 
-#### 特别感谢 @jkqxl @iD2073 @ybbluesky 等为小白羊提供了大量的优化建议
+## MacOS
+> * x64：64位x86架构的处理器
+> * arm64：Apple M1处理器版本
+
+1.  去 [Latest Release](https://github.com/gaozhangmin/aliyunpan/releases/latest) 页面下载对应芯片以 `.dmg` 的安装包（Apple Silicon机器请使用arm64版本，并注意执行下文`xattr`指令）
+2.  下载完成后双击安装包进行安装，然后将 `小白羊` 拖动到 `Applications` 文件夹。
+3.  开始使用吧！
+
+## Linux
+> * x64：64位x86架构的处理器
+> * arm64：64位ARM架构的处理器。
+> * armv7l：32位ARM架构的处理器。
+### deb安装包
+1.  去 [Latest Release](https://github.com/gaozhangmin/aliyunpan/releases/latest) 页面下载以 `.deb` 结尾的安装包
+2.  执行`sudo dpkg -i XBYDriver-3.11.6-linux-amd64.deb`
+### AppImage安装包
+1.  去 [Latest Release](https://github.com/gaozhangmin/aliyunpan/releases/latest) 页面下载以 `.AppImage` 结尾的安装包
+2.  chmod +x XBYDriver-3.11.6-linux-amd64.AppImage`
+3.  下载完成后双击安装包进行安装。
+4.  开始使用吧！
 
 
+### 故障排除
 
+-   "小白羊网盘" can’t be opened because the developer cannot be verified.
+
+    <p align="center">
+      <img width="300" src="https://github.com/gaozhangmin/aliyunpan/assets/9278488/a850d1ed-f177-47a3-a61e-b82d46c6c47d" />
+    </p>
+
+    -   点击 `Cancel` 按钮，然后去 `设置` -> `隐私与安全性` 页面，点击 `仍要打开` 按钮，然后在弹出窗口里点击 `打开` 按钮即可，以后就再也不会有任何弹窗告警了 🎉
+
+        <p align="center">
+          <img width="500" src="https://github.com/gaozhangmin/aliyunpan/assets/9278488/53743a9f-0b0e-49e2-9331-aabc93483f73" /> <img width="200" src="https://github.com/gaozhangmin/aliyunpan/assets/9278488/0d97a636-7018-4b9a-bd68-27c1c17f6cd8" />
+        </p>
+
+    -   如果在 `隐私与安全性` 中找不到以上选项，或启动时提示文件损坏（Apple Silicon版本）。打开 `Terminal.app`，并输入以下命令（中途可能需要输入密码），然后重启 `小白羊云盘` 即可：
+
+        ```sh
+        sudo xattr -d com.apple.quarantine /Applications/小白羊云盘.app
+        ```
+<a href="#readme">
+    <img src="https://img.shields.io/badge/-返回顶部-orange.svg" alt="#" align="right">
+</a>
+
+# 小白羊公众号 [![](https://img.shields.io/badge/-%E5%BE%AE%E4%BF%A1%E5%85%AC%E4%BC%97%E5%8F%B7-blue)](#小白羊公众号-)
+<p align="center">
+  <img height="360" src="https://github.com/gaozhangmin/staticResource/blob/master/images/qrcode_search_white.png" />
+</p>
+<a href="#readme">
+    <img src="https://img.shields.io/badge/-返回顶部-orange.svg" alt="#" align="right">
+</a>
+
+[//]: # (# 请作者喝一杯咖啡 [![]&#40;https://img.shields.io/badge/-%E8%AF%B7%E5%96%9D%E5%92%96%E5%95%A1-blue&#41;]&#40;#请作者喝一杯咖啡-&#41;)
+
+[//]: # (<p align="center">)
+
+[//]: # (  <img height="360" src="https://github.com/gaozhangmin/staticResource/blob/master/images/wechat_pay.jpeg" />)
+
+[//]: # (  <img height="360" src="https://github.com/gaozhangmin/staticResource/blob/master/images/alipay.jpeg" />)
+
+[//]: # (</p>)
+
+[//]: # (<a href="#readme">)
+
+[//]: # (    <img src="https://img.shields.io/badge/-返回顶部-orange.svg" alt="#" align="right">)
+
+[//]: # (</a>)
+
+# 交流社区 [![](https://img.shields.io/badge/-%E4%BA%A4%E6%B5%81%E7%A4%BE%E5%8C%BA-blue)](#交流社区-)
+
+#### Telegram
+[![Telegram-group](https://img.shields.io/badge/Telegram-%E7%BE%A4%E7%BB%84-blue)](https://t.me/+wjdFeQ7ZNNE1NmM1)
+
+
+# 鸣谢 [![](https://img.shields.io/badge/-%E9%B8%A3%E8%B0%A2-blue)](#鸣谢-)
+本项目基于 https://github.com/liupan1890/aliyunpan 仓库继续开发。
+
+感谢作者 [liupan1890](https://github.com/liupan1890)
+<a href="#readme">
+<img src="https://img.shields.io/badge/-返回顶部-orange.svg" alt="#" align="right">
+</a>
+
+# 免责声明 [![](https://img.shields.io/badge/-%E5%A3%B0%E6%98%8E-blue)](#免责声明-)
+1.本程序为免费开源项目，旨在分享网盘文件，方便下载以及学习electron，使用时请遵守相关法律法规，请勿滥用；
+
+2.本程序通过调用官方sdk/接口实现，无破坏官方接口行为；
+
+3.本程序仅做302重定向/流量转发，不拦截、存储、篡改任何用户数据；
+
+4.在使用本程序之前，你应了解并承担相应的风险，包括但不限于账号被ban，下载限速等，与本程序无关；
+
+5.如有侵权，请通过邮件与我联系，会及时处理。
+<a href="#readme">
+<img src="https://img.shields.io/badge/-返回顶部-orange.svg" alt="#" align="right">
+</a>

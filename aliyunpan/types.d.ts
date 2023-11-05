@@ -24,8 +24,11 @@ declare interface Window {
   WebUserToken: any
   WebReload: any
   WebRelaunch: any
-  WebRelaunchAria: any
+  WebRelaunchAria: () => Promise<number>
+  WebRelaunchAlist: () => Promise<number>
+  WebResetAlistPwd:any
   WebSetProgressBar: any
+  WebGetCookies: any
   WebSetCookies: any
   WebOpenWindow: any
   WebShutDown: any
