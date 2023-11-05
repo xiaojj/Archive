@@ -83,6 +83,7 @@ jobs:
           ${GCRS} https://github.com/xiaorouji/openwrt-passwall2 openwrt-passwall2
           ${GCRS} https://github.com/kenzok8/openwrt-packages openwrt-packages
           ${GCRS} https://github.com/kenzok8/small small
+          ${GCRS} https://github.com/vernesong/OpenClash openclash
           # Network Tools
           ${GCRS} https://github.com/klzgrad/forwardproxy forwardproxy
           ${GCRS} https://github.com/wangyu-/udp2raw udp2raw
@@ -137,6 +138,36 @@ jobs:
       - name: Backup Binaries
         run: |
           sudo apt install -y aria2
+          # using 7zip
+          mkdir -p 7zip
+          wget "https://www.7-zip.org/a/7z2301-linux-x64.tar.xz" -O 7zip/7zip.tar.xz
+          tar -xf 7zip/7zip.tar.xz -C 7zip/ && mv 7zip/7zz .
+          rm -rf 7zip && chmod +x 7zz
+          sudo mv 7zz /usr/bin
+          # clash premium
+          mkdir -p clash/Clients
+          pushd clash/Clients || exit 1
+          aria2c -c -x 8 -s 8 -j 1 -k 1M "https://github.com/bolucat/rules/releases/download/software-archived/clash.7z"
+          7zz e clash.7z && rm -rf clash.7z
+          popd || exit 1
+          # clash-cfa
+          mkdir -p clash-cfa/Clients
+          pushd clash-cfa/Clients || exit 1
+          aria2c -c -x 8 -s 8 -j 1 -k 1M "https://github.com/bolucat/rules/releases/download/software-archived/clash-cfa.7z"
+          7zz e clash-cfa.7z && rm -rf clash-cfa.7z
+          popd || exit 1
+          # clash-cfw
+          mkdir -p clash-cfw/Clients
+          pushd clash-cfw/Clients || exit 1
+          aria2c -c -x 8 -s 8 -j 1 -k 1M "https://github.com/bolucat/rules/releases/download/software-archived/clash-cfw.7z"
+          7zz e clash-cfw.7z && rm -rf clash-cfw.7z
+          popd || exit 1
+          # clashx
+          mkdir -p clashx/Clients
+          pushd clashx/Clients || exit 1
+          aria2c -c -x 8 -s 8 -j 1 -k 1M "https://github.com/bolucat/rules/releases/download/software-archived/clashx.7z"
+          7zz e clashx.7z && rm -rf clashx.7z
+          popd || exit 1
           # shadowsocks-windows
           mkdir -p shadowsocks-windows/Clients
           pushd shadowsocks-windows/Clients || exit 1
@@ -343,7 +374,7 @@ jobs:
           mkdir -p release
           # using 7zip
           mkdir -p 7zip
-          wget "https://www.7-zip.org/a/7z2201-linux-x64.tar.xz" -O 7zip/7zip.tar.xz
+          wget "https://www.7-zip.org/a/7z2301-linux-x64.tar.xz" -O 7zip/7zip.tar.xz
           tar -xf 7zip/7zip.tar.xz -C 7zip/ && mv 7zip/7zz .
           rm -rf 7zip && chmod +x 7zz
           # Compressing
@@ -400,6 +431,7 @@ jobs:
           helloworld
           openwrt-packages
           small
+          openclash
           forwardproxy
           glider
           gost
