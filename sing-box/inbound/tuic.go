@@ -4,12 +4,12 @@ package inbound
 
 import (
 	"context"
-	"github.com/sagernet/sing-box/common/uot"
 	"net"
 	"time"
 
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/common/tls"
+	"github.com/sagernet/sing-box/common/uot"
 	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-box/option"
