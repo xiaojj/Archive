@@ -41,7 +41,7 @@ The IPv6 address to bind to.
 
 #### routing_mark
 
-!!! quote ""
+!!! error ""
 
     Only supported on Linux.
 

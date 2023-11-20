@@ -2,7 +2,7 @@
 description: 欢迎来到该 sing-box 项目的文档页。
 ---
 
-# :material-home: 开始
+# 开始
 
 欢迎来到该 sing-box 项目的文档页。
 

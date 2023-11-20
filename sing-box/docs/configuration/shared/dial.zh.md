@@ -44,7 +44,7 @@
 
 #### routing_mark
 
-!!! quote ""
+!!! error ""
 
     仅支持 Linux。
 

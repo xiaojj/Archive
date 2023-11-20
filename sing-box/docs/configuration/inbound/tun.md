@@ -1,4 +1,4 @@
-!!! quote ""
+!!! error ""
 
     Only supported on Linux, Windows and macOS.
 
@@ -102,7 +102,7 @@ The maximum transmission unit.
 
 Set the default route to the Tun.
 
-!!! quote ""
+!!! error ""
 
     To avoid traffic loopback, set `route.auto_detect_interface` or `route.default_interface` or `outbound.bind_interface`
 
@@ -171,11 +171,11 @@ TCP/IP stack.
 
 !!! warning ""
 
-    gVisor and LWIP stacks is not included by default, see [Installation](./#installation).
+    gVisor and LWIP stacks is not included by default, see [Installation](/#installation).
 
 #### include_interface
 
-!!! quote ""
+!!! error ""
 
     Interface rules are only supported on Linux and require auto_route.
 
@@ -191,7 +191,7 @@ Conflict with `include_interface`.
 
 #### include_uid
 
-!!! quote ""
+!!! error ""
 
     UID rules are only supported on Linux and require auto_route.
 
@@ -211,7 +211,7 @@ Exclude users in route, but in range.
 
 #### include_android_user
 
-!!! quote ""
+!!! error ""
 
     Android user and package rules are only supported on Android and require auto_route.
 

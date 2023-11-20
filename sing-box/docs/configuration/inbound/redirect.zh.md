@@ -1,4 +1,4 @@
-!!! quote ""
+!!! error ""
 
     仅支持 Linux 和 macOS。
 
