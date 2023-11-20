@@ -78,12 +78,6 @@
           1000
         ],
         "clash_mode": "direct",
-        "wifi_ssid": [
-          "My WIFI"
-        ],
-        "wifi_bssid": [
-          "00:00:00:00:00:00"
-        ],
         "invert": false,
         "outbound": [
           "direct"
@@ -191,7 +185,7 @@ DNS 查询类型。值可以为整数或者类型名称字符串。
 
 #### process_name
 
-!!! quote ""
+!!! error ""
 
     仅支持 Linux、Windows 和 macOS.
 
@@ -199,7 +193,7 @@ DNS 查询类型。值可以为整数或者类型名称字符串。
 
 #### process_path
 
-!!! quote ""
+!!! error ""
 
     仅支持 Linux、Windows 和 macOS.
 
@@ -211,7 +205,7 @@ DNS 查询类型。值可以为整数或者类型名称字符串。
 
 #### user
 
-!!! quote ""
+!!! error ""
 
     仅支持 Linux。
 
@@ -219,7 +213,7 @@ DNS 查询类型。值可以为整数或者类型名称字符串。
 
 #### user_id
 
-!!! quote ""
+!!! error ""
 
     仅支持 Linux。
 
@@ -228,22 +222,6 @@ DNS 查询类型。值可以为整数或者类型名称字符串。
 #### clash_mode
 
 匹配 Clash 模式。
-
-#### wifi_ssid
-
-!!! quote ""
-
-    仅在 Android 与 iOS 的图形客户端中支持。
-
-匹配 WiFi SSID。
-
-#### wifi_bssid
-
-!!! quote ""
-
-    仅在 Android 与 iOS 的图形客户端中支持。
-
-匹配 WiFi BSSID。
 
 #### invert
 

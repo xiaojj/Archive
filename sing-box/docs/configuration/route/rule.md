@@ -83,12 +83,6 @@
           1000
         ],
         "clash_mode": "direct",
-        "wifi_ssid": [
-          "My WIFI"
-        ],
-        "wifi_bssid": [
-          "00:00:00:00:00:00"
-        ],
         "invert": false,
         "outbound": "direct"
       },
@@ -196,7 +190,7 @@ Match port range.
 
 #### process_name
 
-!!! quote ""
+!!! error ""
 
     Only supported on Linux, Windows, and macOS.
 
@@ -204,7 +198,7 @@ Match process name.
 
 #### process_path
 
-!!! quote ""
+!!! error ""
 
     Only supported on Linux, Windows, and macOS.
 
@@ -216,7 +210,7 @@ Match android package name.
 
 #### user
 
-!!! quote ""
+!!! error ""
 
     Only supported on Linux.
 
@@ -224,7 +218,7 @@ Match user name.
 
 #### user_id
 
-!!! quote ""
+!!! error ""
 
     Only supported on Linux.
 
@@ -233,22 +227,6 @@ Match user id.
 #### clash_mode
 
 Match Clash mode.
-
-#### wifi_ssid
-
-!!! quote ""
-
-    Only supported in graphical clients on Android and iOS.
-
-Match WiFi SSID.
-
-#### wifi_bssid
-
-!!! quote ""
-
-    Only supported in graphical clients on Android and iOS.
-
-Match WiFi BSSID.
 
 #### invert
 

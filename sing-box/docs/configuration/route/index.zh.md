@@ -32,7 +32,7 @@
 
 #### auto_detect_interface
 
-!!! quote ""
+!!! error ""
 
     仅支持 Linux、Windows 和 macOS。
 
@@ -42,7 +42,7 @@
 
 #### override_android_vpn
 
-!!! quote ""
+!!! error ""
 
     仅支持 Android。
 
@@ -50,7 +50,7 @@
 
 #### default_interface
 
-!!! quote ""
+!!! error ""
 
     仅支持 Linux、Windows 和 macOS。
 
@@ -60,7 +60,7 @@
 
 #### default_mark
 
-!!! quote ""
+!!! error ""
 
     仅支持 Linux。
 
