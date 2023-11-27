@@ -11,7 +11,7 @@ import Preferences
 import Alamofire
 import SwiftyJSON
 
-final class PreferenceSubscribeViewController: NSViewController, PreferencePane {
+final class PreferenceSubscribeViewController: NSViewController, PreferencePane, NSTabViewDelegate {
     let preferencePaneIdentifier = PreferencePane.Identifier.subscribeTab
     let preferencePaneTitle = "Subscription"
     let toolbarItemIcon = NSImage(named: NSImage.userAccountsName)!
@@ -41,7 +41,10 @@ final class PreferenceSubscribeViewController: NSViewController, PreferencePane 
         self.logView.isHidden = true
         self.subscribeView.isHidden = false
         self.logArea.string = ""
-
+        // table view
+        self.tableView.delegate = self
+        self.tableView.dataSource = self
+        self.tableView.reloadData()
         // reload tableview
         V2raySubscription.loadConfig()
 
@@ -162,8 +165,7 @@ final class PreferenceSubscribeViewController: NSViewController, PreferencePane 
     }
 }
 
-extension PreferenceSubscribeViewController: NSTableViewDataSource, NSTableViewDelegate {
-
+extension PreferenceSubscribeViewController: NSTableViewDataSource {
     func numberOfRows(in tableView: NSTableView) -> Int {
         return V2raySubscription.count()
     }
@@ -181,5 +183,24 @@ extension PreferenceSubscribeViewController: NSTableViewDataSource, NSTableViewD
             return cell
         }
         return nil
+    }
+
+    // edit cell
+    func tableView(_ tableView: NSTableView, setObjectValue: Any?, for forTableColumn: NSTableColumn?, row: Int) {
+        print("edit row", forTableColumn, setObjectValue, row)
+    }
+}
+
+extension PreferenceSubscribeViewController: NSTableViewDelegate {
+    // For NSTableViewDelegate
+    func tableViewSelectionDidChange(_ notification: Notification) {
+        let idx = self.tableView.selectedRow
+        if idx > -1 {
+            if let item = V2raySubscription.loadSubItem(idx: idx) {
+                // choose
+                self.remark.stringValue = item.remark
+                self.url.stringValue = item.url
+            }
+        }
     }
 }
