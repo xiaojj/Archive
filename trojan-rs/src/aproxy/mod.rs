@@ -1,6 +1,10 @@
-use std::{net::SocketAddr, sync::Arc};
+use std::{net::SocketAddr, sync::Arc, time::SystemTime};
 
-use rustls::{ClientConfig, OwnedTrustAnchor, RootCertStore, ServerName};
+use rustls::{
+    client::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier},
+    Certificate, ClientConfig, DigitallySignedStruct, Error, OwnedTrustAnchor, RootCertStore,
+    ServerName,
+};
 use tokio::{
     net::{TcpListener, UdpSocket},
     runtime::Runtime,
@@ -27,6 +31,33 @@ pub fn run() -> Result<()> {
     runtime.block_on(async_run())
 }
 
+pub struct InsecureAuth;
+
+impl ServerCertVerifier for InsecureAuth {
+    fn verify_server_cert(
+        &self,
+        _end_entity: &Certificate,
+        _intermediates: &[Certificate],
+        _server_name: &ServerName,
+        _scts: &mut dyn Iterator<Item = &[u8]>,
+        _ocsp_response: &[u8],
+        _now: SystemTime,
+    ) -> std::result::Result<ServerCertVerified, Error> {
+        log::info!("insecure verify server cert ok");
+        Ok(ServerCertVerified::assertion())
+    }
+
+    fn verify_tls13_signature(
+        &self,
+        _message: &[u8],
+        _cert: &Certificate,
+        _dss: &DigitallySignedStruct,
+    ) -> std::result::Result<HandshakeSignatureValid, Error> {
+        log::info!("insecure verify tls13 signature ok");
+        Ok(HandshakeSignatureValid::assertion())
+    }
+}
+
 fn prepare_tls_config() -> Arc<ClientConfig> {
     let mut root_store = RootCertStore::empty();
     root_store.add_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.iter().map(|ta| {
@@ -36,14 +67,21 @@ fn prepare_tls_config() -> Arc<ClientConfig> {
             ta.name_constraints,
         )
     }));
-    let config = ClientConfig::builder()
+    let mut config = ClientConfig::builder()
         .with_safe_defaults()
         .with_root_certificates(root_store)
         .with_no_client_auth();
+    if OPTIONS.proxy_args().insecure {
+        log::info!("insecure settings");
+        config
+            .dangerous()
+            .set_certificate_verifier(Arc::new(InsecureAuth));
+    }
     Arc::new(config)
 }
 
 async fn async_run() -> Result<()> {
+    log::info!("insecure:{}", OPTIONS.proxy_args().insecure);
     let addr: SocketAddr = OPTIONS.local_addr.parse()?;
     let tcp_listener = TcpListener::from_std(new_socket(addr, false)?.into())?;
     let udp_listener = UdpSocket::from_std(new_socket(addr, true)?.into())?;
