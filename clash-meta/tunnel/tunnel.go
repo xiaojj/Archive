@@ -12,16 +12,17 @@ import (
 
 	"github.com/jpillora/backoff"
 
-	N "github.com/Dreamacro/clash/common/net"
-	"github.com/Dreamacro/clash/component/nat"
-	P "github.com/Dreamacro/clash/component/process"
-	"github.com/Dreamacro/clash/component/resolver"
-	"github.com/Dreamacro/clash/component/sniffer"
-	C "github.com/Dreamacro/clash/constant"
-	"github.com/Dreamacro/clash/constant/provider"
-	icontext "github.com/Dreamacro/clash/context"
-	"github.com/Dreamacro/clash/log"
-	"github.com/Dreamacro/clash/tunnel/statistic"
+	N "github.com/metacubex/mihomo/common/net"
+	"github.com/metacubex/mihomo/component/nat"
+	P "github.com/metacubex/mihomo/component/process"
+	"github.com/metacubex/mihomo/component/resolver"
+	"github.com/metacubex/mihomo/component/sniffer"
+	C "github.com/metacubex/mihomo/constant"
+	"github.com/metacubex/mihomo/constant/features"
+	"github.com/metacubex/mihomo/constant/provider"
+	icontext "github.com/metacubex/mihomo/context"
+	"github.com/metacubex/mihomo/log"
+	"github.com/metacubex/mihomo/tunnel/statistic"
 )
 
 var (
@@ -620,13 +621,24 @@ func match(metadata *C.Metadata) (C.Proxy, C.Rule, error) {
 
 		if attemptProcessLookup && !findProcessMode.Off() && (findProcessMode.Always() || rule.ShouldFindProcess()) {
 			attemptProcessLookup = false
-			uid, path, err := P.FindProcessName(metadata.NetWork.String(), metadata.SrcIP, int(metadata.SrcPort))
-			if err != nil {
-				log.Debugln("[Process] find process %s: %v", metadata.String(), err)
+			if !features.CMFA {
+				// normal check for process
+				uid, path, err := P.FindProcessName(metadata.NetWork.String(), metadata.SrcIP, int(metadata.SrcPort))
+				if err != nil {
+					log.Debugln("[Process] find process %s error: %v", metadata.String(), err)
+				} else {
+					metadata.Process = filepath.Base(path)
+					metadata.ProcessPath = path
+					metadata.Uid = uid
+				}
 			} else {
-				metadata.Process = filepath.Base(path)
-				metadata.ProcessPath = path
-				metadata.Uid = uid
+				// check package names
+				pkg, err := P.FindPackageName(metadata)
+				if err != nil {
+					log.Debugln("[Process] find process %s error: %v", metadata.String(), err)
+				} else {
+					metadata.Process = pkg
+				}
 			}
 		}
 

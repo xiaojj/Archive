@@ -1,0 +1,81 @@
+{
+  "package": {
+    "productName": "Clash Verge",
+    "version": "1.4.1"
+  },
+  "build": {
+    "distDir": "../dist",
+    "devPath": "http://localhost:3000/",
+    "beforeDevCommand": "pnpm run web:dev",
+    "beforeBuildCommand": "pnpm run web:build"
+  },
+  "tauri": {
+    "systemTray": {
+      "iconPath": "icons/tray-icon.ico",
+      "iconAsTemplate": true
+    },
+    "bundle": {
+      "active": true,
+      "targets": "all",
+      "identifier": "moe.elaina.clash.verge",
+      "icon": [
+        "icons/32x32.png",
+        "icons/128x128.png",
+        "icons/128x128@2x.png",
+        "icons/icon-new.icns",
+        "icons/icon.ico"
+      ],
+      "resources": ["resources"],
+      "externalBin": ["sidecar/clash-meta"],
+      "copyright": "© 2022 zzzgydi All Rights Reserved",
+      "category": "DeveloperTool",
+      "shortDescription": "A Clash GUI based on tauri.",
+      "longDescription": "A Clash GUI based on tauri.",
+      "deb": {
+        "depends": ["openssl"]
+      },
+      "macOS": {
+        "frameworks": [],
+        "minimumSystemVersion": "",
+        "exceptionDomain": "",
+        "signingIdentity": null,
+        "entitlements": null
+      },
+      "windows": {
+        "certificateThumbprint": null,
+        "digestAlgorithm": "sha256",
+        "timestampUrl": "",
+        "wix": {
+          "language": ["zh-CN", "en-US", "ru-RU"]
+        }
+      }
+    },
+    "updater": {
+      "active": true,
+      "endpoints": [
+        "https://mirror.ghproxy.com/https://github.com/wonfen/clash-verge-rev/releases/download/updater/update-proxy.json",
+        "https://github.com/wonfen/clash-verge-rev/releases/download/updater/update.json"
+      ],
+      "dialog": false,
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEQyOEMyRjBCQkVGOUJEREYKUldUZnZmbStDeStNMHU5Mmo1N24xQXZwSVRYbXA2NUpzZE5oVzlqeS9Bc0t6RVV4MmtwVjBZaHgK"
+    },
+    "allowlist": {
+      "shell": {
+        "all": true
+      },
+      "window": {
+        "all": true
+      },
+      "process": {
+        "all": true
+      },
+      "globalShortcut": {
+        "all": true
+      }
+    },
+    "windows": [],
+    "security": {
+      "csp": "script-src 'unsafe-eval' 'self'; default-src blob: data: filesystem: ws: wss: http: https: tauri: 'unsafe-eval' 'unsafe-inline' 'self'; img-src data: 'self';"
+    }
+  }
+}

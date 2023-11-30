@@ -7,7 +7,7 @@ import (
 	"net/netip"
 	"strconv"
 
-	"github.com/Dreamacro/clash/transport/socks5"
+	"github.com/metacubex/mihomo/transport/socks5"
 )
 
 // Socks addr type
@@ -147,6 +147,9 @@ type Metadata struct {
 	SpecialProxy string     `json:"specialProxy"`
 	SpecialRules string     `json:"specialRules"`
 	RemoteDst    string     `json:"remoteDestination"`
+
+	RawSrcAddr net.Addr 	`json:"-"`
+	RawDstAddr net.Addr 	`json:"-"`
 	// Only domain rule
 	SniffHost string `json:"sniffHost"`
 }
@@ -161,7 +164,7 @@ func (m *Metadata) SourceAddress() string {
 
 func (m *Metadata) SourceDetail() string {
 	if m.Type == INNER {
-		return fmt.Sprintf("%s", ClashName)
+		return fmt.Sprintf("%s", MihomoName)
 	}
 
 	switch {
