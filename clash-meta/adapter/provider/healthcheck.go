@@ -6,18 +6,19 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Dreamacro/clash/common/atomic"
-	"github.com/Dreamacro/clash/common/batch"
-	"github.com/Dreamacro/clash/common/singledo"
-	"github.com/Dreamacro/clash/common/utils"
-	C "github.com/Dreamacro/clash/constant"
-	"github.com/Dreamacro/clash/log"
+	"github.com/metacubex/mihomo/common/atomic"
+	"github.com/metacubex/mihomo/common/batch"
+	"github.com/metacubex/mihomo/common/singledo"
+	"github.com/metacubex/mihomo/common/utils"
+	C "github.com/metacubex/mihomo/constant"
+	"github.com/metacubex/mihomo/log"
 
 	"github.com/dlclark/regexp2"
 )
 
 const (
 	defaultURLTestTimeout = time.Second * 5
+	defaultURLTestURL     = "https://www.gstatic.com/generate_204"
 )
 
 type HealthCheckOption struct {
@@ -148,6 +149,10 @@ func (hc *HealthCheck) stop() {
 }
 
 func (hc *HealthCheck) check() {
+	if len(hc.proxies) == 0 {
+		return
+	}
+
 	_, _, _ = hc.singleDo.Do(func() (struct{}, error) {
 		id := utils.NewUUIDV4().String()
 		log.Debugln("Start New Health Checking {%s}", id)
@@ -223,6 +228,7 @@ func NewHealthCheck(proxies []C.Proxy, url string, interval uint, lazy bool, exp
 	if len(url) == 0 {
 		interval = 0
 		expectedStatus = nil
+		url = defaultURLTestURL
 	}
 
 	return &HealthCheck{

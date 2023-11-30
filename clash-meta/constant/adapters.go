@@ -9,15 +9,16 @@ import (
 	"sync"
 	"time"
 
-	N "github.com/Dreamacro/clash/common/net"
-	"github.com/Dreamacro/clash/common/utils"
-	"github.com/Dreamacro/clash/component/dialer"
+	N "github.com/metacubex/mihomo/common/net"
+	"github.com/metacubex/mihomo/common/utils"
+	"github.com/metacubex/mihomo/component/dialer"
 )
 
 // Adapter Type
 const (
 	Direct AdapterType = iota
 	Reject
+	RejectDrop
 	Compatible
 	Pass
 
@@ -43,6 +44,7 @@ const (
 
 const (
 	DefaultTCPTimeout           = 5 * time.Second
+	DefaultDropTime             = 12 * DefaultTCPTimeout
 	DefaultUDPTimeout           = DefaultTCPTimeout
 	DefaultTLSTimeout           = DefaultTCPTimeout
 	DefaultMaxHealthCheckUrlNum = 16
@@ -179,6 +181,8 @@ func (at AdapterType) String() string {
 		return "Direct"
 	case Reject:
 		return "Reject"
+	case RejectDrop:
+		return "RejectDrop"
 	case Compatible:
 		return "Compatible"
 	case Pass:

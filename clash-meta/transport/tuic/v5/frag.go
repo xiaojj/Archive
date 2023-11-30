@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"sync"
 
-	"github.com/Dreamacro/clash/common/cache"
+	"github.com/metacubex/mihomo/common/cache"
 
 	"github.com/metacubex/quic-go"
 )
@@ -37,7 +37,7 @@ func fragWriteNative(quicConn quic.Connection, packet Packet, buf *bytes.Buffer,
 			return
 		}
 		data := buf.Bytes()
-		err = quicConn.SendMessage(data)
+		err = quicConn.SendDatagram(data)
 		if err != nil {
 			return
 		}

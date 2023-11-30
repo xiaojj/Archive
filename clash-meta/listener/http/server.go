@@ -3,9 +3,10 @@ package http
 import (
 	"net"
 
-	"github.com/Dreamacro/clash/adapter/inbound"
-	"github.com/Dreamacro/clash/common/cache"
-	C "github.com/Dreamacro/clash/constant"
+	"github.com/metacubex/mihomo/adapter/inbound"
+	"github.com/metacubex/mihomo/common/cache"
+	C "github.com/metacubex/mihomo/constant"
+	"github.com/metacubex/mihomo/constant/features"
 )
 
 type Listener struct {
@@ -64,6 +65,11 @@ func NewWithAuthenticate(addr string, tunnel C.Tunnel, authenticate bool, additi
 					break
 				}
 				continue
+			}
+			if features.CMFA {
+				if t, ok := conn.(*net.TCPConn); ok {
+					t.SetKeepAlive(false)
+				}
 			}
 			go HandleConn(conn, tunnel, c, additions...)
 		}
