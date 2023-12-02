@@ -1,6 +1,7 @@
 package congestion
 
 import (
+	"github.com/metacubex/mihomo/common/utils"
 	"math"
 	"time"
 )
@@ -16,7 +17,7 @@ func MinNonZeroDuration(a, b time.Duration) time.Duration {
 	if b == 0 {
 		return a
 	}
-	return Min(a, b)
+	return utils.Min(a, b)
 }
 
 // AbsDuration returns the absolute value of a time duration

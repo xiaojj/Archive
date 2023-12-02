@@ -2,6 +2,7 @@ package congestion
 
 import (
 	"fmt"
+	"github.com/metacubex/mihomo/common/utils"
 	"time"
 
 	"github.com/metacubex/quic-go/congestion"
@@ -164,7 +165,7 @@ func (c *cubicSender) OnPacketAcked(
 	priorInFlight congestion.ByteCount,
 	eventTime time.Time,
 ) {
-	c.largestAckedPacketNumber = Max(ackedPacketNumber, c.largestAckedPacketNumber)
+	c.largestAckedPacketNumber = utils.Max(ackedPacketNumber, c.largestAckedPacketNumber)
 	if c.InRecovery() {
 		return
 	}
@@ -232,7 +233,7 @@ func (c *cubicSender) maybeIncreaseCwnd(
 			c.numAckedPackets = 0
 		}
 	} else {
-		c.congestionWindow = Min(c.maxCongestionWindow(), c.cubic.CongestionWindowAfterAck(ackedBytes, c.congestionWindow, c.rttStats.MinRTT(), eventTime))
+		c.congestionWindow = utils.Min(c.maxCongestionWindow(), c.cubic.CongestionWindowAfterAck(ackedBytes, c.congestionWindow, c.rttStats.MinRTT(), eventTime))
 	}
 }
 

@@ -1,6 +1,7 @@
 package congestion
 
 import (
+	"github.com/metacubex/mihomo/common/utils"
 	"math"
 	"time"
 
@@ -186,7 +187,7 @@ func (c *Cubic) CongestionWindowAfterAck(
 		targetCongestionWindow = c.originPointCongestionWindow - deltaCongestionWindow
 	}
 	// Limit the CWND increase to half the acked bytes.
-	targetCongestionWindow = Min(targetCongestionWindow, currentCongestionWindow+c.ackedBytesCount/2)
+	targetCongestionWindow = utils.Min(targetCongestionWindow, currentCongestionWindow+c.ackedBytesCount/2)
 
 	// Increase the window by approximately Alpha * 1 MSS of bytes every
 	// time we ack an estimated tcp window of bytes.  For small
