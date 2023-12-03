@@ -188,12 +188,7 @@ func (r *Resolver) exchangeWithoutCache(ctx context.Context, m *D.Msg) (msg *D.M
 				msg.Extra = lo.Filter(msg.Extra, func(rr D.RR, index int) bool {
 					return rr.Header().Rrtype != D.TypeOPT
 				})
-				if cache, ok := r.cache.(*arc.ARC[string, *D.Msg]); ok {
-					putMsgToCache(cache, q.String(), q, msg)
-				} else {
-					putMsgToCache(r.cache, q.String(), q, msg)
-				}
-
+				putMsgToCache(r.cache, q.String(), q, msg)
 			}
 		}()
 

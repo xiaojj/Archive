@@ -1,7 +1,6 @@
 package congestion
 
 import (
-	"github.com/metacubex/mihomo/common/utils"
 	"time"
 
 	"github.com/metacubex/quic-go/congestion"
@@ -75,8 +74,8 @@ func (s *HybridSlowStart) ShouldExitSlowStart(latestRTT time.Duration, minRTT ti
 		// Divide minRTT by 8 to get a rtt increase threshold for exiting.
 		minRTTincreaseThresholdUs := int64(minRTT / time.Microsecond >> hybridStartDelayFactorExp)
 		// Ensure the rtt threshold is never less than 2ms or more than 16ms.
-		minRTTincreaseThresholdUs = utils.Min(minRTTincreaseThresholdUs, hybridStartDelayMaxThresholdUs)
-		minRTTincreaseThreshold := time.Duration(utils.Max(minRTTincreaseThresholdUs, hybridStartDelayMinThresholdUs)) * time.Microsecond
+		minRTTincreaseThresholdUs = Min(minRTTincreaseThresholdUs, hybridStartDelayMaxThresholdUs)
+		minRTTincreaseThreshold := time.Duration(Max(minRTTincreaseThresholdUs, hybridStartDelayMinThresholdUs)) * time.Microsecond
 
 		if s.currentMinRTT > (minRTT + minRTTincreaseThreshold) {
 			s.hystartFound = true

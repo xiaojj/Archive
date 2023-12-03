@@ -1,7 +1,6 @@
 package congestion
 
 import (
-	"github.com/metacubex/mihomo/common/utils"
 	"math"
 	"time"
 
@@ -632,14 +631,14 @@ func (b *bandwidthSampler) OnCongestionEvent(
 		lastAckedPacketSendState = sample.stateAtSend
 
 		if sample.rtt != 0 {
-			eventSample.sampleRtt = utils.Min(eventSample.sampleRtt, sample.rtt)
+			eventSample.sampleRtt = Min(eventSample.sampleRtt, sample.rtt)
 		}
 		if sample.bandwidth > eventSample.sampleMaxBandwidth {
 			eventSample.sampleMaxBandwidth = sample.bandwidth
 			eventSample.sampleIsAppLimited = sample.stateAtSend.isAppLimited
 		}
 		if sample.sendRate != infBandwidth {
-			maxSendRate = utils.Max(maxSendRate, sample.sendRate)
+			maxSendRate = Max(maxSendRate, sample.sendRate)
 		}
 		inflightSample := b.totalBytesAcked - lastAckedPacketSendState.totalBytesAcked
 		if inflightSample > eventSample.sampleMaxInflight {
@@ -664,12 +663,12 @@ func (b *bandwidthSampler) OnCongestionEvent(
 	}
 
 	isNewMaxBandwidth := eventSample.sampleMaxBandwidth > maxBandwidth
-	maxBandwidth = utils.Max(maxBandwidth, eventSample.sampleMaxBandwidth)
+	maxBandwidth = Max(maxBandwidth, eventSample.sampleMaxBandwidth)
 	if b.limitMaxAckHeightTrackerBySendRate {
-		maxBandwidth = utils.Max(maxBandwidth, maxSendRate)
+		maxBandwidth = Max(maxBandwidth, maxSendRate)
 	}
 
-	eventSample.extraAcked = b.onAckEventEnd(utils.Min(estBandwidthUpperBound, maxBandwidth), isNewMaxBandwidth, roundTripCount)
+	eventSample.extraAcked = b.onAckEventEnd(Min(estBandwidthUpperBound, maxBandwidth), isNewMaxBandwidth, roundTripCount)
 
 	return *eventSample
 }
@@ -820,7 +819,7 @@ func (b *bandwidthSampler) onPacketAcknowledged(ackTime time.Time, packetNumber 
 
 	ackRate := BandwidthFromDelta(b.totalBytesAcked-a0.totalBytesAcked, ackTime.Sub(a0.ackTime))
 
-	sample.bandwidth = utils.Min(sendRate, ackRate)
+	sample.bandwidth = Min(sendRate, ackRate)
 	// Note: this sample does not account for delayed acknowledgement time.  This
 	// means that the RTT measurements here can be artificially high, especially
 	// on low bandwidth connections.

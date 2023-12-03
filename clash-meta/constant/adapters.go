@@ -20,6 +20,7 @@ const (
 	Reject
 	RejectDrop
 	Compatible
+	Mitm
 	Pass
 
 	Relay
@@ -179,6 +180,8 @@ func (at AdapterType) String() string {
 		return "Compatible"
 	case Pass:
 		return "Pass"
+	case Mitm:
+		return "Mitm"
 	case Shadowsocks:
 		return "Shadowsocks"
 	case ShadowsocksR:

@@ -36,6 +36,7 @@ import (
 	L "github.com/metacubex/mihomo/listener"
 	LC "github.com/metacubex/mihomo/listener/config"
 	"github.com/metacubex/mihomo/log"
+	rewrites "github.com/metacubex/mihomo/rewrite"
 	R "github.com/metacubex/mihomo/rules"
 	RP "github.com/metacubex/mihomo/rules/provider"
 	T "github.com/metacubex/mihomo/tunnel"
@@ -82,6 +83,7 @@ type Inbound struct {
 	BindAddress       string         `json:"bind-address"`
 	InboundTfo        bool           `json:"inbound-tfo"`
 	InboundMPTCP      bool           `json:"inbound-mptcp"`
+	MitmPort          int            `json:"mitm-port"`
 }
 
 // Controller config
@@ -158,6 +160,12 @@ type Sniffer struct {
 	ParsePureIp     bool
 }
 
+// Mitm config
+type Mitm struct {
+	Port  int           `yaml:"port" json:"port"`
+	Rules C.RewriteRule `yaml:"rules" json:"rules"`
+}
+
 // Experimental config
 type Experimental struct {
 	Fingerprints     []string `yaml:"fingerprints"`
@@ -169,6 +177,7 @@ type Experimental struct {
 type Config struct {
 	General       *General
 	IPTables      *IPTables
+	Mitm          *Mitm
 	NTP           *NTP
 	DNS           *DNS
 	Experimental  *Experimental
@@ -271,12 +280,18 @@ type RawTuicServer struct {
 	CWND                  int               `yaml:"cwnd" json:"cwnd,omitempty"`
 }
 
+type RawMitm struct {
+	Port  int                    `yaml:"port" json:"port"`
+	Rules []rewrites.RawMitmRule `yaml:"rules" json:"rules"`
+}
+
 type RawConfig struct {
 	Port                    int               `yaml:"port" json:"port"`
 	SocksPort               int               `yaml:"socks-port" json:"socks-port"`
 	RedirPort               int               `yaml:"redir-port" json:"redir-port"`
 	TProxyPort              int               `yaml:"tproxy-port" json:"tproxy-port"`
 	MixedPort               int               `yaml:"mixed-port" json:"mixed-port"`
+	MitmPort                int               `yaml:"mitm-port" json:"mitm-port"`
 	ShadowSocksConfig       string            `yaml:"ss-config"`
 	VmessConfig             string            `yaml:"vmess-config"`
 	InboundTfo              bool              `yaml:"inbound-tfo"`
@@ -316,6 +331,7 @@ type RawConfig struct {
 	TuicServer    RawTuicServer             `yaml:"tuic-server"`
 	EBpf          EBpf                      `yaml:"ebpf"`
 	IPTables      IPTables                  `yaml:"iptables"`
+	MITM          RawMitm                   `yaml:"mitm"`
 	Experimental  Experimental              `yaml:"experimental"`
 	Profile       Profile                   `yaml:"profile"`
 	GeoXUrl       GeoXUrl                   `yaml:"geox-url"`
@@ -470,6 +486,10 @@ func UnmarshalRawConfig(buf []byte) (*RawConfig, error) {
 			ParsePureIp:     true,
 			OverrideDest:    true,
 		},
+		MITM: RawMitm{
+			Port:  0,
+			Rules: []rewrites.RawMitmRule{},
+		},
 		Profile: Profile{
 			StoreSelected: true,
 		},
@@ -565,6 +585,12 @@ func ParseRawConfig(rawCfg *RawConfig) (*Config, error) {
 		return nil, err
 	}
 
+	mitm, err := parseMitm(rawCfg.MITM)
+	if err != nil {
+		return nil, err
+	}
+	config.Mitm = mitm
+
 	config.Users = parseAuthentication(rawCfg.Authentication)
 
 	config.Tunnels = rawCfg.Tunnels
@@ -631,6 +657,7 @@ func parseGeneral(cfg *RawConfig) (*General, error) {
 			RedirPort:         cfg.RedirPort,
 			TProxyPort:        cfg.TProxyPort,
 			MixedPort:         cfg.MixedPort,
+			MitmPort:          cfg.MitmPort,
 			ShadowSocksConfig: cfg.ShadowSocksConfig,
 			VmessConfig:       cfg.VmessConfig,
 			AllowLan:          cfg.AllowLan,
@@ -679,6 +706,11 @@ func parseProxies(cfg *RawConfig) (proxies map[string]C.Proxy, providersMap map[
 	proxies["COMPATIBLE"] = adapter.NewProxy(outbound.NewCompatible())
 	proxies["PASS"] = adapter.NewProxy(outbound.NewPass())
 	proxyList = append(proxyList, "DIRECT", "REJECT")
+
+	if cfg.MITM.Port != 0 {
+		proxies["MITM"] = adapter.NewProxy(outbound.NewMitm(fmt.Sprintf("127.0.0.1:%d", cfg.MITM.Port)))
+		proxyList = append(proxyList, "MITM")
+	}
 
 	// parse proxy
 	for idx, mapping := range proxiesConfig {
@@ -960,6 +992,14 @@ func parseHosts(cfg *RawConfig) (*trie.DomainTrie[resolver.HostValue], error) {
 			_ = tree.Insert(domain, value)
 		}
 	}
+
+	if cfg.MITM.Port != 0 {
+		value, _ := resolver.NewHostValue("8.8.9.9")
+		if err := tree.Insert("mitm.clash", value); err != nil {
+			log.Errorln("insert mitm.clash to host error: %s", err.Error())
+		}
+	}
+
 	tree.Optimize()
 
 	return tree, nil
@@ -1506,4 +1546,29 @@ func parseSniffer(snifferRaw RawSniffer) (*Sniffer, error) {
 	sniffer.SkipDomain = skipDomainTrie.NewDomainSet()
 
 	return sniffer, nil
+}
+
+func parseMitm(rawMitm RawMitm) (*Mitm, error) {
+	var (
+		req []C.Rewrite
+		res []C.Rewrite
+	)
+
+	for _, line := range rawMitm.Rules {
+		rule, err := rewrites.ParseRewrite(line)
+		if err != nil {
+			return nil, fmt.Errorf("parse rewrite rule failure: %w", err)
+		}
+
+		if rule.RuleType() == C.MitmResponseHeader || rule.RuleType() == C.MitmResponseBody {
+			res = append(res, rule)
+		} else {
+			req = append(req, rule)
+		}
+	}
+
+	return &Mitm{
+		Port:  rawMitm.Port,
+		Rules: rewrites.NewRewriteRules(req, res),
+	}, nil
 }

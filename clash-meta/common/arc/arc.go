@@ -4,8 +4,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/metacubex/mihomo/common/utils"
-
 	list "github.com/bahlo/generic-list-go"
 	"github.com/samber/lo"
 )
@@ -154,7 +152,12 @@ func (a *ARC[K, V]) req(ent *entry[K, V]) {
 		} else {
 			d = a.b2.Len() / a.b1.Len()
 		}
-		a.p = utils.Min(a.p+d, a.c)
+
+		// a.p = min(a.p+d, a.c)
+		a.p = a.p + d
+		if a.c < a.p {
+			a.p = a.c
+		}
 
 		a.replace(ent)
 		ent.setMRU(a.t2)
@@ -169,7 +172,11 @@ func (a *ARC[K, V]) req(ent *entry[K, V]) {
 		} else {
 			d = a.b1.Len() / a.b2.Len()
 		}
-		a.p = utils.Max(a.p-d, 0)
+		//a.p = max(a.p-d, 0)
+		a.p = a.p - d
+		if a.p < 0 {
+			a.p = 0
+		}
 
 		a.replace(ent)
 		ent.setMRU(a.t2)

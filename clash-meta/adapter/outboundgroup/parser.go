@@ -124,6 +124,16 @@ func ParseProxyGroup(config map[string]any, proxyMap map[string]C.Proxy, provide
 		// different proxy groups use different test URL
 		addTestUrlToProviders(list, testUrl, expectedStatus, groupOption.Filter, uint(groupOption.Interval))
 
+		if groupOption.Type != "select" && groupOption.Type != "relay" {
+			if groupOption.URL == "" {
+				groupOption.URL = "https://cp.cloudflare.com/generate_204"
+			}
+
+			if groupOption.Interval == 0 {
+				groupOption.Interval = 300
+			}
+		}
+
 		providers = append(providers, list...)
 	} else {
 		groupOption.Filter = ""

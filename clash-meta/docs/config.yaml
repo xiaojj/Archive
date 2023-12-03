@@ -436,12 +436,12 @@ proxies: # socks5
     # servername: example.com # priority over wss host
     # network: ws
     # ws-opts:
-    # path: /path
-    # headers:
-    #   Host: v2ray.com
-    # max-early-data: 2048
-    # early-data-header-name: Sec-WebSocket-Protocol
-    # v2ray-http-upgrade: false
+      # path: /path
+      # headers:
+      #   Host: v2ray.com
+      # max-early-data: 2048
+      # early-data-header-name: Sec-WebSocket-Protocol
+      # v2ray-http-upgrade: false
 
   - name: "vmess-h2"
     type: vmess
