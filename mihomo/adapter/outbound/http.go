@@ -113,10 +113,6 @@ func (h *Http) shakeHand(metadata *C.Metadata, rw io.ReadWriter) error {
 		tempHeaders["Proxy-Authorization"] = "Basic " + base64.StdEncoding.EncodeToString([]byte(auth))
 	}
 
-	if metadata.Type == C.MITM {
-		tempHeaders["Origin-Request-Source-Address"] = metadata.SourceAddress()
-	}
-
 	for key, value := range tempHeaders {
 		HeaderString += key + ": " + value + "\r\n"
 	}

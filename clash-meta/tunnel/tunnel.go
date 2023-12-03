@@ -31,7 +31,6 @@ var (
 	udpQueue       = make(chan C.PacketAdapter, 200)
 	natTable       = nat.New()
 	rules          []C.Rule
-	rewrites       C.RewriteRule
 	listeners      = make(map[string]C.InboundListener)
 	subRules       map[string][]C.Rule
 	proxies        = make(map[string]C.Proxy)
@@ -215,19 +214,7 @@ func SetFindProcessMode(mode P.FindProcessMode) {
 
 func isHandle(t C.Type) bool {
 	status := status.Load()
-	return status == Running || (status == Inner && (t == C.INNER || t == C.MITM))
-}
-
-// Rewrites return all rewrites
-func Rewrites() C.RewriteRule {
-	return rewrites
-}
-
-// UpdateRewrites handle update rewrites
-func UpdateRewrites(rules C.RewriteRule) {
-	configMux.Lock()
-	rewrites = rules
-	configMux.Unlock()
+	return status == Running || (status == Inner && t == C.INNER)
 }
 
 // processUDP starts a loop to handle udp packet
@@ -503,9 +490,8 @@ func handleTCPConn(connCtx C.ConnContext) {
 		return
 	}
 
-	isMitmProxy := metadata.Type == C.MITM
 	dialMetadata := metadata
-	if len(metadata.Host) > 0 && !isMitmProxy {
+	if len(metadata.Host) > 0 {
 		if node, ok := resolver.DefaultHosts.Search(metadata.Host, false); ok {
 			if dstIp, _ := node.RandIP(); !FakeIPRange().Contains(dstIp) {
 				dialMetadata.DstIP = dstIp
@@ -618,10 +604,6 @@ func match(metadata *C.Metadata) (C.Proxy, C.Rule, error) {
 	}
 
 	for _, rule := range getRules(metadata) {
-		if metadata.Type == C.MITM && rule.Adapter() == "MITM" {
-			continue
-		}
-
 		if !resolved && shouldResolveIP(rule, metadata) {
 			func() {
 				ctx, cancel := context.WithTimeout(context.Background(), resolver.DefaultDNSTimeout)

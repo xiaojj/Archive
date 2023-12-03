@@ -1,12 +1,9 @@
 module github.com/metacubex/mihomo
 
-go 1.21
-
-toolchain go1.21.4
+go 1.20
 
 require (
 	github.com/3andne/restls-client-go v0.1.6
-	github.com/Dreamacro/clash v1.18.0
 	github.com/aead/chacha20 v0.0.0-20180709150244-8b13a72661da
 	github.com/bahlo/generic-list-go v0.2.0
 	github.com/cilium/ebpf v0.12.3
@@ -61,7 +58,6 @@ require (
 )
 
 require (
-	github.com/Dreamacro/protobytes v0.0.0-20230617041236-6500a9f4f158 // indirect
 	github.com/RyuaNerin/go-krypto v1.0.2 // indirect
 	github.com/Yawning/aez v0.0.0-20211027044916-e49e68abd344 // indirect
 	github.com/ajg/form v1.5.1 // indirect
@@ -108,7 +104,6 @@ require (
 	github.com/vishvananda/netns v0.0.0-20211101163701-50045581ed74 // indirect
 	github.com/yusufpapurcu/wmi v1.2.3 // indirect
 	gitlab.com/yawning/bsaes.git v0.0.0-20190805113838-0a714cd429ec // indirect
-	go.uber.org/atomic v1.11.0 // indirect
 	go.uber.org/mock v0.3.0 // indirect
 	go4.org/netipx v0.0.0-20230824141953-6213f710f925 // indirect
 	golang.org/x/mod v0.14.0 // indirect

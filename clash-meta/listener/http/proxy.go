@@ -36,7 +36,7 @@ func HandleConn(c net.Conn, tunnel C.Tunnel, cache *lru.LruCache[string, bool], 
 		var resp *http.Response
 
 		if !trusted {
-			resp = Authenticate(request, cache)
+			resp = authenticate(request, cache)
 
 			trusted = resp == nil
 		}
@@ -66,19 +66,19 @@ func HandleConn(c net.Conn, tunnel C.Tunnel, cache *lru.LruCache[string, bool], 
 				return // hijack connection
 			}
 
-			RemoveHopByHopHeaders(request.Header)
-			RemoveExtraHTTPHostPort(request)
+			removeHopByHopHeaders(request.Header)
+			removeExtraHTTPHostPort(request)
 
 			if request.URL.Scheme == "" || request.URL.Host == "" {
-				resp = ResponseWith(request, http.StatusBadRequest)
+				resp = responseWith(request, http.StatusBadRequest)
 			} else {
 				resp, err = client.Do(request)
 				if err != nil {
-					resp = ResponseWith(request, http.StatusBadGateway)
+					resp = responseWith(request, http.StatusBadGateway)
 				}
 			}
 
-			RemoveHopByHopHeaders(resp.Header)
+			removeHopByHopHeaders(resp.Header)
 		}
 
 		if keepAlive {
@@ -98,7 +98,7 @@ func HandleConn(c net.Conn, tunnel C.Tunnel, cache *lru.LruCache[string, bool], 
 	_ = conn.Close()
 }
 
-func Authenticate(request *http.Request, cache *lru.LruCache[string, bool]) *http.Response {
+func authenticate(request *http.Request, cache *lru.LruCache[string, bool]) *http.Response {
 	authenticator := authStore.Authenticator()
 	if inbound.SkipAuthRemoteAddress(request.RemoteAddr) {
 		authenticator = nil
@@ -106,7 +106,7 @@ func Authenticate(request *http.Request, cache *lru.LruCache[string, bool]) *htt
 	if authenticator != nil {
 		credential := parseBasicProxyAuthorization(request)
 		if credential == "" {
-			resp := ResponseWith(request, http.StatusProxyAuthRequired)
+			resp := responseWith(request, http.StatusProxyAuthRequired)
 			resp.Header.Set("Proxy-Authenticate", "Basic")
 			return resp
 		}
@@ -120,14 +120,14 @@ func Authenticate(request *http.Request, cache *lru.LruCache[string, bool]) *htt
 		if !authed {
 			log.Infoln("Auth failed from %s", request.RemoteAddr)
 
-			return ResponseWith(request, http.StatusForbidden)
+			return responseWith(request, http.StatusForbidden)
 		}
 	}
 
 	return nil
 }
 
-func ResponseWith(request *http.Request, statusCode int) *http.Response {
+func responseWith(request *http.Request, statusCode int) *http.Response {
 	return &http.Response{
 		StatusCode: statusCode,
 		Status:     http.StatusText(statusCode),
