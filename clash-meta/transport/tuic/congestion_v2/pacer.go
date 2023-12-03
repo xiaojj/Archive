@@ -4,7 +4,6 @@ import (
 	"math"
 	"time"
 
-	"github.com/metacubex/mihomo/common/utils"
 	"github.com/metacubex/quic-go/congestion"
 )
 
@@ -47,11 +46,11 @@ func (p *Pacer) Budget(now time.Time) congestion.ByteCount {
 	if budget < 0 { // protect against overflows
 		budget = congestion.ByteCount(1<<62 - 1)
 	}
-	return utils.Min(p.maxBurstSize(), budget)
+	return Min(p.maxBurstSize(), budget)
 }
 
 func (p *Pacer) maxBurstSize() congestion.ByteCount {
-	return utils.Max(
+	return Max(
 		congestion.ByteCount((congestion.MinPacingDelay+time.Millisecond).Nanoseconds())*p.getBandwidth()/1e9,
 		maxBurstPackets*p.maxDatagramSize,
 	)
@@ -63,7 +62,7 @@ func (p *Pacer) TimeUntilSend() time.Time {
 	if p.budgetAtLastSent >= p.maxDatagramSize {
 		return time.Time{}
 	}
-	return p.lastSentTime.Add(utils.Max(
+	return p.lastSentTime.Add(Max(
 		congestion.MinPacingDelay,
 		time.Duration(math.Ceil(float64(p.maxDatagramSize-p.budgetAtLastSent)*1e9/
 			float64(p.getBandwidth())))*time.Nanosecond,
