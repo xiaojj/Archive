@@ -47,6 +47,7 @@ async function resolveUpdater() {
       "linux-x86_64": { signature: "", url: "" },
       "linux-aarch64": { signature: "", url: "" },
       "windows-x86_64": { signature: "", url: "" },
+      "windows-i686": { signature: "", url: "" },
     },
   };
 
@@ -54,39 +55,23 @@ async function resolveUpdater() {
     const { name, browser_download_url } = asset;
 
     // win64 url
-    if (
-      name.endsWith(".msi.zip") &&
-      name.includes("en-US") &&
-      name.includes("x64")
-    ) {
+    if (name.endsWith("x64-setup.nsis.zip")) {
       updateData.platforms.win64.url = browser_download_url;
       updateData.platforms["windows-x86_64"].url = browser_download_url;
     }
     // win64 signature
-    if (
-      name.endsWith(".msi.zip.sig") &&
-      name.includes("en-US") &&
-      name.includes("x64")
-    ) {
+    if (name.endsWith("x64-setup.nsis.zip.sig")) {
       const sig = await getSignature(browser_download_url);
       updateData.platforms.win64.signature = sig;
       updateData.platforms["windows-x86_64"].signature = sig;
     }
 
     // win32 url
-    if (
-      name.endsWith(".msi.zip") &&
-      name.includes("en-US") &&
-      name.includes("x86")
-    ) {
+    if (name.endsWith("x86-setup.nsis.zip")) {
       updateData.platforms["windows-i686"].url = browser_download_url;
     }
     // win32 signature
-    if (
-      name.endsWith(".msi.zip.sig") &&
-      name.includes("en-US") &&
-      name.includes("x86")
-    ) {
+    if (name.endsWith("x86-setup.nsis.zip.sig")) {
       const sig = await getSignature(browser_download_url);
       updateData.platforms["windows-i686"].signature = sig;
     }
