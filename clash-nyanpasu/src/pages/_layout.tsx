@@ -1,33 +1,33 @@
-import dayjs from "dayjs";
-import i18next from "i18next";
-import relativeTime from "dayjs/plugin/relativeTime";
-import { SWRConfig, mutate } from "swr";
-import { useEffect } from "react";
-import { useTranslation } from "react-i18next";
-import { Route, Routes, useLocation } from "react-router-dom";
-import { CSSTransition, TransitionGroup } from "react-transition-group";
-import { alpha, List, Paper, ThemeProvider } from "@mui/material";
-import { listen } from "@tauri-apps/api/event";
-import { appWindow } from "@tauri-apps/api/window";
-import { routers } from "./_routers";
-import { getAxios } from "@/services/api";
-import { useVerge } from "@/hooks/use-verge";
 import LogoSvg from "@/assets/image/logo.svg?react";
-import { BaseErrorBoundary, Notice } from "@/components/base";
-import { LayoutItem } from "@/components/layout/layout-item";
 import { LayoutControl } from "@/components/layout/layout-control";
+import { LayoutItem } from "@/components/layout/layout-item";
 import { LayoutTraffic } from "@/components/layout/layout-traffic";
 import { UpdateButton } from "@/components/layout/update-button";
 import { useCustomTheme } from "@/components/layout/use-custom-theme";
+import { useNotification } from "@/hooks/use-notification";
+import { useVerge } from "@/hooks/use-verge";
+import { getAxios } from "@/services/api";
 import getSystem from "@/utils/get-system";
+import { List, Paper, ThemeProvider, alpha } from "@mui/material";
+import { listen } from "@tauri-apps/api/event";
+import { appWindow } from "@tauri-apps/api/window";
+import dayjs from "dayjs";
 import "dayjs/locale/ru";
 import "dayjs/locale/zh-cn";
+import relativeTime from "dayjs/plugin/relativeTime";
+import { AnimatePresence } from "framer-motion";
+import i18next from "i18next";
+import React, { useEffect } from "react";
+import { useTranslation } from "react-i18next";
+import { useLocation, useRoutes } from "react-router-dom";
+import { SWRConfig, mutate } from "swr";
+import { routers } from "./_routers";
 
 dayjs.extend(relativeTime);
 
 const OS = getSystem();
 
-const Layout = () => {
+export default function Layout() {
   const { t } = useTranslation();
 
   const { theme } = useCustomTheme();
@@ -36,6 +36,8 @@ const Layout = () => {
   const { theme_blur, language } = verge || {};
 
   const location = useLocation();
+  const routes = useRoutes(routers);
+  if (!routes) return null;
 
   useEffect(() => {
     window.addEventListener("keydown", (e) => {
@@ -62,10 +64,10 @@ const Layout = () => {
       const [status, msg] = payload as [string, string];
       switch (status) {
         case "set_config::ok":
-          Notice.success("Refresh clash config");
+          useNotification(t("Success"), "Refresh Clash Config");
           break;
         case "set_config::error":
-          Notice.error(msg);
+          useNotification(t("Error"), msg);
           break;
         default:
           break;
@@ -121,7 +123,7 @@ const Layout = () => {
 
             <List className="the-menu">
               {routers.map((router) => (
-                <LayoutItem key={router.label} to={router.link}>
+                <LayoutItem key={router.label} to={router.path}>
                   {t(router.label)}
                 </LayoutItem>
               ))}
@@ -139,32 +141,12 @@ const Layout = () => {
               </div>
             )}
 
-            <TransitionGroup className="the-content">
-              <CSSTransition
-                key={location.pathname}
-                timeout={300}
-                classNames="page"
-              >
-                <Routes>
-                  {routers.map(({ label, link, ele: Ele }) => (
-                    <Route
-                      key={label}
-                      path={link}
-                      element={
-                        <BaseErrorBoundary key={label}>
-                          <Ele />
-                        </BaseErrorBoundary>
-                      }
-                    />
-                  ))}
-                </Routes>
-              </CSSTransition>
-            </TransitionGroup>
+            <AnimatePresence mode="wait">
+              {React.cloneElement(routes, { key: location.pathname })}
+            </AnimatePresence>
           </div>
         </Paper>
       </ThemeProvider>
     </SWRConfig>
   );
-};
-
-export default Layout;
+}

@@ -1,20 +1,21 @@
-import { forwardRef, useImperativeHandle, useState } from "react";
-import { useLockFn } from "ahooks";
-import { useTranslation } from "react-i18next";
+import { BaseDialog, DialogRef } from "@/components/base";
+import { useNotification } from "@/hooks/use-notification";
+import { useVerge } from "@/hooks/use-verge";
+import { getSystemProxy } from "@/services/cmds";
 import {
   Box,
   InputAdornment,
   List,
   ListItem,
   ListItemText,
-  styled,
   Switch,
   TextField,
   Typography,
+  styled,
 } from "@mui/material";
-import { useVerge } from "@/hooks/use-verge";
-import { getSystemProxy } from "@/services/cmds";
-import { BaseDialog, DialogRef, Notice } from "@/components/base";
+import { useLockFn } from "ahooks";
+import { forwardRef, useImperativeHandle, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 export const SysproxyViewer = forwardRef<DialogRef>((props, ref) => {
   const { t } = useTranslation();
@@ -54,7 +55,7 @@ export const SysproxyViewer = forwardRef<DialogRef>((props, ref) => {
 
   const onSave = useLockFn(async () => {
     if (value.duration < 1) {
-      Notice.error("Proxy guard duration at least 1 seconds");
+      useNotification(t("Error"), "Proxy guard duration at least 1 seconds");
       return;
     }
 
@@ -74,7 +75,7 @@ export const SysproxyViewer = forwardRef<DialogRef>((props, ref) => {
       await patchVerge(patch);
       setOpen(false);
     } catch (err: any) {
-      Notice.error(err.message || err.toString());
+      useNotification(t("Error"), err.message || err.toString());
     }
   });
 
@@ -161,6 +162,8 @@ export const SysproxyViewer = forwardRef<DialogRef>((props, ref) => {
     </BaseDialog>
   );
 });
+
+SysproxyViewer.displayName = "SysproxyViewer";
 
 const FlexBox = styled("div")`
   display: flex;

@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { useLockFn } from "ahooks";
 import { useRecoilState } from "recoil";
 import { useTranslation } from "react-i18next";
+import { useSortable } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import {
   Box,
   Typography,
@@ -14,13 +16,13 @@ import {
   Menu,
   CircularProgress,
 } from "@mui/material";
-import { RefreshRounded } from "@mui/icons-material";
+import { RefreshRounded, DragIndicator } from "@mui/icons-material";
 import { atomLoadingCache } from "@/services/states";
 import { updateProfile, deleteProfile, viewProfile } from "@/services/cmds";
-import { Notice } from "@/components/base";
 import { EditorViewer } from "./editor-viewer";
 import { ProfileBox } from "./profile-box";
 import parseTraffic from "@/utils/parse-traffic";
+import { useNotification } from "@/hooks/use-notification";
 
 const round = keyframes`
   from { transform: rotate(0deg); }
@@ -28,6 +30,7 @@ const round = keyframes`
 `;
 
 interface Props {
+  id: string;
   selected: boolean;
   activating: boolean;
   itemData: IProfileItem;
@@ -37,6 +40,9 @@ interface Props {
 
 export const ProfileItem = (props: Props) => {
   const { selected, activating, itemData, onSelect, onEdit } = props;
+
+  const { attributes, listeners, setNodeRef, transform, transition } =
+    useSortable({ id: props.id });
 
   const { t } = useTranslation();
   const [anchorEl, setAnchorEl] = useState<any>(null);
@@ -107,7 +113,7 @@ export const ProfileItem = (props: Props) => {
     try {
       await viewProfile(itemData.uid);
     } catch (err: any) {
-      Notice.error(err?.message || err.toString());
+      useNotification(t("Error"), err?.message || err.toString());
     }
   });
 
@@ -140,8 +146,10 @@ export const ProfileItem = (props: Props) => {
       mutate("getProfiles");
     } catch (err: any) {
       const errmsg = err?.message || err.toString();
-      Notice.error(
-        errmsg.replace(/error sending request for url (\S+?): /, "")
+      useNotification(
+        t("Error"),
+        err.message ||
+          errmsg.replace(/error sending request for url (\S+?): /, ""),
       );
     } finally {
       setLoadingCache((cache) => ({ ...cache, [itemData.uid]: false }));
@@ -154,7 +162,7 @@ export const ProfileItem = (props: Props) => {
       await deleteProfile(itemData.uid);
       mutate("getProfiles");
     } catch (err: any) {
-      Notice.error(err?.message || err.toString());
+      useNotification(t("Error"), err?.message || err.toString());
     }
   });
 
@@ -183,7 +191,12 @@ export const ProfileItem = (props: Props) => {
   };
 
   return (
-    <>
+    <Box
+      sx={{
+        transform: CSS.Transform.toString(transform),
+        transition,
+      }}
+    >
       <ProfileBox
         aria-selected={selected}
         onClick={() => onSelect(false)}
@@ -214,15 +227,26 @@ export const ProfileItem = (props: Props) => {
         )}
 
         <Box position="relative">
-          <Typography
-            width="calc(100% - 36px)"
-            variant="h6"
-            component="h2"
-            noWrap
-            title={name}
-          >
-            {name}
-          </Typography>
+          <Box sx={{ display: "flex", justifyContent: "start" }}>
+            <Box
+              ref={setNodeRef}
+              sx={{ display: "flex", margin: "auto 0" }}
+              {...attributes}
+              {...listeners}
+            >
+              <DragIndicator sx={{ cursor: "grab" }} />
+            </Box>
+
+            <Typography
+              width="calc(100% - 40px)"
+              variant="h6"
+              component="h2"
+              noWrap
+              title={name}
+            >
+              {name}
+            </Typography>
+          </Box>
 
           {/* only if has url can it be updated */}
           {hasUrl && (
@@ -324,7 +348,7 @@ export const ProfileItem = (props: Props) => {
         mode="yaml"
         onClose={() => setFileOpen(false)}
       />
-    </>
+    </Box>
   );
 };
 

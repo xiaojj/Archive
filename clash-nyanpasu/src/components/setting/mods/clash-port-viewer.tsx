@@ -1,37 +1,43 @@
+import { BaseDialog, DialogRef } from "@/components/base";
+import { useClashInfo } from "@/hooks/use-clash";
+import { useNotification } from "@/hooks/use-notification";
+import { useVerge } from "@/hooks/use-verge";
+import { List, ListItem, ListItemText, TextField } from "@mui/material";
+import { useLockFn } from "ahooks";
 import { forwardRef, useImperativeHandle, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useLockFn } from "ahooks";
-import { List, ListItem, ListItemText, TextField } from "@mui/material";
-import { useClashInfo } from "@/hooks/use-clash";
-import { BaseDialog, DialogRef, Notice } from "@/components/base";
 
 export const ClashPortViewer = forwardRef<DialogRef>((props, ref) => {
   const { t } = useTranslation();
 
   const { clashInfo, patchInfo } = useClashInfo();
+  const { verge, patchVerge } = useVerge();
 
   const [open, setOpen] = useState(false);
-  const [port, setPort] = useState(clashInfo?.port ?? 7890);
+  const [port, setPort] = useState(
+    verge?.verge_mixed_port ?? clashInfo?.port ?? 7890,
+  );
 
   useImperativeHandle(ref, () => ({
     open: () => {
-      if (clashInfo?.port) setPort(clashInfo?.port);
+      if (verge?.verge_mixed_port) setPort(verge?.verge_mixed_port);
       setOpen(true);
     },
     close: () => setOpen(false),
   }));
 
   const onSave = useLockFn(async () => {
-    if (port === clashInfo?.port) {
+    if (port === verge?.verge_mixed_port) {
       setOpen(false);
       return;
     }
     try {
       await patchInfo({ "mixed-port": port });
+      await patchVerge({ verge_mixed_port: port });
       setOpen(false);
-      Notice.success("Change Clash port successfully!", 1000);
+      useNotification(t("Success"), "Change Clash port successfully!");
     } catch (err: any) {
-      Notice.error(err.message || err.toString(), 4000);
+      useNotification(t("Error"), err.message || err.toString());
     }
   });
 
@@ -63,3 +69,5 @@ export const ClashPortViewer = forwardRef<DialogRef>((props, ref) => {
     </BaseDialog>
   );
 });
+
+ClashPortViewer.displayName = "ClashPortViewer";

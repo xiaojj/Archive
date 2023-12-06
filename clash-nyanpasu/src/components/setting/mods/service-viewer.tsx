@@ -1,15 +1,16 @@
-import useSWR from "swr";
-import { forwardRef, useImperativeHandle, useState } from "react";
-import { useLockFn } from "ahooks";
-import { useTranslation } from "react-i18next";
-import { Button, Stack, Typography } from "@mui/material";
+import { BaseDialog, DialogRef } from "@/components/base";
+import { useNotification } from "@/hooks/use-notification";
 import {
   checkService,
   installService,
-  uninstallService,
   patchVergeConfig,
+  uninstallService,
 } from "@/services/cmds";
-import { BaseDialog, DialogRef, Notice } from "@/components/base";
+import { Button, Stack, Typography } from "@mui/material";
+import { useLockFn } from "ahooks";
+import { forwardRef, useImperativeHandle, useState } from "react";
+import { useTranslation } from "react-i18next";
+import useSWR from "swr";
 
 interface Props {
   enable: boolean;
@@ -28,7 +29,7 @@ export const ServiceViewer = forwardRef<DialogRef, Props>((props, ref) => {
       revalidateIfStale: false,
       shouldRetryOnError: false,
       focusThrottleInterval: 36e5, // 1 hour
-    }
+    },
   );
 
   useImperativeHandle(ref, () => ({
@@ -43,10 +44,10 @@ export const ServiceViewer = forwardRef<DialogRef, Props>((props, ref) => {
       await installService();
       mutateCheck();
       setOpen(false);
-      Notice.success("Service installed successfully");
+      useNotification(t("Success"), "Service installed successfully");
     } catch (err: any) {
       mutateCheck();
-      Notice.error(err.message || err.toString());
+      useNotification(t("Error"), err.message || err.toString());
     }
   });
 
@@ -59,10 +60,10 @@ export const ServiceViewer = forwardRef<DialogRef, Props>((props, ref) => {
       await uninstallService();
       mutateCheck();
       setOpen(false);
-      Notice.success("Service uninstalled successfully");
+      useNotification(t("Success"), "Service uninstalled successfully");
     } catch (err: any) {
       mutateCheck();
-      Notice.error(err.message || err.toString());
+      useNotification(t("Error"), err.message || err.toString());
     }
   });
 
@@ -74,7 +75,7 @@ export const ServiceViewer = forwardRef<DialogRef, Props>((props, ref) => {
       setOpen(false);
     } catch (err: any) {
       mutateCheck();
-      Notice.error(err.message || err.toString());
+      useNotification(t("Error"), err.message || err.toString());
     }
   });
 
@@ -121,3 +122,5 @@ export const ServiceViewer = forwardRef<DialogRef, Props>((props, ref) => {
     </BaseDialog>
   );
 });
+
+ServiceViewer.displayName = "ServiceViewer";

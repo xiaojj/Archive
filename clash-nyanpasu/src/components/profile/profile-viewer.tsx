@@ -1,13 +1,6 @@
-import {
-  forwardRef,
-  useEffect,
-  useImperativeHandle,
-  useRef,
-  useState,
-} from "react";
-import { useLockFn } from "ahooks";
-import { useTranslation } from "react-i18next";
-import { useForm, Controller } from "react-hook-form";
+import { BaseDialog } from "@/components/base";
+import { useNotification } from "@/hooks/use-notification";
+import { createProfile, patchProfile } from "@/services/cmds";
 import {
   Box,
   FormControl,
@@ -16,12 +9,20 @@ import {
   MenuItem,
   Select,
   Switch,
-  styled,
   TextField,
+  styled,
 } from "@mui/material";
-import { createProfile, patchProfile } from "@/services/cmds";
-import { BaseDialog, Notice } from "@/components/base";
 import { version } from "@root/package.json";
+import { useLockFn } from "ahooks";
+import {
+  forwardRef,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+} from "react";
+import { Controller, useForm } from "react-hook-form";
+import { useTranslation } from "react-i18next";
 import { FileInput } from "./file-input";
 
 interface Props {
@@ -118,10 +119,10 @@ export const ProfileViewer = forwardRef<ProfileViewerRef, Props>(
           fileDataRef.current = null;
           props.onChange();
         } catch (err: any) {
-          Notice.error(err.message || err.toString());
+          useNotification(t("Error"), err.message || err.toString());
           setLoading(false);
         }
-      })
+      }),
     );
 
     const handleClose = () => {
@@ -273,8 +274,10 @@ export const ProfileViewer = forwardRef<ProfileViewerRef, Props>(
         )}
       </BaseDialog>
     );
-  }
+  },
 );
+
+ProfileViewer.displayName = "ProfileViewer";
 
 const StyledBox = styled(Box)(() => ({
   margin: "8px 0 8px 8px",

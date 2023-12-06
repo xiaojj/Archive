@@ -64,6 +64,8 @@
   "IPv6": "IPv6",
   "Log Level": "Уровень логов",
   "Mixed Port": "Смешанный порт",
+  "Random Port": "Случайный порт",
+  "After restart to take effect": "Чтобы изменения вступили в силу, необходимо перезапустить приложение",
   "Clash Core": "Ядро Clash",
   "Tun Mode": "Режим туннеля",
   "Service Mode": "Режим сервиса",
@@ -81,6 +83,11 @@
   "Theme Setting": "Настройка темы",
   "Hotkey Setting": "Настройка клавиатурных сокращений",
   "Traffic Graph": "График трафика",
+  "Page Transition Animation": "Анимация перехода страниц",
+  "Page Transition Animation Slide": "Слайд",
+  "Page Transition Animation Blur": "Размытие",
+  "Page Transition Animation Transparent": "Прозрачность",
+  "Page Transition Animation None": "Нет",
   "Language": "Язык",
   "Open App Dir": "Открыть папку приложения",
   "Open Core Dir": "Открыть папку ядра",
@@ -108,5 +115,8 @@
   "disable_system_proxy": "Отключить системный прокси",
   "toggle_tun_mode": "Переключить режим туннеля",
   "enable_tun_mode": "Включить режим туннеля",
-  "disable_tun_mode": "Отключить режим туннеля"
+  "disable_tun_mode": "Отключить режим туннеля",
+
+  "Error": "Ошибка",
+  "Success": "Успех"
 }

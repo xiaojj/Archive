@@ -1,14 +1,15 @@
-import useSWR from "swr";
-import snarkdown from "snarkdown";
-import { forwardRef, useImperativeHandle, useState, useMemo } from "react";
-import { useLockFn } from "ahooks";
+import { BaseDialog, DialogRef } from "@/components/base";
+import { useNotification } from "@/hooks/use-notification";
+import { atomUpdateState } from "@/services/states";
 import { Box, styled } from "@mui/material";
-import { useRecoilState } from "recoil";
-import { useTranslation } from "react-i18next";
 import { relaunch } from "@tauri-apps/api/process";
 import { checkUpdate, installUpdate } from "@tauri-apps/api/updater";
-import { BaseDialog, DialogRef, Notice } from "@/components/base";
-import { atomUpdateState } from "@/services/states";
+import { useLockFn } from "ahooks";
+import { forwardRef, useImperativeHandle, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { useRecoilState } from "recoil";
+import snarkdown from "snarkdown";
+import useSWR from "swr";
 
 const UpdateLog = styled(Box)(() => ({
   "h1,h2,h3,ul,ol,p": { margin: "0.5em 0", color: "inherit" },
@@ -47,7 +48,7 @@ export const UpdateViewer = forwardRef<DialogRef>((props, ref) => {
       await installUpdate();
       await relaunch();
     } catch (err: any) {
-      Notice.error(err?.message || err.toString());
+      useNotification(t("Error"), err?.message || err.toString());
     } finally {
       setUpdateState(false);
     }
@@ -68,3 +69,5 @@ export const UpdateViewer = forwardRef<DialogRef>((props, ref) => {
     </BaseDialog>
   );
 });
+
+UpdateViewer.displayName = "UpdateViewer";

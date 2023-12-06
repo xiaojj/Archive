@@ -69,6 +69,8 @@
   "IPv6": "IPv6",
   "Log Level": "Log Level",
   "Mixed Port": "Mixed Port",
+  "Random Port": "Random Port",
+  "After restart to take effect": "After restart to take effect",
   "External": "External",
   "Clash Core": "Clash Core",
   "Tun Mode": "Tun Mode",
@@ -76,7 +78,7 @@
   "Auto Launch": "Auto Launch",
   "Silent Start": "Silent Start",
   "System Proxy": "System Proxy",
-  "Open UWP tool": "UWP工具",
+  "Open UWP tool": "Open UWP tool",
   "System Proxy Setting": "System Proxy Setting",
   "Proxy Guard": "Proxy Guard",
   "Guard Duration": "Guard Duration",
@@ -90,6 +92,12 @@
   "Hotkey Setting": "Hotkey Setting",
   "Traffic Graph": "Traffic Graph",
   "Memory Usage": "Memory Usage",
+  "Page Transition Animation": "Page Transition Animation",
+  "Page Transition Animation Slide": "Slide",
+  "Page Transition Animation Blur": "Blur",
+  "Page Transition Animation Transparent": "Transparent",
+  "Page Transition Animation None": "None",
+
   "Language": "Language",
   "Open App Dir": "Open App Dir",
   "Open Core Dir": "Open Core Dir",
@@ -129,5 +137,8 @@
   "Enable Clash Fields Filter": "Enable Clash Fields Filter",
   "Enable Builtin Enhanced": "Enable Builtin Enhanced",
   "Proxy Layout Column": "Proxy Layout Column",
-  "Default Latency Test": "Default Latency Test"
+  "Default Latency Test": "Default Latency Test",
+
+  "Error": "Error",
+  "Success": "Success"
 }

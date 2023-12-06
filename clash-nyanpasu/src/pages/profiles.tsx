@@ -1,9 +1,37 @@
-import useSWR, { mutate } from "swr";
-import { useMemo, useRef, useState } from "react";
-import { useLockFn } from "ahooks";
-import { useSetRecoilState } from "recoil";
-import { Box, Button, Grid, IconButton, Stack, TextField } from "@mui/material";
-import { LoadingButton } from "@mui/lab";
+import { BasePage, DialogRef } from "@/components/base";
+import { ProfileItem } from "@/components/profile/profile-item";
+import { ProfileMore } from "@/components/profile/profile-more";
+import {
+  ProfileViewer,
+  ProfileViewerRef,
+} from "@/components/profile/profile-viewer";
+import { ConfigViewer } from "@/components/setting/mods/config-viewer";
+import { useNotification } from "@/hooks/use-notification";
+import { useProfiles } from "@/hooks/use-profiles";
+import { closeAllConnections } from "@/services/api";
+import {
+  deleteProfile,
+  enhanceProfiles,
+  getProfiles,
+  getRuntimeLogs,
+  importProfile,
+  reorderProfile,
+  updateProfile,
+} from "@/services/cmds";
+import { atomLoadingCache } from "@/services/states";
+import {
+  DndContext,
+  DragEndEvent,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+} from "@dnd-kit/sortable";
 import {
   ClearRounded,
   ContentCopyRounded,
@@ -11,35 +39,28 @@ import {
   RefreshRounded,
   TextSnippetOutlined,
 } from "@mui/icons-material";
-import { useTranslation } from "react-i18next";
-import {
-  getProfiles,
-  importProfile,
-  enhanceProfiles,
-  getRuntimeLogs,
-  deleteProfile,
-  updateProfile,
-} from "@/services/cmds";
-import { atomLoadingCache } from "@/services/states";
-import { closeAllConnections } from "@/services/api";
-import { BasePage, DialogRef, Notice } from "@/components/base";
-import {
-  ProfileViewer,
-  ProfileViewerRef,
-} from "@/components/profile/profile-viewer";
-import { ProfileItem } from "@/components/profile/profile-item";
-import { ProfileMore } from "@/components/profile/profile-more";
-import { useProfiles } from "@/hooks/use-profiles";
-import { ConfigViewer } from "@/components/setting/mods/config-viewer";
+import { LoadingButton } from "@mui/lab";
+import { Box, Button, Grid, IconButton, Stack, TextField } from "@mui/material";
+import { useLockFn } from "ahooks";
 import { throttle } from "lodash-es";
+import { useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { useSetRecoilState } from "recoil";
+import useSWR, { mutate } from "swr";
 
-const ProfilePage = () => {
+export default function ProfilePage() {
   const { t } = useTranslation();
 
   const [url, setUrl] = useState("");
   const [disabled, setDisabled] = useState(false);
   const [activating, setActivating] = useState("");
   const [loading, setLoading] = useState(false);
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
+  );
 
   const {
     profiles = {},
@@ -50,7 +71,7 @@ const ProfilePage = () => {
 
   const { data: chainLogs = {}, mutate: mutateLogs } = useSWR(
     "getRuntimeLogs",
-    getRuntimeLogs
+    getRuntimeLogs,
   );
 
   const chain = profiles.chain || [];
@@ -82,7 +103,7 @@ const ProfilePage = () => {
 
     try {
       await importProfile(url);
-      Notice.success("Successfully import profile.");
+      useNotification(t("Success"), "Successfully import profile.");
       setUrl("");
       setLoading(false);
 
@@ -98,11 +119,21 @@ const ProfilePage = () => {
         }
       });
     } catch (err: any) {
-      Notice.error(err.message || err.toString());
+      useNotification(t("Error"), err.message || err.toString());
       setLoading(false);
     } finally {
       setDisabled(false);
       setLoading(false);
+    }
+  };
+
+  const onDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (over) {
+      if (active.id !== over.id) {
+        await reorderProfile(active.id.toString(), over.id.toString());
+        mutateProfiles();
+      }
     }
   };
 
@@ -115,9 +146,9 @@ const ProfilePage = () => {
       mutateLogs();
       closeAllConnections();
       setTimeout(() => activateSelected(), 2000);
-      Notice.success("Refresh clash config", 1000);
+      useNotification(t("Success"), "Refresh Clash Config");
     } catch (err: any) {
-      Notice.error(err?.message || err.toString(), 4000);
+      useNotification(t("Error"), err?.message || err.toString());
     } finally {
       clearTimeout(reset);
       setActivating("");
@@ -128,9 +159,9 @@ const ProfilePage = () => {
     try {
       await enhanceProfiles();
       mutateLogs();
-      Notice.success("Refresh clash config", 1000);
+      useNotification(t("Success"), "Refresh Clash Config");
     } catch (err: any) {
-      Notice.error(err.message || err.toString(), 3000);
+      useNotification(t("Error"), err.message || err.toString());
     }
   });
 
@@ -155,7 +186,7 @@ const ProfilePage = () => {
       mutateProfiles();
       mutateLogs();
     } catch (err: any) {
-      Notice.error(err?.message || err.toString());
+      useNotification(t("Error"), err?.message || err.toString());
     }
   });
 
@@ -192,7 +223,7 @@ const ProfilePage = () => {
       setLoadingCache((cache) => {
         // 获取没有正在更新的配置
         const items = regularItems.filter(
-          (e) => e.type === "remote" && !cache[e.uid]
+          (e) => e.type === "remote" && !cache[e.uid],
         );
         const change = Object.fromEntries(items.map((e) => [e.uid, true]));
 
@@ -294,21 +325,34 @@ const ProfilePage = () => {
         </Button>
       </Stack>
 
-      <Box sx={{ mb: 4.5 }}>
-        <Grid container spacing={{ xs: 2, lg: 3 }}>
-          {regularItems.map((item) => (
-            <Grid item xs={12} sm={6} md={4} lg={3} key={item.file}>
-              <ProfileItem
-                selected={profiles.current === item.uid}
-                activating={activating === item.uid}
-                itemData={item}
-                onSelect={(f) => onSelect(item.uid, f)}
-                onEdit={() => viewerRef.current?.edit(item)}
-              />
-            </Grid>
-          ))}
-        </Grid>
-      </Box>
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragEnd={onDragEnd}
+      >
+        <Box sx={{ mb: 4.5 }}>
+          <Grid container spacing={{ xs: 1, lg: 1 }}>
+            <SortableContext
+              items={regularItems.map((x) => {
+                return x.uid;
+              })}
+            >
+              {regularItems.map((item) => (
+                <Grid item xs={12} sm={6} md={4} lg={3} key={item.file}>
+                  <ProfileItem
+                    id={item.uid}
+                    selected={profiles.current === item.uid}
+                    activating={activating === item.uid}
+                    itemData={item}
+                    onSelect={(f) => onSelect(item.uid, f)}
+                    onEdit={() => viewerRef.current?.edit(item)}
+                  />
+                </Grid>
+              ))}
+            </SortableContext>
+          </Grid>
+        </Box>
+      </DndContext>
 
       {enhanceItems.length > 0 && (
         <Grid container spacing={{ xs: 2, lg: 3 }}>
@@ -335,6 +379,4 @@ const ProfilePage = () => {
       <ConfigViewer ref={configRef} />
     </BasePage>
   );
-};
-
-export default ProfilePage;
+}

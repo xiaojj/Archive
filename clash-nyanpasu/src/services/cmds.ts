@@ -1,6 +1,6 @@
 import dayjs from "dayjs";
 import { invoke } from "@tauri-apps/api/tauri";
-import { Notice } from "@/components/base";
+import { useNotification } from "@/hooks/use-notification";
 
 export async function getClashLogs() {
   const regex = /time="(.+?)"\s+level=(.+?)\s+msg="(.+?)"/;
@@ -40,7 +40,7 @@ export async function patchProfilesConfig(profiles: IProfilesConfig) {
 
 export async function createProfile(
   item: Partial<IProfileItem>,
-  fileData?: string | null
+  fileData?: string | null,
 ) {
   return invoke<void>("create_profile", { item, fileData });
 }
@@ -64,6 +64,13 @@ export async function importProfile(url: string) {
   });
 }
 
+export async function reorderProfile(activeId: string, overId: string) {
+  return invoke<void>("reorder_profile", {
+    activeId,
+    overId,
+  });
+}
+
 export async function updateProfile(index: string, option?: IProfileOption) {
   return invoke<void>("update_profile", { index, option });
 }
@@ -74,7 +81,7 @@ export async function deleteProfile(index: string) {
 
 export async function patchProfile(
   index: string,
-  profile: Partial<IProfileItem>
+  profile: Partial<IProfileItem>,
 ) {
   return invoke<void>("patch_profile", { index, profile });
 }
@@ -133,19 +140,19 @@ export async function grantPermission(core: string) {
 
 export async function openAppDir() {
   return invoke<void>("open_app_dir").catch((err) =>
-    Notice.error(err?.message || err.toString(), 1500)
+    useNotification("Error", err?.message || err.toString()),
   );
 }
 
 export async function openCoreDir() {
   return invoke<void>("open_core_dir").catch((err) =>
-    Notice.error(err?.message || err.toString(), 1500)
+    useNotification("Error", err?.message || err.toString()),
   );
 }
 
 export async function openLogsDir() {
   return invoke<void>("open_logs_dir").catch((err) =>
-    Notice.error(err?.message || err.toString(), 1500)
+    useNotification("Error", err?.message || err.toString()),
   );
 }
 
@@ -176,6 +183,6 @@ export async function uninstallService() {
 
 export async function invoke_uwp_tool() {
   return invoke<void>("invoke_uwp_tool").catch((err) =>
-    Notice.error(err?.message || err.toString(), 1500)
+    useNotification("Error", err?.message || err.toString()),
   );
 }
