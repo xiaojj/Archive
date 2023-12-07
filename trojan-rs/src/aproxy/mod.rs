@@ -1,9 +1,14 @@
-use rustls::{
-    Certificate,
-    client::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier}, ClientConfig, DigitallySignedStruct, Error, OwnedTrustAnchor, RootCertStore,
-    ServerName,
+use std::{
+    net::{IpAddr, SocketAddr},
+    sync::{atomic::AtomicBool, Arc},
 };
-use std::{net::SocketAddr, sync::Arc, time::SystemTime};
+
+use rustls::{
+    client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier},
+    crypto::ring::default_provider,
+    ClientConfig, DigitallySignedStruct, Error, RootCertStore, SignatureScheme,
+};
+use rustls_pki_types::{CertificateDer, ServerName, UnixTime};
 use tokio::{
     net::{TcpListener, UdpSocket},
     runtime::Runtime,
@@ -31,44 +36,50 @@ pub fn run() -> Result<()> {
     runtime.block_on(async_run())
 }
 
+#[derive(Debug)]
 pub struct InsecureAuth;
 
 impl ServerCertVerifier for InsecureAuth {
     fn verify_server_cert(
         &self,
-        _end_entity: &Certificate,
-        _intermediates: &[Certificate],
-        _server_name: &ServerName,
-        _scts: &mut dyn Iterator<Item=&[u8]>,
+        _end_entity: &CertificateDer<'_>,
+        _intermediates: &[CertificateDer<'_>],
+        _server_name: &ServerName<'_>,
         _ocsp_response: &[u8],
-        _now: SystemTime,
+        _now: UnixTime,
     ) -> std::result::Result<ServerCertVerified, Error> {
-        log::info!("insecure verify server cert ok");
         Ok(ServerCertVerified::assertion())
+    }
+
+    fn verify_tls12_signature(
+        &self,
+        _message: &[u8],
+        _cert: &CertificateDer<'_>,
+        _dss: &DigitallySignedStruct,
+    ) -> std::result::Result<HandshakeSignatureValid, Error> {
+        Ok(HandshakeSignatureValid::assertion())
     }
 
     fn verify_tls13_signature(
         &self,
         _message: &[u8],
-        _cert: &Certificate,
+        _cert: &CertificateDer<'_>,
         _dss: &DigitallySignedStruct,
     ) -> std::result::Result<HandshakeSignatureValid, Error> {
-        log::info!("insecure verify tls13 signature ok");
         Ok(HandshakeSignatureValid::assertion())
+    }
+
+    fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
+        default_provider()
+            .signature_verification_algorithms
+            .supported_schemes()
     }
 }
 
 fn prepare_tls_config() -> Arc<ClientConfig> {
     let mut root_store = RootCertStore::empty();
-    root_store.add_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.iter().map(|ta| {
-        OwnedTrustAnchor::from_subject_spki_name_constraints(
-            ta.subject,
-            ta.spki,
-            ta.name_constraints,
-        )
-    }));
+    root_store.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
     let mut config = ClientConfig::builder()
-        .with_safe_defaults()
         .with_root_certificates(root_store)
         .with_no_client_auth();
     if OPTIONS.proxy_args().insecure {
@@ -124,4 +135,41 @@ async fn async_run() -> Result<()> {
         }
     }
     Ok(())
+}
+
+#[cfg(target_os = "windows")]
+async fn wait_until_stop(_running: Arc<AtomicBool>, _ip: IpAddr) {}
+
+#[cfg(not(target_os = "windows"))]
+async fn wait_until_stop(running: Arc<AtomicBool>, ip: IpAddr) {
+    let timeout = OPTIONS.proxy_args().ipset_timeout;
+    if timeout == 0 || OPTIONS.proxy_args().skip_dns_ip == Some(ip) {
+        return;
+    }
+    let mut tick = tokio::time::interval(std::time::Duration::from_secs(1));
+    let mut counter = 0;
+    while running.load(std::sync::atomic::Ordering::SeqCst) {
+        tick.tick().await;
+        counter += 1;
+        if counter % timeout != 1 {
+            continue;
+        }
+        let mut session = OPTIONS
+            .proxy_args()
+            .session
+            .as_ref()
+            .unwrap()
+            .lock()
+            .unwrap();
+        match session.add(ip, Some(timeout as u32 + 5)) {
+            Ok(ret) => {
+                if !ret {
+                    log::error!("add ip:{} to ipset failed", ip);
+                }
+            }
+            Err(err) => {
+                log::error!("add ip:{} to ipset failed:{}", ip, err);
+            }
+        }
+    }
 }
