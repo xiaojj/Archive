@@ -1,15 +1,19 @@
-use bytes::{Buf, BytesMut};
-use rustls::ServerName;
 use std::{
     collections::HashMap,
     io,
     io::ErrorKind,
     net::{IpAddr, SocketAddr},
-    sync::Arc,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
     time::{Duration, Instant},
 };
+
+use bytes::{Buf, BytesMut};
+use rustls_pki_types::ServerName;
 use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt, ReadHalf, split},
+    io::{split, AsyncReadExt, AsyncWriteExt, ReadHalf},
     net::{TcpStream, UdpSocket},
     spawn,
     sync::mpsc::{channel, Receiver, Sender, UnboundedSender},
@@ -17,9 +21,9 @@ use tokio::{
 use tokio_rustls::{client::TlsStream, TlsConnector};
 
 use crate::{
-    aproxy::new_socket,
+    aproxy::{new_socket, wait_until_stop},
     config::OPTIONS,
-    proto::{TrojanRequest, UDP_ASSOCIATE, UdpAssociate, UdpParseResult},
+    proto::{TrojanRequest, UdpAssociate, UdpParseResult, UDP_ASSOCIATE},
     sys,
     types::Result,
 };
@@ -31,7 +35,7 @@ enum SelectResult {
 
 pub async fn run_udp(
     listener: UdpSocket,
-    server_name: ServerName,
+    server_name: ServerName<'static>,
     connector: TlsConnector,
     profiler_sender: Option<UnboundedSender<IpAddr>>,
 ) -> Result<()> {
@@ -131,7 +135,7 @@ pub async fn run_udp(
 async fn local_to_remote(
     mut local: Receiver<(SocketAddr, Vec<u8>)>,
     socket: Arc<UdpSocket>,
-    server_name: ServerName,
+    server_name: ServerName<'static>,
     connector: TlsConnector,
     request: Arc<BytesMut>,
     src_addr: SocketAddr,
@@ -147,7 +151,9 @@ async fn local_to_remote(
                 return;
             }
             let (read_half, write_half) = split(remote);
-            spawn(remote_to_local(read_half, socket, src_addr, sender));
+            spawn(remote_to_local_with_wait(
+                read_half, socket, src_addr, sender,
+            ));
             write_half
         } else {
             log::error!("connect to remote server failed");
@@ -162,6 +168,11 @@ async fn local_to_remote(
         if remote.write_all(header.as_ref()).await.is_err()
             || remote.write_all(data.as_slice()).await.is_err()
         {
+            log::error!(
+                "local:{} to remote:{} send failed, remote closed",
+                src_addr,
+                target
+            );
             break;
         }
     }
@@ -174,6 +185,7 @@ async fn remote_to_local(
     local: Arc<UdpSocket>,
     src_addr: SocketAddr,
     sender: Sender<SocketAddr>,
+    running: Arc<AtomicBool>,
 ) {
     let mut buffer = BytesMut::new();
     'main: loop {
@@ -181,7 +193,7 @@ async fn remote_to_local(
             Duration::from_secs(OPTIONS.udp_idle_timeout),
             remote.read_buf(&mut buffer),
         )
-            .await
+        .await
         {
             Ok(Ok(n)) if n > 0 => loop {
                 match UdpAssociate::parse(buffer.as_ref()) {
@@ -206,11 +218,37 @@ async fn remote_to_local(
                     }
                 }
             },
+            Err(e) => {
+                log::warn!("udp remote to local:{} timeout:{}", src_addr, e);
+                break;
+            }
             _ => {
-                log::error!("udp remote to local:{} failed, remote closed", src_addr);
+                log::warn!(
+                    "udp remote to local:{} read failed, remote closed",
+                    src_addr
+                );
                 break;
             }
         }
     }
     let _ = sender.send(src_addr).await;
+    running.store(false, Ordering::SeqCst);
+}
+
+async fn remote_to_local_with_wait(
+    read_half: ReadHalf<TlsStream<TcpStream>>,
+    socket: Arc<UdpSocket>,
+    src_addr: SocketAddr,
+    sender: Sender<SocketAddr>,
+) {
+    let addr = socket.local_addr().unwrap();
+    let running = Arc::new(AtomicBool::new(true));
+    spawn(remote_to_local(
+        read_half,
+        socket,
+        src_addr,
+        sender,
+        running.clone(),
+    ));
+    wait_until_stop(running, addr.ip()).await;
 }

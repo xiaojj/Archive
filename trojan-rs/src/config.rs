@@ -8,6 +8,12 @@ use std::{
 use clap::Parser;
 use sha2::{Digest, Sha224};
 
+#[cfg(not(target_os = "windows"))]
+use ipset::{
+    types::{EnvOption, HashIp},
+    Session,
+};
+
 use crate::{
     types::TrojanError,
     utils::{get_system_dns, resolve},
@@ -197,8 +203,25 @@ pub struct ProxyArgs {
     pub ping_threshold: u16,
 
     /// allow insecure connections.
-    #[clap(long)]
+    #[clap(short = 's', long)]
     pub insecure: bool,
+
+    /// timeout for no_bypass_ipset in seconds.
+    #[clap(short = 'r', long, default_value = "0")]
+    pub ipset_timeout: u64,
+
+    /// the dns address to be skipped from timeout setting
+    #[clap(short = 'd', long, default_value = "8.8.8.8")]
+    pub skip_dns: String,
+
+    /// skip_dns in IpAddr
+    #[clap(skip)]
+    pub skip_dns_ip: Option<IpAddr>,
+
+    /// session used for ipset
+    #[clap(skip)]
+    #[cfg(not(target_os = "windows"))]
+    pub session: Option<std::sync::Mutex<Session<HashIp>>>,
 }
 
 #[derive(Parser)]
@@ -277,6 +300,7 @@ pub struct ServerArgs {
     #[clap(long, default_value = "600")]
     pub cached_ping_timeout: u64,
 
+    /// enable private ip to be proxy.
     #[clap(short = 'p', long)]
     pub allow_private: bool,
 }
@@ -347,7 +371,17 @@ impl Opts {
                 self.back_addr = Some(back_addr);
                 self.system_dns = get_system_dns().unwrap_or("127.0.0.53".to_string())
             }
-            Mode::Proxy(ref args) | Mode::Aproxy(ref args) => {
+            Mode::Proxy(ref mut args) | Mode::Aproxy(ref mut args) => {
+                if args.ipset_timeout > 0 {
+                    #[cfg(not(target_os = "windows"))]
+                    {
+                        let ip: Option<IpAddr> = args.skip_dns.as_str().parse().ok();
+                        args.skip_dns_ip = ip;
+                        let session = Session::new(args.no_bypass_ipset.clone());
+                        session.set_option(EnvOption::Exist);
+                        args.session = Some(std::sync::Mutex::new(session));
+                    }
+                }
                 let hostname = args.hostname.clone();
                 let port = args.port;
                 self.resolve(hostname, port, None);

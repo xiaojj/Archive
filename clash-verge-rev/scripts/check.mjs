@@ -18,6 +18,7 @@ const PLATFORM_MAP = {
   "x86_64-apple-darwin": "darwin",
   "aarch64-apple-darwin": "darwin",
   "x86_64-unknown-linux-gnu": "linux",
+  "i686-unknown-linux-gnu": "linux",
   "aarch64-unknown-linux-gnu": "linux",
   "armv7-unknown-linux-gnueabihf": "linux",
 };
@@ -28,6 +29,7 @@ const ARCH_MAP = {
   "x86_64-apple-darwin": "x64",
   "aarch64-apple-darwin": "arm64",
   "x86_64-unknown-linux-gnu": "x64",
+  "i686-unknown-linux-gnu": "ia32",
   "aarch64-unknown-linux-gnu": "arm64",
   "armv7-unknown-linux-gnueabihf": "arm",
 };
@@ -58,6 +60,7 @@ const META_ALPHA_MAP = {
   "darwin-x64": "mihomo-darwin-amd64",
   "darwin-arm64": "mihomo-darwin-arm64",
   "linux-x64": "mihomo-linux-amd64-compatible",
+  "linux-ia32": "mihomo-linux-386",
   "linux-arm64": "mihomo-linux-arm64",
   "linux-arm": "mihomo-linux-armv7",
 };
@@ -86,6 +89,7 @@ const META_MAP = {
   "darwin-x64": "mihomo-darwin-amd64",
   "darwin-arm64": "mihomo-darwin-arm64",
   "linux-x64": "mihomo-linux-amd64-compatible",
+  "linux-ia32": "mihomo-linux-386",
   "linux-arm64": "mihomo-linux-arm64",
   "linux-arm": "mihomo-linux-armv7",
 };
