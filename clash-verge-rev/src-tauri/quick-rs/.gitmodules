@@ -1,3 +1,0 @@
-[submodule "quickjs-sys/embed/quickjs"]
-	path = quickjs-sys/embed/quickjs
-	url = https://github.com/bellard/quickjs.git

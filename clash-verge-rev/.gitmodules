@@ -1,3 +1,0 @@
-[submodule "src-tauri/quick-rs"]
-	path = src-tauri/quick-rs
-	url = https://github.com/clash-verge-rev/quick-rs.git

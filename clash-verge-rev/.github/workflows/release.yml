@@ -20,8 +20,8 @@ jobs:
             target: x86_64-pc-windows-msvc
           - os: windows-latest
             target: i686-pc-windows-msvc
-          - os: windows-latest
-            target: aarch64-pc-windows-msvc
+          # - os: windows-latest
+          #   target: aarch64-pc-windows-msvc
           - os: macos-latest
             target: aarch64-apple-darwin
           - os: macos-latest
@@ -31,8 +31,6 @@ jobs:
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
-        with:
-          submodules: "recursive"
 
       - name: Install Rust Stable
         uses: dtolnay/rust-toolchain@stable
@@ -63,6 +61,7 @@ jobs:
           pnpm check ${{ matrix.target }}
 
       - name: Tauri build
+        if: startsWith(matrix.os, 'windows') || startsWith(matrix.os,'macos') || startsWith(matrix.target,'x86_64')
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -79,7 +78,8 @@ jobs:
 
       - name: Portable Bundle
         if: matrix.os == 'windows-latest'
-        run: pnpm portable ${{ matrix.target }}
+        run: |
+          pnpm portable ${{ matrix.target }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
@@ -97,14 +97,12 @@ jobs:
             target: i686-unknown-linux-gnu
           - os: ubuntu-latest
             target: aarch64-unknown-linux-gnu
-          - os: ubuntu-latest
-            target: armv7-unknown-linux-gnueabihf
+          # - os: ubuntu-latest
+          #   target: armv7-unknown-linux-gnueabihf
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
-        with:
-          submodules: "recursive"
 
       - name: Build for Linux
         uses: ./.github/build-for-linux
