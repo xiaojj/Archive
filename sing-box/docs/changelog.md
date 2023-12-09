@@ -4,7 +4,25 @@ icon: material/alert-decagram
 
 #### 1.8.0-alpha.17
 
+* Add GSO support for TUN and WireGuard system interface **1**
+* Update uTLS to 1.5.4 **2**
+* Update dependencies **3**
 * Fixes and improvements
+
+**1**:
+
+See [TUN](/configuration/inbound/tun) inbound and [WireGuard](/configuration/outbound/wireguard) outbound.
+
+**2**:
+
+Added some new [fingerprints](/configuration/shared/tls#utls).
+Also, starting with this release, uTLS requires at least Go 1.20.
+
+**3**:
+
+Updated `cloudflare-tls`, `gomobile`, `smux`, `tfo-go` and `wireguard-go` to latest, and `gvisor` to `20231204.0`
+
+This may break something, good luck!
 
 #### 1.7.4
 
