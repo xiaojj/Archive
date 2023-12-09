@@ -41,10 +41,6 @@ impl Tray {
                 "direct_mode",
                 t!("Direct Mode", "直连模式"),
             ))
-            .add_item(CustomMenuItem::new(
-                "script_mode",
-                t!("Script Mode", "脚本模式"),
-            ))
             .add_native_item(SystemTrayMenuItem::Separator)
             .add_item(CustomMenuItem::new(
                 "system_proxy",
@@ -128,27 +124,35 @@ impl Tray {
         let _ = tray.get_item("rule_mode").set_selected(mode == "rule");
         let _ = tray.get_item("global_mode").set_selected(mode == "global");
         let _ = tray.get_item("direct_mode").set_selected(mode == "direct");
-        let _ = tray.get_item("script_mode").set_selected(mode == "script");
 
         let verge = Config::verge();
         let verge = verge.latest();
         let system_proxy = verge.enable_system_proxy.as_ref().unwrap_or(&false);
         let tun_mode = verge.enable_tun_mode.as_ref().unwrap_or(&false);
 
-        #[cfg(target_os = "windows")]
-        {
-            let mut indication_icon = if *system_proxy {
-                include_bytes!("../../icons/win-tray-icon-activated.png").to_vec()
-            } else {
-                include_bytes!("../../icons/win-tray-icon.png").to_vec()
-            };
+        let mut indication_icon = if *system_proxy {
+            #[cfg(not(target_os = "macos"))]
+            let icon = include_bytes!("../../icons/tray-icon-sys.png").to_vec();
+            #[cfg(target_os = "macos")]
+            let icon = include_bytes!("../../icons/mac-tray-icon-sys.png").to_vec();
+            icon
+        } else {
+            #[cfg(not(target_os = "macos"))]
+            let icon = include_bytes!("../../icons/tray-icon.png").to_vec();
+            #[cfg(target_os = "macos")]
+            let icon = include_bytes!("../../icons/icon.png").to_vec();
+            icon
+        };
 
-            if *tun_mode {
-                indication_icon = include_bytes!("../../icons/win-tray-icon-tun.png").to_vec();
-            }
-
-            let _ = tray.set_icon(tauri::Icon::Raw(indication_icon));
+        if *tun_mode {
+            #[cfg(not(target_os = "macos"))]
+            let icon = include_bytes!("../../icons/tray-icon-tun.png").to_vec();
+            #[cfg(target_os = "macos")]
+            let icon = include_bytes!("../../icons/mac-tray-icon-tun.png").to_vec();
+            indication_icon = icon
         }
+
+        let _ = tray.set_icon(tauri::Icon::Raw(indication_icon));
 
         let _ = tray.get_item("system_proxy").set_selected(*system_proxy);
         let _ = tray.get_item("tun_mode").set_selected(*tun_mode);
@@ -160,7 +164,6 @@ impl Tray {
             map
         };
 
-        #[cfg(not(target_os = "linux"))]
         let _ = tray.set_tooltip(&format!(
             "Clash Verge {version}\n{}: {}\n{}: {}",
             t!("System Proxy", "系统代理"),
@@ -185,14 +188,12 @@ impl Tray {
 
     pub fn on_system_tray_event(app_handle: &AppHandle, event: SystemTrayEvent) {
         match event {
-            #[cfg(not(target_os = "linux"))]
             SystemTrayEvent::LeftClick { .. } => Tray::on_left_click(app_handle),
             SystemTrayEvent::MenuItemClick { id, .. } => match id.as_str() {
-                mode @ ("rule_mode" | "global_mode" | "direct_mode" | "script_mode") => {
+                mode @ ("rule_mode" | "global_mode" | "direct_mode") => {
                     let mode = &mode[0..mode.len() - 5];
                     feat::change_clash_mode(mode.into());
                 }
-
                 "open_window" => resolve::create_window(app_handle),
                 "system_proxy" => feat::toggle_system_proxy(),
                 "tun_mode" => feat::toggle_tun_mode(),
