@@ -187,14 +187,6 @@ class QUICHE_EXPORT QuicSpdySession
                                   size_t frame_len,
                                   const QuicHeaderList& header_list);
 
-  // Called by |headers_stream_| when push promise headers have been
-  // completely received.  |fin| will be true if the fin flag was set
-  // in the headers.
-  virtual void OnPromiseHeaderList(QuicStreamId stream_id,
-                                   QuicStreamId promised_stream_id,
-                                   size_t frame_len,
-                                   const QuicHeaderList& header_list);
-
   // Called by |headers_stream_| when a PRIORITY frame has been received for a
   // stream. This method will only be called for server streams.
   virtual void OnPriorityFrame(QuicStreamId stream_id,
@@ -252,12 +244,6 @@ class QUICHE_EXPORT QuicSpdySession
   // has already been sent. Send connection close with |error_code| and |reason|
   // before encryption gets established.
   void SendHttp3GoAway(QuicErrorCode error_code, const std::string& reason);
-
-  // Write |headers| for |promised_stream_id| on |original_stream_id| in a
-  // PUSH_PROMISE frame to peer.
-  virtual void WritePushPromise(QuicStreamId original_stream_id,
-                                QuicStreamId promised_stream_id,
-                                spdy::Http2HeaderBlock headers);
 
   QpackEncoder* qpack_encoder();
   QpackDecoder* qpack_decoder();
@@ -332,15 +318,8 @@ class QUICHE_EXPORT QuicSpdySession
   // Called when the size of the compressed frame payload is available.
   void OnCompressedFrameSize(size_t frame_len);
 
-  // Called when a PUSH_PROMISE frame has been received.
-  // TODO(b/171463363): Remove.
-  void OnPushPromise(spdy::SpdyStreamId stream_id,
-                     spdy::SpdyStreamId promised_stream_id);
-
   // Called when the complete list of headers is available.
   void OnHeaderList(const QuicHeaderList& header_list);
-
-  QuicStreamId promised_stream_id() const { return promised_stream_id_; }
 
   // Initialze HTTP/3 unidirectional streams if |unidirectional| is true and
   // those streams are not initialized yet.
@@ -360,6 +339,9 @@ class QUICHE_EXPORT QuicSpdySession
   // received or sent.
   bool goaway_received() const;
   bool goaway_sent() const;
+  absl::optional<uint64_t> last_received_http3_goaway_id() {
+    return last_received_http3_goaway_id_;
+  }
 
   // Log header compression ratio histogram.
   // |using_qpack| is true for QPACK, false for HPACK.
@@ -480,6 +462,12 @@ class QUICHE_EXPORT QuicSpdySession
 
   QuicSpdyStream* GetOrCreateSpdyDataStream(const QuicStreamId stream_id);
 
+  // Returns a pointer to the incoming QPACK encoder stream (the one that
+  // belongs to the local decoding context). Might return nullptr.
+  QpackReceiveStream* GetQpackEncoderReceiveStream() const {
+    return qpack_encoder_receive_stream_;
+  }
+
   void OnConfigNegotiated() override;
 
  protected:
@@ -512,10 +500,13 @@ class QUICHE_EXPORT QuicSpdySession
   bool UsesPendingStreamForFrame(QuicFrameType type,
                                  QuicStreamId stream_id) const override;
 
-  // Processes incoming unidirectional streams; parses the stream type, and
-  // creates a new stream of the corresponding type.  Returns the pointer to the
-  // newly created stream, or nullptr if the stream type is not yet available.
-  QuicStream* ProcessPendingStream(PendingStream* pending) override;
+  // Called when a STREAM_FRAME is received on |pending| stream or
+  // ProcessAllPendingStreams() gets called. Processes incoming unidirectional
+  // streams; parses the stream type, and creates a new stream of the
+  // corresponding type. Returns the pointer to the newly created stream, or
+  // nullptr if the stream type is not yet available.
+  QuicStream* ProcessReadUnidirectionalPendingStream(
+      PendingStream* pending) override;
 
   size_t WriteHeadersOnHeadersStreamImpl(
       QuicStreamId id, spdy::Http2HeaderBlock headers, bool fin,
@@ -655,7 +646,6 @@ class QUICHE_EXPORT QuicSpdySession
 
   // Data about the stream whose headers are being processed.
   QuicStreamId stream_id_;
-  QuicStreamId promised_stream_id_;
   size_t frame_len_;
   bool fin_;
 
@@ -719,6 +709,10 @@ class QUICHE_EXPORT QuicSpdySession
 
   // Latched value of quic_enable_h3_datagrams reloadable flag.
   bool quic_enable_h3_datagrams_flag_;
+
+  // Latched value of quic_do_not_increase_max_streams_after_h3_goaway
+  // reloadable flag.
+  bool do_not_increase_max_streams_after_h3_goaway_flag_;
 };
 
 }  // namespace quic

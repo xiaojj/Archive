@@ -60,17 +60,14 @@ component("url") {
 
   defines = [ "IS_URL_IMPL" ]
 
+  deps = [ "//base/third_party/dynamic_annotations" ]
+
   public_deps = [
     "//base",
     "//build:robolectric_buildflags",
   ]
 
-  if (is_robolectric) {
-    # Make jni.h available.
-    public_configs = [ "//third_party/jdk" ]
-  }
-
-  deps = [ "//base/third_party/dynamic_annotations" ]
+  configs += [ "//build/config/compiler:wexit_time_destructors" ]
 
   if (is_win) {
     # Don't conflict with Windows' "url.dll".

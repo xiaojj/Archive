@@ -284,12 +284,16 @@ absl::optional<size_t> MoqtParser::ProcessMessage(absl::string_view data) {
       return ProcessSubscribeOk(data);
     case MoqtMessageType::kSubscribeError:
       return ProcessSubscribeError(data);
+    case MoqtMessageType::kUnsubscribe:
+      return ProcessUnsubscribe(data);
     case MoqtMessageType::kAnnounce:
       return ProcessAnnounce(data);
     case MoqtMessageType::kAnnounceOk:
       return ProcessAnnounceOk(data);
     case MoqtMessageType::kAnnounceError:
       return ProcessAnnounceError(data);
+    case MoqtMessageType::kUnannounce:
+      return ProcessUnannounce(data);
     case MoqtMessageType::kGoAway:
       return ProcessGoAway(data);
     default:
@@ -341,19 +345,20 @@ absl::optional<size_t> MoqtParser::ProcessObject(absl::string_view data) {
 absl::optional<size_t> MoqtParser::ProcessSetup(absl::string_view data) {
   MoqtSetup setup;
   quic::QuicDataReader reader(data);
+  uint64_t number_of_supported_versions;
   if (perspective_ == quic::Perspective::IS_SERVER) {
-    if (!reader.ReadVarInt62(&setup.number_of_supported_versions)) {
+    if (!reader.ReadVarInt62(&number_of_supported_versions)) {
       return absl::nullopt;
     }
   } else {
-    setup.number_of_supported_versions = 1;
+    number_of_supported_versions = 1;
   }
   uint64_t value;
-  for (uint64_t i = 0; i < setup.number_of_supported_versions; ++i) {
+  for (uint64_t i = 0; i < number_of_supported_versions; ++i) {
     if (!reader.ReadVarInt62(&value)) {
       return absl::nullopt;
     }
-    setup.supported_versions.push_back(value);
+    setup.supported_versions.push_back(static_cast<MoqtVersion>(value));
   }
   // Parse parameters
   while (!reader.IsDoneReading()) {
@@ -366,10 +371,6 @@ absl::optional<size_t> MoqtParser::ProcessSetup(absl::string_view data) {
       case MoqtSetupParameter::kRole:
         if (setup.role.has_value()) {
           ParseError("ROLE parameter appears twice in SETUP");
-          return absl::nullopt;
-        }
-        if (perspective_ == quic::Perspective::IS_CLIENT) {
-          ParseError("ROLE parameter sent by server in SETUP");
           return absl::nullopt;
         }
         if (!ReadIntegerPieceVarInt62(reader, value)) {
@@ -520,6 +521,18 @@ absl::optional<size_t> MoqtParser::ProcessSubscribeError(
   return reader.PreviouslyReadPayload().length();
 }
 
+absl::optional<size_t> MoqtParser::ProcessUnsubscribe(absl::string_view data) {
+  MoqtUnsubscribe unsubscribe;
+  quic::QuicDataReader reader(data);
+  if (!reader.ReadStringPieceVarInt62(&unsubscribe.full_track_name)) {
+    return absl::nullopt;
+  }
+  if (reader.IsDoneReading()) {
+    visitor_.OnUnsubscribeMessage(unsubscribe);
+  }
+  return reader.PreviouslyReadPayload().length();
+}
+
 absl::optional<size_t> MoqtParser::ProcessAnnounce(absl::string_view data) {
   MoqtAnnounce announce;
   quic::QuicDataReader reader(data);
@@ -585,7 +598,7 @@ absl::optional<size_t> MoqtParser::ProcessAnnounce(absl::string_view data) {
 absl::optional<size_t> MoqtParser::ProcessAnnounceOk(absl::string_view data) {
   MoqtAnnounceOk announce_ok;
   quic::QuicDataReader reader(data);
-  if (!reader.ReadStringPiece(&announce_ok.track_namespace, data.length())) {
+  if (!reader.ReadStringPieceVarInt62(&announce_ok.track_namespace)) {
     return absl::nullopt;
   }
   if (reader.IsDoneReading()) {
@@ -609,6 +622,18 @@ absl::optional<size_t> MoqtParser::ProcessAnnounceError(
   }
   if (reader.IsDoneReading()) {
     visitor_.OnAnnounceErrorMessage(announce_error);
+  }
+  return reader.PreviouslyReadPayload().length();
+}
+
+absl::optional<size_t> MoqtParser::ProcessUnannounce(absl::string_view data) {
+  MoqtUnannounce unannounce;
+  quic::QuicDataReader reader(data);
+  if (!reader.ReadStringPieceVarInt62(&unannounce.track_namespace)) {
+    return absl::nullopt;
+  }
+  if (reader.IsDoneReading()) {
+    visitor_.OnUnannounceMessage(unannounce);
   }
   return reader.PreviouslyReadPayload().length();
 }

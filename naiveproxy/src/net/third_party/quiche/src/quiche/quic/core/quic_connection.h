@@ -2367,9 +2367,6 @@ class QUICHE_EXPORT QuicConnection
   const bool ignore_gquic_probing_ =
       GetQuicReloadableFlag(quic_ignore_gquic_probing);
 
-  const bool ignore_duplicate_new_cid_frame_ =
-      GetQuicReloadableFlag(quic_ignore_duplicate_new_cid_frame);
-
   RetransmittableOnWireBehavior retransmittable_on_wire_behavior_ = DEFAULT;
 
   // Server addresses that are known to the client.
@@ -2410,6 +2407,21 @@ class QUICHE_EXPORT QuicConnection
   // The ECN codepoint of the last packet to be sent to the writer, which
   // might be different from the next codepoint in per_packet_options_.
   QuicEcnCodepoint last_ecn_codepoint_sent_ = ECN_NOT_ECT;
+
+  // The reason for the last call to CanWrite with a true return value.
+  enum LastCanWriteReason : uint8_t {
+    LAST_CAN_WRITE_REASON_NONE = 0,
+    LAST_CAN_WRITE_REASON_COALESCE_PACKET,
+    LAST_CAN_WRITE_REASON_PENDING_TIMER,
+    LAST_CAN_WRITE_REASON_NO_RETRANSMITTABLE_DATA,
+    LAST_CAN_WRITE_REASON_DELAY_WITHIN_RELEASE_TIME,
+    LAST_CAN_WRITE_REASON_NO_DELAY,
+  };
+  void RecordLastCanWriteReason(LastCanWriteReason reason);
+  // TODO(b/299071230): Delete |packets_sent_on_last_successful_can_write_| and
+  // |last_can_write_reason_| after debugging.
+  LastCanWriteReason last_can_write_reason_ = LAST_CAN_WRITE_REASON_NONE;
+  QuicPacketCount packets_sent_on_last_successful_can_write_ = 0;
 };
 
 }  // namespace quic

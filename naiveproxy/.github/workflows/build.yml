@@ -411,9 +411,17 @@ jobs:
             openwrt: 'target=mvebu subtarget=cortexa72'
             target_cpu: arm64
             extra: 'arm_cpu="cortex-a72"'
+          - arch: aarch64_cortex-a72-static
+            openwrt: 'target=mvebu subtarget=cortexa72'
+            target_cpu: arm64
+            extra: 'arm_cpu="cortex-a72" build_static=true no_madvise_syscall=true'
           - arch: aarch64_generic
             openwrt: 'target=rockchip subtarget=armv8'
             target_cpu: arm64
+          - arch: aarch64_generic-static
+            openwrt: 'target=rockchip subtarget=armv8'
+            target_cpu: arm64
+            extra: 'build_static=true no_madvise_syscall=true'
           - arch: arm_arm1176jzf-s_vfp
             openwrt: 'target=bcm27xx subtarget=bcm2708'
             target_cpu: arm

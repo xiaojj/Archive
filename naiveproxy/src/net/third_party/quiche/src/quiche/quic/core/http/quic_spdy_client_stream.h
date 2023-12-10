@@ -39,10 +39,6 @@ class QUICHE_EXPORT QuicSpdyClientStream : public QuicSpdyStream {
   void OnTrailingHeadersComplete(bool fin, size_t frame_len,
                                  const QuicHeaderList& header_list) override;
 
-  // Override the base class to handle creation of the push stream.
-  void OnPromiseHeaderList(QuicStreamId promised_id, size_t frame_len,
-                           const QuicHeaderList& header_list) override;
-
   // QuicStream implementation called by the session when there's data for us.
   void OnBodyAvailable() override;
 
@@ -82,7 +78,7 @@ class QUICHE_EXPORT QuicSpdyClientStream : public QuicSpdyStream {
   using QuicSpdyStream::SetPriority;
 
  protected:
-  bool ValidatedReceivedHeaders(const QuicHeaderList& header_list) override;
+  bool ValidateReceivedHeaders(const QuicHeaderList& header_list) override;
 
   // Called by OnInitialHeadersComplete to set response_header_. Returns false
   // on error.

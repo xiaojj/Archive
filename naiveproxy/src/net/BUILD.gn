@@ -242,6 +242,8 @@ component("net") {
     "base/priority_queue.h",
     "base/privacy_mode.cc",
     "base/privacy_mode.h",
+    "base/proxy_chain.cc",
+    "base/proxy_chain.h",
     "base/proxy_delegate.h",
     "base/proxy_server.cc",
     "base/proxy_server.h",
@@ -1088,7 +1090,7 @@ component("net") {
     ":cronet_buildflags",
     ":net_deps",
     "//build:chromeos_buildflags",
-    "//net/data/ssl/chrome_root_store:gen_root_store_inc",
+    "//components/miracle_parameter/common",
     "//net/http:transport_security_state_generated_files",
   ]
 
@@ -1218,10 +1220,6 @@ component("net") {
       "base/address_map_cache_linux.cc",
       "base/address_map_cache_linux.h",
     ]
-  }
-
-  if (is_chromeos) {
-    deps += [ "//third_party/xdg_shared_mime_info" ]
   }
 
   if (is_mac) {
@@ -1423,8 +1421,6 @@ component("net") {
       "cert/internal/system_trust_store_nss.h",
       "cert/internal/trust_store_nss.cc",
       "cert/internal/trust_store_nss.h",
-      "cert/known_roots_nss.cc",
-      "cert/known_roots_nss.h",
       "cert/nss_cert_database.cc",
       "cert/nss_cert_database.h",
       "cert/test_root_certs_builtin.cc",
@@ -1454,7 +1450,10 @@ component("net") {
   }
 
   if (is_fuchsia) {
-    deps += [ "//third_party/fuchsia-sdk/sdk/pkg/async-loop-cpp" ]
+    deps += [
+      "//net/data/ssl/chrome_root_store:gen_root_store_inc",
+      "//third_party/fuchsia-sdk/sdk/pkg/async-loop-cpp",
+    ]
     public_deps += [ "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.net.interfaces:fuchsia.net.interfaces_hlcpp" ]
     sources += [
       "base/fuchsia/network_interface_cache.cc",
@@ -1671,6 +1670,10 @@ source_set("net_deps") {
     "//third_party/zlib",
     "//url:buildflags",
   ]
+
+  if (!disable_file_support) {
+    public_deps += [ ":net_resources" ]
+  }
 
   public_configs = net_configs
 

@@ -34,18 +34,20 @@ class NaiveProxyDelegate : public ProxyDelegate {
   ~NaiveProxyDelegate() override;
 
   void OnResolveProxy(const GURL& url,
-                      const GURL& top_frame_url,
+                      const NetworkAnonymizationKey& network_anonymization_key,
                       const std::string& method,
                       const ProxyRetryInfoMap& proxy_retry_info,
                       ProxyInfo* result) override {}
-  void OnFallback(const ProxyServer& bad_proxy, int net_error) override {}
+  void OnFallback(const ProxyChain& bad_proxy, int net_error) override {}
 
   // This only affects h2 proxy client socket.
-  void OnBeforeTunnelRequest(const ProxyServer& proxy_server,
+  void OnBeforeTunnelRequest(const ProxyChain& proxy_server,
+                             size_t chain_index,
                              HttpRequestHeaders* extra_headers) override;
 
   Error OnTunnelHeadersReceived(
-      const ProxyServer& proxy_server,
+      const ProxyChain& proxy_chain,
+      size_t chain_index,
       const HttpResponseHeaders& response_headers) override;
 
   // Returns empty if the padding type has not been negotiated.

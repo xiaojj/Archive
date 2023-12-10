@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// Structured data for message types in draft-ietf-moq-transport-00.
+// Structured data for message types in draft-ietf-moq-transport-01.
 
 #ifndef QUICHE_QUIC_MOQT_MOQT_MESSAGES_H_
 #define QUICHE_QUIC_MOQT_MOQT_MESSAGES_H_
@@ -15,9 +15,23 @@
 #include "absl/strings/string_view.h"
 #include "absl/types/optional.h"
 #include "quiche/quic/core/quic_time.h"
+#include "quiche/quic/core/quic_types.h"
 #include "quiche/common/platform/api/quiche_export.h"
 
 namespace moqt {
+
+enum class MoqtVersion : uint64_t {
+  kDraft01 = 0xff000001,
+  kUnrecognizedVersionForTests = 0xfe0000ff,
+};
+
+struct QUICHE_EXPORT MoqtSessionParameters {
+  // TODO: support multiple versions.
+  MoqtVersion version;
+  quic::Perspective perspective;
+  bool using_webtrans;
+  std::string path;
+};
 
 // The maximum length of a message, excluding any OBJECT payload. This prevents
 // DoS attack via forcing the parser to buffer a large message (OBJECT payloads
@@ -33,6 +47,8 @@ enum class QUICHE_EXPORT MoqtMessageType : uint64_t {
   kAnnounce = 0x06,
   kAnnounceOk = 0x7,
   kAnnounceError = 0x08,
+  kUnannounce = 0x09,
+  kUnsubscribe = 0x0a,
   kGoAway = 0x10,
 };
 
@@ -54,8 +70,7 @@ enum class QUICHE_EXPORT MoqtTrackRequestParameter : uint64_t {
 };
 
 struct QUICHE_EXPORT MoqtSetup {
-  uint64_t number_of_supported_versions;
-  std::vector<uint64_t> supported_versions;
+  std::vector<MoqtVersion> supported_versions;
   absl::optional<MoqtRole> role;
   absl::optional<absl::string_view> path;
 };
@@ -88,6 +103,10 @@ struct QUICHE_EXPORT MoqtSubscribeError {
   absl::string_view reason_phrase;
 };
 
+struct QUICHE_EXPORT MoqtUnsubscribe {
+  absl::string_view full_track_name;
+};
+
 struct QUICHE_EXPORT MoqtAnnounce {
   absl::string_view track_namespace;
   absl::optional<absl::string_view> authorization_info;
@@ -101,6 +120,10 @@ struct QUICHE_EXPORT MoqtAnnounceError {
   absl::string_view track_namespace;
   uint64_t error_code;
   absl::string_view reason_phrase;
+};
+
+struct QUICHE_EXPORT MoqtUnannounce {
+  absl::string_view track_namespace;
 };
 
 struct QUICHE_EXPORT MoqtGoAway {};

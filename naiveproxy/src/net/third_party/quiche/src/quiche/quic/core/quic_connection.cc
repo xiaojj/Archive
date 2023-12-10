@@ -394,9 +394,6 @@ QuicConnection::QuicConnection(
     AddKnownServerAddress(initial_peer_address);
   }
   packet_creator_.SetDefaultPeerAddress(initial_peer_address);
-  if (ignore_duplicate_new_cid_frame_) {
-    QUIC_RELOADABLE_FLAG_COUNT(quic_ignore_duplicate_new_cid_frame);
-  }
 }
 
 void QuicConnection::InstallInitialCrypters(QuicConnectionId connection_id) {
@@ -490,7 +487,7 @@ bool QuicConnection::ValidateConfigConnectionIds(const QuicConfig& config) {
       // connection ID from the config matches the one from the RETRY.
       if (!config.HasReceivedRetrySourceConnectionId() ||
           config.ReceivedRetrySourceConnectionId() !=
-              retry_source_connection_id_.value()) {
+              *retry_source_connection_id_) {
         std::string received_value;
         if (config.HasReceivedRetrySourceConnectionId()) {
           received_value = config.ReceivedRetrySourceConnectionId().ToString();
@@ -499,8 +496,8 @@ bool QuicConnection::ValidateConfigConnectionIds(const QuicConfig& config) {
         }
         std::string error_details =
             absl::StrCat("Bad retry_source_connection_id: expected ",
-                         retry_source_connection_id_.value().ToString(),
-                         ", received ", received_value);
+                         retry_source_connection_id_->ToString(), ", received ",
+                         received_value);
         CloseConnection(IETF_QUIC_PROTOCOL_VIOLATION, error_details,
                         ConnectionCloseBehavior::SEND_CONNECTION_CLOSE_PACKET);
         return false;
@@ -925,7 +922,7 @@ void QuicConnection::OnRetryPacket(QuicConnectionId original_connection_id,
     original_destination_connection_id_ = default_path_.server_connection_id;
   }
   QUICHE_DCHECK(!retry_source_connection_id_.has_value())
-      << retry_source_connection_id_.value();
+      << *retry_source_connection_id_;
   retry_source_connection_id_ = new_connection_id;
   ReplaceInitialServerConnectionId(new_connection_id);
   packet_creator_.SetRetryToken(retry_token);
@@ -946,7 +943,7 @@ void QuicConnection::SetOriginalDestinationConnectionId(
                    default_path_.server_connection_id);
   InstallInitialCrypters(original_destination_connection_id);
   QUICHE_DCHECK(!original_destination_connection_id_.has_value())
-      << original_destination_connection_id_.value();
+      << *original_destination_connection_id_;
   original_destination_connection_id_ = original_destination_connection_id;
   original_destination_connection_id_replacement_ =
       default_path_.server_connection_id;
@@ -954,7 +951,7 @@ void QuicConnection::SetOriginalDestinationConnectionId(
 
 QuicConnectionId QuicConnection::GetOriginalDestinationConnectionId() const {
   if (original_destination_connection_id_.has_value()) {
-    return original_destination_connection_id_.value();
+    return *original_destination_connection_id_;
   }
   return default_path_.server_connection_id;
 }
@@ -1941,7 +1938,7 @@ NewConnectionIdResult QuicConnection::OnNewConnectionIdFrameInner(
                     ConnectionCloseBehavior::SEND_CONNECTION_CLOSE_PACKET);
     return NewConnectionIdResult::kProtocolViolation;
   }
-  if (duplicate_new_connection_id && ignore_duplicate_new_cid_frame_) {
+  if (duplicate_new_connection_id) {
     return NewConnectionIdResult::kDuplicateFrame;
   }
   if (perspective_ == Perspective::IS_SERVER) {
@@ -2413,7 +2410,11 @@ void QuicConnection::MaybeSendInResponseToPacket() {
     if (send_alarm_->deadline() > max_deadline) {
       QUIC_BUG(quic_send_alarm_postponed)
           << "previous deadline:" << max_deadline
-          << ", deadline from CanWrite:" << send_alarm_->deadline();
+          << ", deadline from CanWrite:" << send_alarm_->deadline()
+          << ", last_can_write_reason:"
+          << static_cast<int>(last_can_write_reason_)
+          << ", packets_sent_on_last_successful_can_write:"
+          << packets_sent_on_last_successful_can_write_;
       QUIC_DVLOG(1) << "Send alarm restored after processing packet.";
       QUIC_RELOADABLE_FLAG_COUNT_N(quic_no_send_alarm_unless_necessary, 4, 7);
       // Restore to the previous, earlier deadline.
@@ -3227,6 +3228,11 @@ const QuicFrames QuicConnection::MaybeBundleOpportunistically() {
   return frames;
 }
 
+void QuicConnection::RecordLastCanWriteReason(LastCanWriteReason reason) {
+  last_can_write_reason_ = reason;
+  packets_sent_on_last_successful_can_write_ = stats_.packets_sent;
+}
+
 bool QuicConnection::CanWrite(HasRetransmittableData retransmittable) {
   if (!connected_) {
     return false;
@@ -3252,6 +3258,9 @@ bool QuicConnection::CanWrite(HasRetransmittableData retransmittable) {
     // Try to coalesce packet, only allow to write when creator is on soft max
     // packet length. Given the next created packet is going to fill current
     // coalesced packet, do not check amplification factor.
+    if (packet_creator_.HasSoftMaxPacketLength()) {
+      RecordLastCanWriteReason(LAST_CAN_WRITE_REASON_COALESCE_PACKET);
+    }
     return packet_creator_.HasSoftMaxPacketLength();
   }
 
@@ -3260,6 +3269,7 @@ bool QuicConnection::CanWrite(HasRetransmittableData retransmittable) {
     // 1) firing PTO,
     // 2) bundling CRYPTO data with ACKs,
     // 3) coalescing CRYPTO data of higher space.
+    RecordLastCanWriteReason(LAST_CAN_WRITE_REASON_PENDING_TIMER);
     return true;
   }
 
@@ -3282,6 +3292,7 @@ bool QuicConnection::CanWrite(HasRetransmittableData retransmittable) {
 
   // Allow acks and probing frames to be sent immediately.
   if (retransmittable == NO_RETRANSMITTABLE_DATA) {
+    RecordLastCanWriteReason(LAST_CAN_WRITE_REASON_NO_RETRANSMITTABLE_DATA);
     return true;
   }
   // If the send alarm is set, wait for it to fire.
@@ -3300,6 +3311,7 @@ bool QuicConnection::CanWrite(HasRetransmittableData retransmittable) {
   if (!delay.IsZero()) {
     if (delay <= release_time_into_future_) {
       // Required delay is within pace time into future, send now.
+      RecordLastCanWriteReason(LAST_CAN_WRITE_REASON_DELAY_WITHIN_RELEASE_TIME);
       return true;
     }
     // Cannot send packet now because delay is too far in the future.
@@ -3308,6 +3320,8 @@ bool QuicConnection::CanWrite(HasRetransmittableData retransmittable) {
                   << "ms";
     return false;
   }
+
+  RecordLastCanWriteReason(LAST_CAN_WRITE_REASON_NO_DELAY);
   return true;
 }
 
@@ -5296,13 +5310,16 @@ void QuicConnection::StartEffectivePeerMigration(AddressChangeType type) {
 
     if (alternative_path_.peer_address.host() ==
             current_effective_peer_address.host() &&
-        alternative_path_.send_algorithm != nullptr) {
+        alternative_path_.send_algorithm != nullptr &&
+        alternative_path_.rtt_stats.has_value()) {
       // Update the default path with the congestion controller of the
       // alternative path.
       sent_packet_manager_.SetSendAlgorithm(
           alternative_path_.send_algorithm.release());
-      sent_packet_manager_.SetRttStats(
-          std::move(alternative_path_.rtt_stats).value());
+      sent_packet_manager_.SetRttStats(*alternative_path_.rtt_stats);
+
+      // Explicitly clear alternative_path_.rtt_stats
+      alternative_path_.rtt_stats = absl::nullopt;
     }
   }
   // Update to the new peer address.
@@ -6946,13 +6963,13 @@ std::vector<QuicConnectionId> QuicConnection::GetActiveServerConnectionIds()
   }
   // Add the original connection ID
   if (std::find(result.begin(), result.end(),
-                original_destination_connection_id_.value()) != result.end()) {
+                *original_destination_connection_id_) != result.end()) {
     QUIC_BUG(quic_unexpected_original_destination_connection_id)
         << "original_destination_connection_id: "
-        << original_destination_connection_id_.value()
+        << *original_destination_connection_id_
         << " is unexpectedly in active list";
   } else {
-    result.insert(result.end(), original_destination_connection_id_.value());
+    result.insert(result.end(), *original_destination_connection_id_);
   }
   return result;
 }
@@ -7098,7 +7115,7 @@ QuicConnection::PathState& QuicConnection::PathState::operator=(
     send_algorithm = std::move(other.send_algorithm);
     if (other.rtt_stats.has_value()) {
       rtt_stats.emplace();
-      rtt_stats->CloneFrom(other.rtt_stats.value());
+      rtt_stats->CloneFrom(*other.rtt_stats);
     } else {
       rtt_stats.reset();
     }
@@ -7301,10 +7318,13 @@ void QuicConnection::RestoreToLastValidatedPath(
   if (alternative_path_.send_algorithm != nullptr) {
     sent_packet_manager_.SetSendAlgorithm(
         alternative_path_.send_algorithm.release());
-    sent_packet_manager_.SetRttStats(alternative_path_.rtt_stats.value());
   } else {
     QUIC_BUG(quic_bug_10511_42)
         << "Fail to store congestion controller before migration.";
+  }
+
+  if (alternative_path_.rtt_stats.has_value()) {
+    sent_packet_manager_.SetRttStats(*alternative_path_.rtt_stats);
   }
 
   UpdatePeerAddress(original_direct_peer_address);
