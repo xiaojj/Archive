@@ -67,10 +67,6 @@ class QUICHE_EXPORT QuicSpdyStream
     // Called when the stream is closed.
     virtual void OnClose(QuicSpdyStream* stream) = 0;
 
-    // Allows subclasses to override and do work.
-    virtual void OnPromiseHeadersComplete(QuicStreamId /*promised_id*/,
-                                          size_t /*frame_len*/) {}
-
    protected:
     virtual ~Visitor() {}
   };
@@ -98,11 +94,6 @@ class QUICHE_EXPORT QuicSpdyStream
   // should be closed; no more data will be sent by the peer.
   virtual void OnStreamHeaderList(bool fin, size_t frame_len,
                                   const QuicHeaderList& header_list);
-
-  // Called by the session when decompressed push promise headers have
-  // been completely delivered to this stream.
-  virtual void OnPromiseHeaderList(QuicStreamId promised_id, size_t frame_len,
-                                   const QuicHeaderList& header_list);
 
   // Called by the session when a PRIORITY frame has been been received for this
   // stream. This method will only be called for server streams.
@@ -365,10 +356,10 @@ class QUICHE_EXPORT QuicSpdyStream
 
   void OnWriteSideInDataRecvdState() override;
 
-  virtual bool ValidatedReceivedHeaders(const QuicHeaderList& header_list);
+  virtual bool ValidateReceivedHeaders(const QuicHeaderList& header_list);
   // TODO(b/202433856) Merge AreHeaderFieldValueValid into
-  // ValidatedReceivedHeaders once all flags guarding the behavior of
-  // ValidatedReceivedHeaders has been rolled out.
+  // ValidateReceivedHeaders once all flags guarding the behavior of
+  // ValidateReceivedHeaders has been rolled out.
   virtual bool AreHeaderFieldValuesValid(
       const QuicHeaderList& header_list) const;
 

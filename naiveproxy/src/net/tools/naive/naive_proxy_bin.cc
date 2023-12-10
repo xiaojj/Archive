@@ -11,7 +11,7 @@
 
 #include "base/allocator/allocator_check.h"
 #include "base/allocator/partition_alloc_support.h"
-#include "base/allocator/partition_allocator/shim/allocator_shim.h"
+#include "base/allocator/partition_allocator/src/partition_alloc/shim/allocator_shim.h"
 #include "base/at_exit.h"
 #include "base/check.h"
 #include "base/command_line.h"
@@ -597,7 +597,7 @@ int main(int argc, char* argv[]) {
   net::ClientSocketPoolManager::set_max_sockets_per_pool(
       net::HttpNetworkSession::NORMAL_SOCKET_POOL,
       kDefaultMaxSocketsPerPool * kExpectedMaxUsers);
-  net::ClientSocketPoolManager::set_max_sockets_per_proxy_server(
+  net::ClientSocketPoolManager::set_max_sockets_per_proxy_chain(
       net::HttpNetworkSession::NORMAL_SOCKET_POOL,
       kDefaultMaxSocketsPerPool * kExpectedMaxUsers);
   net::ClientSocketPoolManager::set_max_sockets_per_group(

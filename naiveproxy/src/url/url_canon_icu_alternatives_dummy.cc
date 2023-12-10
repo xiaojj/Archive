@@ -7,7 +7,7 @@
 
 namespace url {
 
-bool IDNToASCII(const char16_t* src, int src_len, CanonOutputW* output) {
+bool IDNToASCII(std::u16string_view src, CanonOutputW* output) {
   NOTIMPLEMENTED();
   return false;
 }

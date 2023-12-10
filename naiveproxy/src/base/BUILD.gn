@@ -98,7 +98,7 @@ if (is_android || is_robolectric) {
 }
 
 if (is_fuchsia) {
-  import("//third_party/fuchsia-sdk/sdk/build/fidl_library.gni")
+  import("//third_party/fuchsia-gn-sdk/src/fidl_library.gni")
 }
 
 # The Rust implementation of base::JSONReader. NaCl depends on base and doesn't
@@ -288,6 +288,7 @@ component("base") {
     "containers/linked_list.cc",
     "containers/linked_list.h",
     "containers/lru_cache.h",
+    "containers/map_util.h",
     "containers/small_map.h",
     "containers/span.h",
     "containers/stack.h",
@@ -421,6 +422,7 @@ component("base") {
     "memory/raw_ptr_exclusion.h",
     "memory/raw_ref.h",
     "memory/raw_scoped_refptr_mismatch_checker.h",
+    "memory/raw_span.h",
     "memory/read_only_shared_memory_region.cc",
     "memory/read_only_shared_memory_region.h",
     "memory/ref_counted.cc",
@@ -792,6 +794,7 @@ component("base") {
     "task/thread_pool/pooled_task_runner_delegate.h",
     "task/thread_pool/priority_queue.cc",
     "task/thread_pool/priority_queue.h",
+    "task/thread_pool/semaphore.h",
     "task/thread_pool/sequence.cc",
     "task/thread_pool/sequence.h",
     "task/thread_pool/service_thread.cc",
@@ -1075,6 +1078,7 @@ component("base") {
     ":synchronization_buildflags",
     ":tracing_buildflags",
     "//base/allocator/partition_allocator:buildflags",
+    "//base/allocator/partition_allocator:raw_ptr",
     "//base/numerics:base_numerics",
     "//build:chromecast_buildflags",
     "//build:chromeos_buildflags",
@@ -1256,8 +1260,6 @@ component("base") {
       "android/jni_android.h",
       "android/jni_array.cc",
       "android/jni_array.h",
-      "android/jni_generator/jni_generator_helper.h",
-      "android/jni_int_wrapper.h",
       "android/jni_registrar.cc",
       "android/jni_registrar.h",
       "android/jni_string.cc",
@@ -1463,6 +1465,7 @@ component("base") {
       "rand_util_nacl.cc",
       "sync_socket_nacl.cc",
       "system/sys_info_nacl.cc",
+      "task/thread_pool/semaphore/semaphore_default.cc",
       "threading/platform_thread_linux_base.cc",
       "threading/platform_thread_nacl.cc",
     ]
@@ -1540,6 +1543,10 @@ component("base") {
         "base_paths_android.cc",
         "base_paths_android.h",
       ]
+    }
+
+    if (is_linux || is_chromeos || is_android || is_fuchsia) {
+      sources += [ "task/thread_pool/semaphore/semaphore_posix.cc" ]
     }
 
     if (is_posix) {
@@ -1629,6 +1636,8 @@ component("base") {
       # Add stuff that doesn't work in NaCl.
       sources += [
         # PartitionAlloc uses SpinLock, which doesn't work in NaCl (see below).
+        "allocator/miracle_parameter.cc",
+        "allocator/miracle_parameter.h",
         "allocator/partition_alloc_features.cc",
         "allocator/partition_alloc_features.h",
         "allocator/partition_alloc_support.cc",
@@ -1713,6 +1722,7 @@ component("base") {
       "synchronization/waitable_event_watcher_win.cc",
       "synchronization/waitable_event_win.cc",
       "system/sys_info_win.cc",
+      "task/thread_pool/semaphore/semaphore_win.cc",
       "threading/platform_thread_win.cc",
       "threading/platform_thread_win.h",
       "threading/thread_local_storage_win.cc",
@@ -1924,6 +1934,7 @@ component("base") {
       "strings/sys_string_conversions_apple.mm",
       "synchronization/waitable_event_apple.cc",
       "system/sys_info_apple.mm",
+      "task/thread_pool/semaphore/semaphore_apple.cc",
       "threading/platform_thread_apple.mm",
       "time/time_apple.mm",
     ]

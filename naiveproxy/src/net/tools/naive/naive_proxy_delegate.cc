@@ -65,11 +65,13 @@ NaiveProxyDelegate::NaiveProxyDelegate(
 NaiveProxyDelegate::~NaiveProxyDelegate() = default;
 
 void NaiveProxyDelegate::OnBeforeTunnelRequest(
-    const ProxyServer& proxy_server,
+    const ProxyChain& proxy_chain,
+    size_t chain_index,
     HttpRequestHeaders* extra_headers) {
   // Not possible to negotiate padding capability given the underlying
   // protocols.
-  if (proxy_server.is_direct() || proxy_server.is_socks())
+  if (proxy_chain.is_direct() ||
+      proxy_chain.GetProxyServer(chain_index).is_socks())
     return;
 
   // Sends client-side padding header regardless of server support
@@ -79,7 +81,8 @@ void NaiveProxyDelegate::OnBeforeTunnelRequest(
 
   // Enables Fast Open in H2/H3 proxy client socket once the state of server
   // padding support is known.
-  if (padding_type_by_server_[proxy_server].has_value()) {
+  if (padding_type_by_server_[proxy_chain.GetProxyServer(chain_index)]
+          .has_value()) {
     extra_headers->SetHeader("fastopen", "1");
   }
   extra_headers->MergeFrom(extra_headers_);
@@ -110,11 +113,13 @@ std::optional<PaddingType> NaiveProxyDelegate::ParsePaddingHeaders(
 }
 
 Error NaiveProxyDelegate::OnTunnelHeadersReceived(
-    const ProxyServer& proxy_server,
+    const ProxyChain& proxy_chain,
+    size_t chain_index,
     const HttpResponseHeaders& response_headers) {
   // Not possible to negotiate padding capability given the underlying
   // protocols.
-  if (proxy_server.is_direct() || proxy_server.is_socks())
+  if (proxy_chain.is_direct() ||
+      proxy_chain.GetProxyServer(chain_index).is_socks())
     return OK;
 
   // Detects server padding support, even if it changes dynamically.
@@ -124,9 +129,9 @@ Error NaiveProxyDelegate::OnTunnelHeadersReceived(
     return ERR_INVALID_RESPONSE;
   }
   std::optional<PaddingType>& padding_type =
-      padding_type_by_server_[proxy_server];
+      padding_type_by_server_[proxy_chain.GetProxyServer(chain_index)];
   if (!padding_type.has_value() || padding_type != new_padding_type) {
-    LOG(INFO) << ProxyServerToProxyUri(proxy_server)
+    LOG(INFO) << ProxyServerToProxyUri(proxy_chain.GetProxyServer(chain_index))
               << " negotiated padding type: "
               << ToReadableString(*new_padding_type);
     padding_type = new_padding_type;

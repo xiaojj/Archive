@@ -41,6 +41,12 @@ case "$target_os" in
     if [ "$SYSROOT_ARCH" ]; then
       WITH_SYSROOT="out/sysroot-build/bullseye/bullseye_${SYSROOT_ARCH}_staging"
     fi
+    # This is the case where running ./build.sh without EXTRA_FLAGS
+    # wants to avoid downloading sysroots.
+    if [ ! "$EXTRA_FLAGS" -a "$target_cpu" = "$host_cpu" ]; then
+      SYSROOT_ARCH=
+      WITH_SYSROOT=
+    fi
   ;;
   openwrt)
     eval "$OPENWRT_FLAGS"

@@ -35,8 +35,9 @@ class QUICHE_NO_EXPORT TestMessageBase {
   MoqtMessageType message_type() const { return message_type_; }
 
   typedef absl::variant<MoqtSetup, MoqtObject, MoqtSubscribeRequest,
-                        MoqtSubscribeOk, MoqtSubscribeError, MoqtAnnounce,
-                        MoqtAnnounceOk, MoqtAnnounceError, MoqtGoAway>
+                        MoqtSubscribeOk, MoqtSubscribeError, MoqtUnsubscribe,
+                        MoqtAnnounce, MoqtAnnounceOk, MoqtAnnounceError,
+                        MoqtUnannounce, MoqtGoAway>
       MessageStructuredData;
 
   // The total actual size of the message.
@@ -233,12 +234,11 @@ class QUICHE_NO_EXPORT SetupMessage : public TestMessageBase {
   bool EqualFieldValues(MessageStructuredData& values) const override {
     auto cast = std::get<MoqtSetup>(values);
     const MoqtSetup* compare = client_ ? &server_setup_ : &client_setup_;
-    if (cast.number_of_supported_versions !=
-        compare->number_of_supported_versions) {
+    if (cast.supported_versions.size() != compare->supported_versions.size()) {
       QUIC_LOG(INFO) << "SETUP number of supported versions mismatch";
       return false;
     }
-    for (uint64_t i = 0; i < cast.number_of_supported_versions; ++i) {
+    for (uint64_t i = 0; i < cast.supported_versions.size(); ++i) {
       // Listed versions are 1 and 2, in that order.
       if (cast.supported_versions[i] != compare->supported_versions[i]) {
         QUIC_LOG(INFO) << "SETUP supported version mismatch";
@@ -283,14 +283,14 @@ class QUICHE_NO_EXPORT SetupMessage : public TestMessageBase {
       0x01,  // version
   };
   MoqtSetup client_setup_ = {
-      /*number_of_supported_versions=*/2,
-      /*supported_versions=*/std::vector<uint64_t>({1, 2}),
+      /*supported_versions=*/std::vector<MoqtVersion>(
+          {static_cast<MoqtVersion>(1), static_cast<MoqtVersion>(2)}),
       /*role=*/MoqtRole::kBoth,
       /*path=*/"foo",
   };
   MoqtSetup server_setup_ = {
-      /*number_of_supported_versions=*/1,
-      /*supported_versions=*/std::vector<uint64_t>({1}),
+      /*supported_versions=*/std::vector<MoqtVersion>(
+          {static_cast<MoqtVersion>(1)}),
       /*role=*/absl::nullopt,
       /*path=*/absl::nullopt,
   };
@@ -429,6 +429,37 @@ class QUICHE_NO_EXPORT SubscribeErrorMessage : public TestMessageBase {
   };
 };
 
+class QUICHE_NO_EXPORT UnsubscribeMessage : public TestMessageBase {
+ public:
+  UnsubscribeMessage() : TestMessageBase(MoqtMessageType::kUnsubscribe) {
+    SetWireImage(raw_packet_, sizeof(raw_packet_));
+  }
+
+  bool EqualFieldValues(MessageStructuredData& values) const override {
+    auto cast = std::get<MoqtUnsubscribe>(values);
+    if (cast.full_track_name != unsubscribe_.full_track_name) {
+      QUIC_LOG(INFO) << "UNSUBSCRIBE full track name mismatch";
+      return false;
+    }
+    return true;
+  }
+
+  void ExpandVarints() override { ExpandVarintsImpl("vvv---"); }
+
+  MessageStructuredData structured_data() const override {
+    return TestMessageBase::MessageStructuredData(unsubscribe_);
+  }
+
+ private:
+  uint8_t raw_packet_[6] = {
+      0x0a, 0x04, 0x03, 0x66, 0x6f, 0x6f,  // track_name = "foo"
+  };
+
+  MoqtUnsubscribe unsubscribe_ = {
+      /*full_track_name=*/"foo",
+  };
+};
+
 class QUICHE_NO_EXPORT AnnounceMessage : public TestMessageBase {
  public:
   AnnounceMessage() : TestMessageBase(MoqtMessageType::kAnnounce) {
@@ -481,15 +512,15 @@ class QUICHE_NO_EXPORT AnnounceOkMessage : public TestMessageBase {
     return true;
   }
 
-  void ExpandVarints() override { ExpandVarintsImpl("vv---"); }
+  void ExpandVarints() override { ExpandVarintsImpl("vvv---"); }
 
   MessageStructuredData structured_data() const override {
     return TestMessageBase::MessageStructuredData(announce_ok_);
   }
 
  private:
-  uint8_t raw_packet_[5] = {
-      0x07, 0x03, 0x66, 0x6f, 0x6f,  // track_namespace = "foo"
+  uint8_t raw_packet_[6] = {
+      0x07, 0x04, 0x03, 0x66, 0x6f, 0x6f,  // track_namespace = "foo"
   };
 
   MoqtAnnounceOk announce_ok_ = {
@@ -537,6 +568,37 @@ class QUICHE_NO_EXPORT AnnounceErrorMessage : public TestMessageBase {
       /*track_namespace=*/"foo",
       /*error_code=*/1,
       /*reason_phrase=*/"bar",
+  };
+};
+
+class QUICHE_NO_EXPORT UnannounceMessage : public TestMessageBase {
+ public:
+  UnannounceMessage() : TestMessageBase(MoqtMessageType::kUnannounce) {
+    SetWireImage(raw_packet_, sizeof(raw_packet_));
+  }
+
+  bool EqualFieldValues(MessageStructuredData& values) const override {
+    auto cast = std::get<MoqtUnannounce>(values);
+    if (cast.track_namespace != unannounce_.track_namespace) {
+      QUIC_LOG(INFO) << "UNSUBSCRIBE full track name mismatch";
+      return false;
+    }
+    return true;
+  }
+
+  void ExpandVarints() override { ExpandVarintsImpl("vvv---"); }
+
+  MessageStructuredData structured_data() const override {
+    return TestMessageBase::MessageStructuredData(unannounce_);
+  }
+
+ private:
+  uint8_t raw_packet_[6] = {
+      0x09, 0x04, 0x03, 0x66, 0x6f, 0x6f,  // track_namespace
+  };
+
+  MoqtUnannounce unannounce_ = {
+      /*track_namespace=*/"foo",
   };
 };
 
