@@ -2,6 +2,15 @@
 icon: material/alert-decagram
 ---
 
+#### 1.8.0-beta.2
+
+* Fixes and improvements
+
+#### 1.8.0-beta.1
+
+* Fix GSO support
+* Fixes and improvements
+
 #### 1.8.0-alpha.17
 
 * Add GSO support for TUN and WireGuard system interface **1**
