@@ -141,8 +141,10 @@ impl Tray {
 
         #[cfg(target_os = "windows")]
         {
-            let indication_icon = if *system_proxy {
-                include_bytes!("../../icons/win-tray-icon-activated.png").to_vec()
+            let indication_icon = if *tun_mode {
+                include_bytes!("../../icons/win-tray-icon-blue.png").to_vec()
+            } else if *system_proxy {
+                include_bytes!("../../icons/win-tray-icon-pink.png").to_vec()
             } else {
                 include_bytes!("../../icons/win-tray-icon.png").to_vec()
             };
@@ -194,7 +196,7 @@ impl Tray {
                 "restart_clash" => feat::restart_clash_core(),
                 "restart_app" => api::process::restart(&app_handle.env()),
                 "quit" => {
-                    let _ = resolve::save_window_size_position(app_handle, true);
+                    let _ = resolve::save_window_state(app_handle, true);
 
                     resolve::resolve_reset();
                     api::process::kill_children();
