@@ -26,19 +26,19 @@ require (
 	github.com/sagernet/gvisor v0.0.0-20231209105102-8d27a30e436e
 	github.com/sagernet/quic-go v0.40.0
 	github.com/sagernet/reality v0.0.0-20230406110435-ee17307e7691
-	github.com/sagernet/sing v0.3.0-beta.2
+	github.com/sagernet/sing v0.3.0-beta.2.0.20231215035907-17dab0e7bc33
 	github.com/sagernet/sing-dns v0.1.11
 	github.com/sagernet/sing-mux v0.1.6-0.20231208180947-9053c29513a2
 	github.com/sagernet/sing-quic v0.1.6-0.20231207143711-eb3cbf9ed054
 	github.com/sagernet/sing-shadowsocks v0.2.6
 	github.com/sagernet/sing-shadowsocks2 v0.1.6-0.20231207143709-50439739601a
 	github.com/sagernet/sing-shadowtls v0.1.4
-	github.com/sagernet/sing-tun v0.2.0-beta.1
+	github.com/sagernet/sing-tun v0.2.0-beta.1.0.20231215163740-de4c486b47ab
 	github.com/sagernet/sing-vmess v0.1.8
 	github.com/sagernet/smux v0.0.0-20231208180855-7041f6ea79e7
 	github.com/sagernet/tfo-go v0.0.0-20231209031829-7b5343ac1dc6
 	github.com/sagernet/utls v1.5.4
-	github.com/sagernet/wireguard-go v0.0.0-20230807125731-5d4a7ef2dc5f
+	github.com/sagernet/wireguard-go v0.0.0-20231215045610-50d65c2c2dd6
 	github.com/sagernet/ws v0.0.0-20231204124109-acfe8907c854
 	github.com/spf13/cobra v1.8.0
 	github.com/stretchr/testify v1.8.4

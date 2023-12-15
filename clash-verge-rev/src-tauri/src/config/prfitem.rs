@@ -1,4 +1,4 @@
-use crate::utils::{dirs, help, tmpl};
+use crate::utils::{dirs, help, resolve::VERSION, tmpl};
 use anyhow::{bail, Context, Result};
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
@@ -231,7 +231,11 @@ impl PrfItem {
             };
         }
 
-        let version = format!("clash-verge-rev");
+        let version = match VERSION.get() {
+            Some(v) => format!("clash-verge/v{}", v),
+            None => format!("clash-verge/unknown"),
+        };
+
         builder = builder.user_agent(user_agent.unwrap_or(version));
 
         let resp = builder.build()?.get(url).send().await?;
@@ -247,12 +251,11 @@ impl PrfItem {
         let extra = match header.get("Subscription-Userinfo") {
             Some(value) => {
                 let sub_info = value.to_str().unwrap_or("");
-
                 Some(PrfExtra {
-                    upload: help::parse_str(sub_info, "upload=").unwrap_or(0),
-                    download: help::parse_str(sub_info, "download=").unwrap_or(0),
-                    total: help::parse_str(sub_info, "total=").unwrap_or(0),
-                    expire: help::parse_str(sub_info, "expire=").unwrap_or(0),
+                    upload: help::parse_str(sub_info, "upload").unwrap_or(0),
+                    download: help::parse_str(sub_info, "download").unwrap_or(0),
+                    total: help::parse_str(sub_info, "total").unwrap_or(0),
+                    expire: help::parse_str(sub_info, "expire").unwrap_or(0),
                 })
             }
             None => None,
@@ -262,9 +265,9 @@ impl PrfItem {
         let filename = match header.get("Content-Disposition") {
             Some(value) => {
                 let filename = value.to_str().unwrap_or("");
-                match help::parse_str::<String>(filename, "filename=") {
+                match help::parse_str::<String>(filename, "filename") {
                     Some(filename) => Some(filename),
-                    None => match help::parse_str::<String>(filename, "filename*=") {
+                    None => match help::parse_str::<String>(filename, "filename*") {
                         Some(filename) => {
                             let iter = percent_encoding::percent_decode(filename.as_bytes());
                             let filename = iter.decode_utf8().unwrap_or_default();
