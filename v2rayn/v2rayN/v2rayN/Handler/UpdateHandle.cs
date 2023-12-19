@@ -180,7 +180,7 @@ namespace v2rayN.Handler
                         //_updateFunc(false, $"{hashCode}{ResUI.MsgNoValidSubscription}");
                         continue;
                     }
-                    if (!url.StartsWith(Global.httpsProtocol) && !url.StartsWith(Global.httpProtocol))
+                    if (!url.StartsWith(Global.HttpsProtocol) && !url.StartsWith(Global.HttpProtocol))
                     {
                         continue;
                     }
@@ -553,7 +553,7 @@ namespace v2rayN.Handler
         {
             _config = config;
             _updateFunc = update;
-            var url = string.Format(Global.geoUrl, geoName);
+            var url = string.Format(Global.GeoUrl, geoName);
 
             DownloadHandle downloadHandle = new();
             downloadHandle.UpdateCompleted += (sender2, args) =>
@@ -600,7 +600,7 @@ namespace v2rayN.Handler
         {
             _config = config;
             _updateFunc = update;
-            var url = string.Format(Global.singboxGeoUrl, geoName);
+            var url = string.Format(Global.SingboxGeoUrl, geoName);
 
             DownloadHandle downloadHandle = new();
             downloadHandle.UpdateCompleted += async (sender2, args) =>
