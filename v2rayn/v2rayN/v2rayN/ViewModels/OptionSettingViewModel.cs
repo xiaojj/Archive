@@ -323,7 +323,7 @@ namespace v2rayN.ViewModels
             //coreType
             SaveCoreType();
 
-            if (ConfigHandler.SaveConfig(ref _config) == 0)
+            if (ConfigHandler.SaveConfig(_config) == 0)
             {
                 _noticeHandler?.Enqueue(ResUI.OperationSuccess);
                 _view.DialogResult = true;
@@ -367,6 +367,7 @@ namespace v2rayN.ViewModels
                         break;
 
                     case 7:
+                    case 8:
                         continue;
                 }
                 item.coreType = (ECoreType)Enum.Parse(typeof(ECoreType), type);

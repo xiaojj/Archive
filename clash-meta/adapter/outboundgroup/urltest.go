@@ -113,7 +113,7 @@ func (u *URLTest) fast(touch bool) C.Proxy {
 
 	elm, _, shared := u.fastSingle.Do(func() (C.Proxy, error) {
 		fast := proxies[0]
-		min := fast.LastDelayForTestUrl(u.testUrl)
+		minDelay := fast.LastDelayForTestUrl(u.testUrl)
 		fastNotExist := true
 
 		for _, proxy := range proxies[1:] {
@@ -126,9 +126,9 @@ func (u *URLTest) fast(touch bool) C.Proxy {
 			}
 
 			delay := proxy.LastDelayForTestUrl(u.testUrl)
-			if delay < min {
+			if delay < minDelay {
 				fast = proxy
-				min = delay
+				minDelay = delay
 			}
 
 		}

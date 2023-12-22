@@ -271,7 +271,7 @@ namespace v2rayN.Handler
                             _updateFunc(false, $"{hashCode}{result}");
                         }
 
-                        int ret = ConfigHandler.AddBatchServers(ref config, result, id, true);
+                        int ret = ConfigHandler.AddBatchServers(config, result, id, true);
                         if (ret <= 0)
                         {
                             Utils.SaveLog("FailedImportSubscription");
@@ -296,8 +296,8 @@ namespace v2rayN.Handler
                 await UpdateGeoFile("geosite", _config, update);
                 await UpdateGeoFile("geoip", _config, update);
 
-                await UpdateGeoFile4Singbox("geosite", _config, false, update);
-                await UpdateGeoFile4Singbox("geoip", _config, true, update);
+                //await UpdateGeoFile4Singbox("geosite", _config, false, update);
+                //await UpdateGeoFile4Singbox("geoip", _config, true, update);
             });
         }
 
