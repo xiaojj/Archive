@@ -99,13 +99,24 @@
   "Clash Field": "Используемые настройки Clash",
   "Runtime Config": "Используемый конфиг",
   "ReadOnly": "Только для чтения",
+  "Check Updates": "Проверить обновления",
   "Restart": "Перезапуск",
+
+  "Tasks": "Задачи",
+  "Auto Log Clean": "Автоочистка логов",
+  "Never Clean": "Никогда не чистить",
+  "Retain 3 Days": "Сохранять 3 дня",
+  "Retain 7 Days": "Сохранять 7 дней",
+  "Retain 30 Days": "Сохранять 30 дней",
+  "Retain 90 Days": "Сохранять 90 дней",
+
+  "Collect Logs": "Собрать логи",
 
   "Back": "Назад",
   "Save": "Сохранить",
   "Cancel": "Отмена",
 
-  "open_dashboard": "Open Dashboard",
+  "open_or_close_dashboard": "Открыть/закрыть панель управления",
   "clash_mode_rule": "Режим правил",
   "clash_mode_global": "Глобальный режим",
   "clash_mode_direct": "Прямой режим",
@@ -118,5 +129,12 @@
   "disable_tun_mode": "Отключить режим туннеля",
 
   "Error": "Ошибка",
-  "Success": "Успех"
+  "Success": "Успех",
+
+  "Providers": "Провайдеры",
+  "Rules Providers": "Провайдеры правил",
+  "Update Rules Providers All": "Обновить все провайдеры правил",
+  "Rule Set rules": "{{rule}} правила",
+  "Last Update": "Последнее обновление {{fromNow}}",
+  "Update Rules Providers Success": "Провайдеры правил успешно обновлены"
 }

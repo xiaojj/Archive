@@ -65,7 +65,7 @@ export const getRules = async () => {
 /// Get Proxy delay
 export const getProxyDelay = async (name: string, url?: string) => {
   const params = {
-    timeout: 5000,
+    timeout: 10000,
     url: url || "http://www.gstatic.com/generate_204",
   };
   const instance = await getAxios();
@@ -190,4 +190,40 @@ export const deleteConnection = async (id: string) => {
 export const closeAllConnections = async () => {
   const instance = await getAxios();
   await instance.delete<any, any>(`/connections`);
+};
+
+export interface ProviderRules {
+  behavior: string;
+  format: string;
+  name: string;
+  ruleCount: number;
+  type: string;
+  updatedAt: string;
+  vehicleType: string;
+}
+
+export interface ProvidersRules {
+  providers: {
+    [name: string]: {
+      behavior: string;
+      format: string;
+      name: string;
+      ruleCount: number;
+      type: string;
+      updatedAt: string;
+      vehicleType: string;
+    };
+  };
+}
+
+// Get rule providers
+export const getRulesProviders = async () => {
+  const instance = await getAxios();
+  const response = await instance.get<any, any>("/providers/rules");
+  return Object.values(response.providers) as ProviderRules[];
+};
+
+export const updateRulesProviders = async (name: string) => {
+  const instance = await getAxios();
+  return instance.put(`/providers/rules/${name}`);
 };

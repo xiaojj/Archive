@@ -5,13 +5,15 @@ use tauri::{
     SystemTraySubmenu,
 };
 
+use super::storage;
+
 pub struct Tray {}
 
 impl Tray {
     pub fn tray_menu(app_handle: &AppHandle) -> SystemTrayMenu {
         let zh = { Config::verge().latest().language == Some("zh".into()) };
 
-        let version = app_handle.package_info().version.to_string();
+        let version = env!("NYANPASU_VERSION");
 
         macro_rules! t {
             ($en: expr, $zh: expr) => {
@@ -201,6 +203,8 @@ impl Tray {
                     resolve::resolve_reset();
                     api::process::kill_children();
                     app_handle.exit(0);
+                    // flush all data to disk
+                    storage::Storage::global().destroy().unwrap();
                     std::process::exit(0);
                 }
                 _ => {}

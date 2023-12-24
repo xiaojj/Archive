@@ -155,7 +155,7 @@ interface IProfilesConfig {
 interface IVergeConfig {
   app_log_level?: "trace" | "debug" | "info" | "warn" | "error" | string;
   language?: string;
-  clash_core?: string;
+  clash_core?: "mihomo" | "mihomo-alpha" | "clash-rs" | "clash";
   theme_mode?: "light" | "dark" | "system";
   theme_blur?: boolean;
   traffic_graph?: boolean;
@@ -186,6 +186,7 @@ interface IVergeConfig {
     css_injection?: string;
     page_transition_duration?: number;
   };
+  auto_log_clean?: number;
   auto_close_connection?: boolean;
   default_latency_test?: string;
   enable_clash_fields?: boolean;

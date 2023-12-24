@@ -57,18 +57,18 @@ impl CoreManager {
         let config_path = dirs::path_to_str(&config_path)?;
 
         let clash_core = { Config::verge().latest().clash_core.clone() };
-        let clash_core = clash_core.unwrap_or("clash".into());
+        let clash_core = clash_core.unwrap_or(ClashCore::ClashPremium).to_string();
 
         let app_dir = dirs::app_home_dir()?;
         let app_dir = dirs::path_to_str(&app_dir)?;
-
+        log::debug!(target: "app", "check config in `{clash_core}`");
         let output = Command::new_sidecar(clash_core)?
             .args(["-t", "-d", app_dir, "-f", config_path])
             .output()?;
 
         if !output.status.success() {
             let error = clash_api::parse_check_output(output.stdout.clone());
-            let error = match error.len() > 0 {
+            let error = match !error.is_empty() {
                 true => error,
                 false => output.stdout.clone(),
             };
@@ -104,7 +104,31 @@ impl CoreManager {
         if should_kill {
             sleep(Duration::from_millis(500)).await;
         }
+        #[cfg(target_os = "macos")]
+        {
+            let enable_tun = Config::verge().latest().enable_tun_mode.clone();
+            let enable_tun = enable_tun.unwrap_or(false);
 
+            if enable_tun {
+                log::debug!(target: "app", "try to set system dns");
+
+                match (|| async {
+                    let tun_device_ip = Config::clash().clone().latest().get_tun_device_ip();
+                    // 执行 networksetup -setdnsservers Wi-Fi $tun_device_ip
+                    Command::new("networksetup")
+                        .args(["-setdnsservers", "Wi-Fi", tun_device_ip.as_str()])
+                        .output()
+                })()
+                .await
+                {
+                    Ok(_) => return Ok(()),
+                    Err(err) => {
+                        // 修改这个值，免得stop出错
+                        log::error!(target: "app", "{err}");
+                    }
+                }
+            }
+        }
         #[cfg(target_os = "windows")]
         {
             use super::win_service;
@@ -139,16 +163,21 @@ impl CoreManager {
         let app_dir = dirs::path_to_str(&app_dir)?;
 
         let clash_core = { Config::verge().latest().clash_core.clone() };
-        let clash_core = clash_core.unwrap_or("clash".into());
-        let is_clash = clash_core == "clash";
+        let clash_core = clash_core.unwrap_or(ClashCore::ClashPremium);
+        let is_clash = match &clash_core {
+            ClashCore::ClashPremium => true,
+            _ => false,
+        };
 
         let config_path = dirs::path_to_str(&config_path)?;
 
         // fix #212
-        let args = match clash_core.as_str() {
-            "clash-meta" => vec!["-m", "-d", app_dir, "-f", config_path],
-            "clash-rs" => vec!["-d", app_dir, "-c", config_path],
-            _ => vec!["-d", app_dir, "-f", config_path],
+        let args = match &clash_core {
+            ClashCore::Mihomo | ClashCore::MihomoAlpha => {
+                vec!["-m", "-d", app_dir, "-f", config_path]
+            }
+            ClashCore::ClashRs => vec!["-d", app_dir, "-c", config_path],
+            ClashCore::ClashPremium => vec!["-d", app_dir, "-f", config_path],
         };
 
         let cmd = Command::new_sidecar(clash_core)?;
@@ -248,6 +277,29 @@ impl CoreManager {
             return Ok(());
         }
 
+        #[cfg(target_os = "macos")]
+        {
+            let enable_tun = Config::verge().latest().enable_tun_mode.clone();
+            let enable_tun = enable_tun.unwrap_or(false);
+
+            if enable_tun {
+                log::debug!(target: "app", "try to set system dns");
+
+                match (|| {
+                    // 执行 networksetup -setdnsservers Wi-Fi "Empty"
+                    Command::new("networksetup")
+                        .args(["-setdnsservers", "Wi-Fi", "Empty"])
+                        .output()
+                })() {
+                    Ok(_) => return Ok(()),
+                    Err(err) => {
+                        // 修改这个值，免得stop出错
+                        *self.use_service_mode.lock() = false;
+                        log::error!(target: "app", "{err}");
+                    }
+                }
+            }
+        }
         let mut sidecar = self.sidecar.lock();
         if let Some(child) = sidecar.take() {
             log::debug!(target: "app", "stop the core by sidecar");
@@ -257,12 +309,12 @@ impl CoreManager {
     }
 
     /// 切换核心
-    pub async fn change_core(&self, clash_core: Option<String>) -> Result<()> {
+    pub async fn change_core(&self, clash_core: Option<ClashCore>) -> Result<()> {
         let clash_core = clash_core.ok_or(anyhow::anyhow!("clash core is null"))?;
 
-        if &clash_core != "clash" && &clash_core != "clash-meta" && &clash_core != "clash-rs" {
-            bail!("invalid clash core name \"{clash_core}\"");
-        }
+        // if &clash_core != "clash" && &clash_core != "clash-meta" && &clash_core != "clash-rs" {
+        //     bail!("invalid clash core name \"{clash_core}\"");
+        // }
 
         log::debug!(target: "app", "change core to `{clash_core}`");
 

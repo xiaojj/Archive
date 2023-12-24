@@ -13,6 +13,7 @@ static APP_DIR: &str = "clash-verge-dev";
 static CLASH_CONFIG: &str = "config.yaml";
 static VERGE_CONFIG: &str = "verge.yaml";
 static PROFILE_YAML: &str = "profiles.yaml";
+static STORAGE_DB: &str = "storage.db";
 
 static mut RESOURCE_DIR: Option<PathBuf> = None;
 
@@ -20,7 +21,7 @@ static mut RESOURCE_DIR: Option<PathBuf> = None;
 #[allow(unused)]
 static mut PORTABLE_FLAG: bool = false;
 
-pub static mut APP_VERSION: &str = "v1.2.0";
+pub static mut APP_VERSION: &str = env!("NYANPASU_VERSION");
 
 /// initialize portable flag
 #[cfg(target_os = "windows")]
@@ -76,10 +77,6 @@ pub fn app_resources_dir(package_info: &PackageInfo) -> Result<PathBuf> {
 
     unsafe {
         RESOURCE_DIR = Some(res_dir.clone());
-
-        let ver = package_info.version.to_string();
-        let ver_str = format!("v{ver}");
-        APP_VERSION = Box::leak(Box::new(ver_str));
     }
 
     Ok(res_dir)
@@ -105,6 +102,10 @@ pub fn verge_path() -> Result<PathBuf> {
 
 pub fn profiles_path() -> Result<PathBuf> {
     Ok(app_home_dir()?.join(PROFILE_YAML))
+}
+
+pub fn storage_path() -> Result<PathBuf> {
+    Ok(app_home_dir()?.join(STORAGE_DB))
 }
 
 #[allow(unused)]

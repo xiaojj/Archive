@@ -1,4 +1,5 @@
 import { getProxyDelay } from "./api";
+import { cmdGetProxyDelay } from "./cmds";
 
 const hashKey = (name: string, group: string) => `${group ?? ""}::${name}`;
 
@@ -74,7 +75,7 @@ class DelayManager {
 
     try {
       const url = this.getUrl(group);
-      const result = await getProxyDelay(name, url);
+      const result = await cmdGetProxyDelay(name, url);
       delay = result.delay;
     } catch {
       delay = 1e6; // error
@@ -84,7 +85,7 @@ class DelayManager {
     return delay;
   }
 
-  async checkListDelay(nameList: string[], group: string, concurrency = 6) {
+  async checkListDelay(nameList: string[], group: string, concurrency = 36) {
     const names = nameList.filter(Boolean);
     // 设置正在延迟测试中
     names.forEach((name) => this.setDelay(name, group, -2));
@@ -106,6 +107,21 @@ class DelayManager {
       };
       for (let i = 0; i < concurrency; ++i) help();
     });
+  }
+
+  formatDelay(delay: number) {
+    if (delay < 0) return "-";
+    if (delay > 1e5) return "Error";
+    if (delay >= 10000) return "Timeout"; // 10s
+    return `${delay}`;
+  }
+
+  formatDelayColor(delay: number) {
+    if (delay <= 0) return "text.secondary";
+    if (delay >= 10000) return "error.main";
+    if (delay > 500) return "warning.main";
+    if (delay > 100) return "text.secondary";
+    return "success.main";
   }
 }
 
