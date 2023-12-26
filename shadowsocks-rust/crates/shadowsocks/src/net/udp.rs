@@ -1,10 +1,5 @@
 //! UDP socket wrappers
 
-use std::{
-    io,
-    net::SocketAddr,
-    ops::{Deref, DerefMut},
-};
 #[cfg(any(
     target_os = "linux",
     target_os = "android",
@@ -12,8 +7,11 @@ use std::{
     target_os = "ios",
     target_os = "freebsd"
 ))]
+use std::io::{ErrorKind, IoSlice, IoSliceMut};
 use std::{
-    io::{ErrorKind, IoSlice, IoSliceMut},
+    io,
+    net::SocketAddr,
+    ops::{Deref, DerefMut},
     task::{Context as TaskContext, Poll},
 };
 
@@ -24,7 +22,8 @@ use std::{
     target_os = "ios",
     target_os = "freebsd"
 ))]
-use futures::{future, ready};
+use futures::future;
+use futures::ready;
 use pin_project::pin_project;
 #[cfg(any(
     target_os = "linux",
