@@ -1,6 +1,11 @@
 use std::net::IpAddr;
 
 use derive_more::From;
+#[cfg(target_os = "linux")]
+use ipset::{
+    types::{EnvOption, HashIp},
+    Session,
+};
 use log::SetLoggerError;
 
 #[allow(dead_code)]
@@ -45,3 +50,27 @@ pub enum CopyResult {
 }
 
 pub type Result<T> = std::result::Result<T, TrojanError>;
+
+#[cfg(target_os = "linux")]
+pub struct ProxyData {
+    pub server_ips: Vec<IpAddr>,
+    pub skip_dns: Option<IpAddr>,
+    pub bypass_session: Session<HashIp>,
+    pub no_bypass_session: Session<HashIp>,
+}
+
+#[cfg(target_os = "linux")]
+impl ProxyData {
+    pub fn new(no_bypass: String, bypass: String) -> Self {
+        let no_bypass_session = Session::new(no_bypass);
+        no_bypass_session.set_option(EnvOption::Exist);
+        let bypass_session = Session::new(bypass);
+        bypass_session.set_option(EnvOption::Exist);
+        Self {
+            server_ips: vec![],
+            skip_dns: None,
+            bypass_session,
+            no_bypass_session,
+        }
+    }
+}

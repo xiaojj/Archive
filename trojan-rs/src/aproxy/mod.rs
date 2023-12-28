@@ -10,11 +10,11 @@ use rustls::{
 };
 use rustls_pki_types::{CertificateDer, ServerName, UnixTime};
 use tokio::{
-    net::{TcpListener, UdpSocket},
+    net::{lookup_host, TcpListener, TcpStream, UdpSocket},
     runtime::Runtime,
     sync::mpsc::unbounded_channel,
 };
-use tokio_rustls::TlsConnector;
+use tokio_rustls::{client::TlsStream, TlsConnector};
 
 use crate::{
     aproxy::{
@@ -24,6 +24,7 @@ use crate::{
     },
     config::OPTIONS,
     proxy::new_socket,
+    types,
     types::Result,
 };
 
@@ -143,8 +144,17 @@ async fn wait_until_stop(_running: Arc<AtomicBool>, _ip: IpAddr) {}
 #[cfg(not(target_os = "windows"))]
 async fn wait_until_stop(running: Arc<AtomicBool>, ip: IpAddr) {
     let timeout = OPTIONS.proxy_args().ipset_timeout;
-    if timeout == 0 || OPTIONS.proxy_args().skip_dns_ip == Some(ip) {
-        return;
+    {
+        let proxy_data = OPTIONS
+            .proxy_args()
+            .proxy_data
+            .as_ref()
+            .unwrap()
+            .lock()
+            .await;
+        if timeout == 0 || proxy_data.skip_dns == Some(ip) {
+            return;
+        }
     }
     let mut tick = tokio::time::interval(std::time::Duration::from_secs(1));
     let mut counter = 0;
@@ -154,14 +164,17 @@ async fn wait_until_stop(running: Arc<AtomicBool>, ip: IpAddr) {
         if counter % timeout != 1 {
             continue;
         }
-        let mut session = OPTIONS
+        let mut proxy_data = OPTIONS
             .proxy_args()
-            .session
+            .proxy_data
             .as_ref()
             .unwrap()
             .lock()
-            .unwrap();
-        match session.add(ip, Some(timeout as u32 + 5)) {
+            .await;
+        match proxy_data
+            .no_bypass_session
+            .add(ip, Some(timeout as u32 + 5))
+        {
             Ok(ret) => {
                 if !ret {
                     log::error!("add ip:{} to ipset failed", ip);
@@ -172,4 +185,37 @@ async fn wait_until_stop(running: Arc<AtomicBool>, ip: IpAddr) {
             }
         }
     }
+}
+
+pub async fn init_tls_conn(
+    connector: TlsConnector,
+    server_name: ServerName<'static>,
+) -> types::Result<TlsStream<TcpStream>> {
+    let ips: Vec<_> = lookup_host((
+        OPTIONS.proxy_args().hostname.as_str(),
+        OPTIONS.proxy_args().port,
+    ))
+    .await?
+    .collect();
+    #[cfg(target_os = "linux")]
+    {
+        let mut proxy_data = OPTIONS
+            .proxy_args()
+            .proxy_data
+            .as_ref()
+            .unwrap()
+            .lock()
+            .await;
+        for ip in &ips {
+            if !proxy_data.server_ips.contains(&ip.ip()) {
+                proxy_data.server_ips.push(ip.ip());
+                if let Err(err) = proxy_data.bypass_session.add(ip.ip(), None) {
+                    log::error!("add ip:{} to session failed:{}", ip, err);
+                }
+            }
+        }
+    }
+    let stream = tokio::net::TcpStream::connect(ips.as_slice()).await?;
+    let conn = connector.connect(server_name, stream).await?;
+    Ok(conn)
 }

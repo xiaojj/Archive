@@ -8,12 +8,6 @@ use std::{
 use clap::Parser;
 use sha2::{Digest, Sha224};
 
-#[cfg(not(target_os = "windows"))]
-use ipset::{
-    types::{EnvOption, HashIp},
-    Session,
-};
-
 use crate::{
     types::TrojanError,
     utils::{get_system_dns, resolve},
@@ -214,14 +208,10 @@ pub struct ProxyArgs {
     #[clap(short = 'd', long, default_value = "8.8.8.8")]
     pub skip_dns: String,
 
-    /// skip_dns in IpAddr
+    /// session used for no bypass ipset
     #[clap(skip)]
-    pub skip_dns_ip: Option<IpAddr>,
-
-    /// session used for ipset
-    #[clap(skip)]
-    #[cfg(not(target_os = "windows"))]
-    pub session: Option<std::sync::Mutex<Session<HashIp>>>,
+    #[cfg(target_os = "linux")]
+    pub proxy_data: Option<tokio::sync::Mutex<crate::types::ProxyData>>,
 }
 
 #[derive(Parser)]
@@ -372,15 +362,17 @@ impl Opts {
                 self.system_dns = get_system_dns().unwrap_or("127.0.0.53".to_string())
             }
             Mode::Proxy(ref mut args) | Mode::Aproxy(ref mut args) => {
-                if args.ipset_timeout > 0 {
-                    #[cfg(not(target_os = "windows"))]
-                    {
+                #[cfg(target_os = "linux")]
+                {
+                    let mut proxy_data = crate::types::ProxyData::new(
+                        args.no_bypass_ipset.clone(),
+                        args.bypass_ipset.clone(),
+                    );
+                    if args.ipset_timeout > 0 {
                         let ip: Option<IpAddr> = args.skip_dns.as_str().parse().ok();
-                        args.skip_dns_ip = ip;
-                        let session = Session::new(args.no_bypass_ipset.clone());
-                        session.set_option(EnvOption::Exist);
-                        args.session = Some(std::sync::Mutex::new(session));
+                        proxy_data.skip_dns = ip;
                     }
+                    args.proxy_data = Some(tokio::sync::Mutex::new(proxy_data));
                 }
                 let hostname = args.hostname.clone();
                 let port = args.port;
