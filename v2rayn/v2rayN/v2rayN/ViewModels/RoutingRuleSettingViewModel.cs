@@ -5,7 +5,6 @@ using ReactiveUI.Fody.Helpers;
 using Splat;
 using System.Reactive;
 using System.Windows;
-using v2rayN.Base;
 using v2rayN.Handler;
 using v2rayN.Mode;
 using v2rayN.Resx;
@@ -60,7 +59,7 @@ namespace v2rayN.ViewModels
             else
             {
                 SelectedRouting = routingItem;
-                _rules = Utils.FromJson<List<RulesItem>>(SelectedRouting.ruleSet);
+                _rules = JsonUtils.FromJson<List<RulesItem>>(SelectedRouting.ruleSet);
             }
 
             RefreshRulesItems();
@@ -81,9 +80,9 @@ namespace v2rayN.ViewModels
             {
                 ImportRulesFromClipboard();
             });
-            ImportRulesFromUrlCmd = ReactiveCommand.Create(() =>
+            ImportRulesFromUrlCmd = ReactiveCommand.CreateFromTask(() =>
             {
-                ImportRulesFromUrl();
+                return ImportRulesFromUrl();
             });
 
             RuleRemoveCmd = ReactiveCommand.Create(() =>
@@ -143,7 +142,7 @@ namespace v2rayN.ViewModels
 
         public void RuleEdit(bool blNew)
         {
-            RulesItem item;
+            RulesItem? item;
             if (blNew)
             {
                 item = new();
@@ -209,7 +208,7 @@ namespace v2rayN.ViewModels
             }
             if (lst.Count > 0)
             {
-                Utils.SetClipboardData(Utils.ToJson(lst));
+                Utils.SetClipboardData(JsonUtils.ToJson(lst));
                 //UI.Show(ResUI.OperationSuccess"));
             }
         }
@@ -248,7 +247,7 @@ namespace v2rayN.ViewModels
                 it.id = Utils.GetGUID(false);
             }
             item.ruleNum = _rules.Count;
-            item.ruleSet = Utils.ToJson(_rules, false);
+            item.ruleSet = JsonUtils.ToJson(_rules, false);
 
             if (ConfigHandler.SaveRoutingItem(_config, item) == 0)
             {
@@ -334,7 +333,7 @@ namespace v2rayN.ViewModels
             {
                 return -1;
             }
-            var lstRules = Utils.FromJson<List<RulesItem>>(clipboardData);
+            var lstRules = JsonUtils.FromJson<List<RulesItem>>(clipboardData);
             if (lstRules == null)
             {
                 return -1;

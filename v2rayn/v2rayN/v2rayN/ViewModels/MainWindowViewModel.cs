@@ -15,11 +15,9 @@ using System.Reactive.Linq;
 using System.Text;
 using System.Windows;
 using System.Windows.Media;
-using v2rayN.Base;
 using v2rayN.Handler;
 using v2rayN.Mode;
 using v2rayN.Resx;
-using v2rayN.Tool;
 using v2rayN.Views;
 
 namespace v2rayN.ViewModels
@@ -652,13 +650,13 @@ namespace v2rayN.ViewModels
 
                                 if (SelectedProfile?.indexId == item.indexId)
                                 {
-                                    var temp = Utils.DeepCopy(item);
+                                    var temp = JsonUtils.DeepCopy(item);
                                     _profileItems.Replace(item, temp);
                                     SelectedProfile = temp;
                                 }
                                 else
                                 {
-                                    _profileItems.Replace(item, Utils.DeepCopy(item));
+                                    _profileItems.Replace(item, JsonUtils.DeepCopy(item));
                                 }
                             }
                         }
@@ -667,7 +665,7 @@ namespace v2rayN.ViewModels
             }
             catch (Exception ex)
             {
-                Utils.SaveLog(ex.Message, ex);
+                Logging.SaveLog(ex.Message, ex);
             }
         }
 
@@ -700,7 +698,7 @@ namespace v2rayN.ViewModels
                 {
                     item.speedVal = $"{speed} {Global.SpeedUnit}";
                 }
-                _profileItems.Replace(item, Utils.DeepCopy(item));
+                _profileItems.Replace(item, JsonUtils.DeepCopy(item));
             }
         }
 
@@ -734,7 +732,7 @@ namespace v2rayN.ViewModels
         {
             try
             {
-                Utils.SaveLog("MyAppExit Begin");
+                Logging.SaveLog("MyAppExit Begin");
 
                 StorageUI();
                 ConfigHandler.SaveConfig(_config);
@@ -755,7 +753,7 @@ namespace v2rayN.ViewModels
                 _statistics?.Close();
 
                 _coreHandler.CoreStop();
-                Utils.SaveLog("MyAppExit End");
+                Logging.SaveLog("MyAppExit End");
             }
             catch { }
             finally
@@ -835,7 +833,7 @@ namespace v2rayN.ViewModels
                             totalDown = t22 == null ? "" : Utils.HumanFy(t22.totalDown),
                             totalUp = t22 == null ? "" : Utils.HumanFy(t22.totalUp)
                         }).OrderBy(t => t.sort).ToList();
-            _lstProfile = Utils.FromJson<List<ProfileItem>>(Utils.ToJson(lstModel));
+            _lstProfile = JsonUtils.FromJson<List<ProfileItem>>(JsonUtils.ToJson(lstModel));
 
             Application.Current.Dispatcher.Invoke((Action)(() =>
             {
@@ -941,7 +939,7 @@ namespace v2rayN.ViewModels
             }
             else
             {
-                lstSelecteds = Utils.FromJson<List<ProfileItem>>(Utils.ToJson(orderProfiles));
+                lstSelecteds = JsonUtils.FromJson<List<ProfileItem>>(JsonUtils.ToJson(orderProfiles));
             }
 
             return 0;
@@ -1134,7 +1132,7 @@ namespace v2rayN.ViewModels
                 _noticeHandler?.Enqueue(ResUI.PleaseSelectServer);
                 return;
             }
-            string url = ShareHandler.GetShareUrl(item);
+            var url = ShareHandler.GetShareUrl(item);
             if (Utils.IsNullOrEmpty(url))
             {
                 return;
@@ -1456,7 +1454,7 @@ namespace v2rayN.ViewModels
                     CloseV2ray();
 
                     string fileName = Utils.GetTempPath(Utils.GetDownloadFileName(msg));
-                    string toPath = Utils.GetBinPath("", type);
+                    string toPath = Utils.GetBinPath("", type.ToString());
 
                     FileManager.ZipExtractToFile(fileName, toPath, _config.guiItem.ignoreGeoUpdateCore ? "geo" : "");
 

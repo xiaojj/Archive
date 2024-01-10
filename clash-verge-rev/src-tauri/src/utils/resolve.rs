@@ -86,7 +86,7 @@ pub fn resolve_setup(app: &mut App) {
     log::trace!("init system tray");
     log_err!(tray::Tray::update_systray(&app.app_handle()));
 
-    let silent_start = { Config::verge().data().enable_silent_start.clone() };
+    let silent_start = { Config::verge().data().enable_silent_start };
     if !silent_start.unwrap_or(false) {
         create_window(&app.app_handle());
     }
@@ -240,15 +240,17 @@ pub fn save_window_size_position(app_handle: &AppHandle, save_to_file: bool) -> 
 }
 
 pub async fn resolve_scheme(param: String) {
-    let url = param.trim_start_matches("clash://install-config/?url=");
+    let url = param
+        .trim_start_matches("clash://install-config/?url=")
+        .trim_start_matches("clash://install-config?url=");
     let option = PrfOption {
         user_agent: None,
         with_proxy: Some(true),
         self_proxy: None,
         update_interval: None,
     };
-    if let Ok(item) = PrfItem::from_url(&url, None, None, Some(option)).await {
-        if let Ok(_) = Config::profiles().data().append_item(item) {
+    if let Ok(item) = PrfItem::from_url(url, None, None, Some(option)).await {
+        if Config::profiles().data().append_item(item).is_ok() {
             notification::Notification::new(crate::utils::dirs::APP_ID)
                 .title("Clash Verge")
                 .body("Import profile success")

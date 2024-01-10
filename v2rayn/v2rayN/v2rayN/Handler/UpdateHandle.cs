@@ -6,10 +6,8 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Windows;
-using v2rayN.Base;
 using v2rayN.Mode;
 using v2rayN.Resx;
-using v2rayN.Tool;
 
 namespace v2rayN.Handler
 {
@@ -223,7 +221,7 @@ namespace v2rayN.Handler
                     //more url
                     if (Utils.IsNullOrEmpty(item.convertTarget) && !Utils.IsNullOrEmpty(item.moreUrl.TrimEx()))
                     {
-                        if (!Utils.IsNullOrEmpty(result) && Utils.IsBase64String(result))
+                        if (!Utils.IsNullOrEmpty(result) && Utils.IsBase64String(result!))
                         {
                             result = Utils.Base64Decode(result);
                         }
@@ -247,7 +245,7 @@ namespace v2rayN.Handler
                             }
                             if (!Utils.IsNullOrEmpty(result2))
                             {
-                                if (Utils.IsBase64String(result2))
+                                if (Utils.IsBase64String(result2!))
                                 {
                                     result += Utils.Base64Decode(result2);
                                 }
@@ -274,8 +272,8 @@ namespace v2rayN.Handler
                         int ret = ConfigHandler.AddBatchServers(config, result, id, true);
                         if (ret <= 0)
                         {
-                            Utils.SaveLog("FailedImportSubscription");
-                            Utils.SaveLog(result);
+                            Logging.SaveLog("FailedImportSubscription");
+                            Logging.SaveLog(result);
                         }
                         _updateFunc(false,
                             ret > 0
@@ -327,13 +325,13 @@ namespace v2rayN.Handler
                 }
                 else
                 {
-                    Utils.SaveLog("StatusCode error: " + url);
+                    Logging.SaveLog("StatusCode error: " + url);
                     return;
                 }
             }
             catch (Exception ex)
             {
-                Utils.SaveLog(ex.Message, ex);
+                Logging.SaveLog(ex.Message, ex);
                 _updateFunc(false, ex.Message);
             }
         }
@@ -350,7 +348,7 @@ namespace v2rayN.Handler
                 foreach (string name in coreInfo.coreExes)
                 {
                     string vName = $"{name}.exe";
-                    vName = Utils.GetBinPath(vName, coreInfo.coreType);
+                    vName = Utils.GetBinPath(vName, coreInfo.coreType.ToString());
                     if (File.Exists(vName))
                     {
                         filePath = vName;
@@ -399,7 +397,7 @@ namespace v2rayN.Handler
             }
             catch (Exception ex)
             {
-                Utils.SaveLog(ex.Message, ex);
+                Logging.SaveLog(ex.Message, ex);
                 _updateFunc(false, ex.Message);
                 return new SemanticVersion("");
             }
@@ -409,7 +407,7 @@ namespace v2rayN.Handler
         {
             try
             {
-                var gitHubReleases = Utils.FromJson<List<GitHubRelease>>(gitHubReleaseApi);
+                var gitHubReleases = JsonUtils.FromJson<List<GitHubRelease>>(gitHubReleaseApi);
                 var gitHubRelease = preRelease ? gitHubReleases!.First() : gitHubReleases!.First(r => r.Prerelease == false);
                 var version = new SemanticVersion(gitHubRelease!.TagName);
                 var body = gitHubRelease!.Body;
@@ -524,7 +522,7 @@ namespace v2rayN.Handler
             }
             catch (Exception ex)
             {
-                Utils.SaveLog(ex.Message, ex);
+                Logging.SaveLog(ex.Message, ex);
                 _updateFunc(false, ex.Message);
             }
         }

@@ -3,7 +3,6 @@ using ReactiveUI.Fody.Helpers;
 using Splat;
 using System.Reactive;
 using System.Windows;
-using v2rayN.Base;
 using v2rayN.Handler;
 using v2rayN.Mode;
 using v2rayN.Resx;
@@ -33,7 +32,7 @@ namespace v2rayN.ViewModels
             }
             else
             {
-                SelectedSource = Utils.DeepCopy(subItem);
+                SelectedSource = JsonUtils.DeepCopy(subItem);
             }
 
             SaveCmd = ReactiveCommand.Create(() =>
