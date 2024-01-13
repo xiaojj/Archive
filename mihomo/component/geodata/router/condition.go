@@ -137,9 +137,7 @@ func (m *GeoIPMatcher) Init(cidrs []*CIDR) error {
 			return fmt.Errorf("error when loading GeoIP: %w", err)
 		}
 	}
-	m.cidrSet.Merge()
-
-	return nil
+	return m.cidrSet.Merge()
 }
 
 func (m *GeoIPMatcher) SetReverseMatch(isReverseMatch bool) {
@@ -148,7 +146,7 @@ func (m *GeoIPMatcher) SetReverseMatch(isReverseMatch bool) {
 
 // Match returns true if the given ip is included by the GeoIP.
 func (m *GeoIPMatcher) Match(ip netip.Addr) bool {
-	match := m.Match(ip)
+	match := m.cidrSet.IsContain(ip)
 	if m.reverseMatch {
 		return !match
 	}
