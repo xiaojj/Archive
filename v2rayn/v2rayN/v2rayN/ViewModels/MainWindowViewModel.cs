@@ -88,6 +88,7 @@ namespace v2rayN.ViewModels
         public ReactiveCommand<Unit, Unit> AddTrojanServerCmd { get; }
         public ReactiveCommand<Unit, Unit> AddHysteria2ServerCmd { get; }
         public ReactiveCommand<Unit, Unit> AddTuicServerCmd { get; }
+        public ReactiveCommand<Unit, Unit> AddWireguardServerCmd { get; }
         public ReactiveCommand<Unit, Unit> AddCustomServerCmd { get; }
         public ReactiveCommand<Unit, Unit> AddServerViaClipboardCmd { get; }
         public ReactiveCommand<Unit, Unit> AddServerViaScanCmd { get; }
@@ -346,6 +347,10 @@ namespace v2rayN.ViewModels
             AddTuicServerCmd = ReactiveCommand.Create(() =>
             {
                 EditServer(true, EConfigType.Tuic);
+            });
+            AddWireguardServerCmd = ReactiveCommand.Create(() =>
+            {
+                EditServer(true, EConfigType.Wireguard);
             });
             AddCustomServerCmd = ReactiveCommand.Create(() =>
             {
@@ -1621,6 +1626,13 @@ namespace v2rayN.ViewModels
             if (_config.tunModeItem.enableTun != EnableTun)
             {
                 _config.tunModeItem.enableTun = EnableTun;
+                // When running as a non-administrator, reboot to administrator mode
+                if (EnableTun && !Utils.IsAdministrator())
+                {
+                    _config.tunModeItem.enableTun = false;
+                    RebootAsAdmin();
+                    return;
+                }
                 Reload();
             }
         }
@@ -1839,7 +1851,7 @@ namespace v2rayN.ViewModels
             if (_config.uiItem.autoHideStartup)
             {
                 Observable.Range(1, 1)
-                 .Delay(TimeSpan.FromSeconds(2))
+                 .Delay(TimeSpan.FromSeconds(0.5))
                  .Subscribe(x =>
                  {
                      Application.Current.Dispatcher.Invoke(() =>

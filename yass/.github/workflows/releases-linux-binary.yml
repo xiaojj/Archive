@@ -31,6 +31,9 @@ on:
     types: [published]
   schedule:
     - cron: '0 16 * * *'
+concurrency:
+  group: ${{ github.workflow }} / ${{ startsWith(github.event_name, 'pull') && github.ref_name || github.sha }}
+  cancel-in-progress: ${{ startsWith(github.event_name, 'pull') }}
 env:
   CACHE_EPOCH: 121-2
   GOPROXY: direct
@@ -92,7 +95,7 @@ jobs:
         with:
           path: |
             qemu-user-static*.deb
-          key: ${{ runner.os }}-qemu-v1
+          key: ${{ runner.os }}-qemu-8.2.0-ds4
       - name: Cache sysroot
         id: sysroot-cache
         uses: actions/cache@v3
@@ -112,7 +115,7 @@ jobs:
       - name: "Install dependency: qemu user cache"
         if: ${{ steps.qemu-user-cache.outputs.cache-hit != 'true' }}
         run: |
-          wget http://ftp.us.debian.org/debian/pool/main/q/qemu/qemu-user-static_8.1.2+ds-1_amd64.deb
+          wget http://ftp.us.debian.org/debian/pool/main/q/qemu/qemu-user-static_8.2.0+ds-4_amd64.deb
       - name: "Install dependency: sysroot"
         if: ${{ steps.sysroot-cache.outputs.cache-hit != 'true' }}
         run: |
