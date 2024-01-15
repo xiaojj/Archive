@@ -6,7 +6,6 @@ use std::os::unix::io::{AsRawFd, RawFd};
 
 use std::cell::RefCell;
 use std::rc::Rc;
-use std::vec::Vec;
 
 use smoltcp::phy::{self, Device, DeviceCapabilities};
 use smoltcp::time::Instant;
@@ -21,7 +20,6 @@ pub struct ContextInterfaceDesc {
     get_read_packet_context_size_fn: unsafe extern "C" fn(*mut libc::c_void, *mut libc::c_void) -> libc::size_t,
     free_read_packet_context_size_fn: unsafe extern "C" fn(*mut libc::c_void, *mut libc::c_void),
     write_packets_fn: unsafe extern "C" fn(*mut libc::c_void, *const *const libc::c_void, *const libc::size_t, libc::c_int),
-    previous_read_ctx: *mut libc::c_void,
     mtu: usize,
 }
 
@@ -45,7 +43,6 @@ impl ContextInterfaceDesc {
           get_read_packet_context_size_fn: get_read_packet_context_size_fn,
           free_read_packet_context_size_fn: free_read_packet_context_size_fn,
           write_packets_fn: write_packets_fn,
-          previous_read_ctx: 0 as *mut libc::c_void,
           mtu: mtu
         })
     }
@@ -54,12 +51,8 @@ impl ContextInterfaceDesc {
         Ok(self.mtu)
     }
 
-    pub fn recv(&mut self) -> io::Result<(*const libc::c_void, usize)> {
+    pub fn recv(&mut self) -> io::Result<(*mut libc::c_void, *mut libc::c_void)> {
         unsafe {
-            if self.previous_read_ctx != 0 as *mut libc::c_void {
-                (self.free_read_packet_context_size_fn)(self.context, self.previous_read_ctx);
-                self.previous_read_ctx = 0 as *mut libc::c_void;
-            }
             let mut context_buffer = vec![0; 8];
             let len = libc::read(
                 self.read_fd,
@@ -69,11 +62,8 @@ impl ContextInterfaceDesc {
             if len == -1 {
                 return Err(io::Error::last_os_error());
             }
-            let context: *mut libc::c_void = *(context_buffer.as_ptr() as *mut *mut libc::c_void);
-            let context_ptr: *const libc::c_void = (self.get_read_packet_context_data_fn)(self.context, context);
-            let context_size: libc::size_t = (self.get_read_packet_context_size_fn)(self.context, context);
-            self.previous_read_ctx = context;
-            Ok((context_ptr, context_size as usize))
+            let read_ctx: *mut libc::c_void = *(context_buffer.as_ptr() as *mut *mut libc::c_void);
+            Ok((self.context, read_ctx))
         }
     }
 
@@ -89,10 +79,6 @@ impl ContextInterfaceDesc {
 
 impl Drop for ContextInterfaceDesc {
     fn drop(&mut self) {
-        if self.previous_read_ctx != 0 as *mut libc::c_void {
-            unsafe { (self.free_read_packet_context_size_fn)(self.context, self.previous_read_ctx); }
-            self.previous_read_ctx = 0 as *mut libc::c_void;
-        }
         unsafe {
             libc::close(self.read_fd);
         }
@@ -147,13 +133,18 @@ impl Device for ContextInterface {
 
     fn receive(&mut self, _timestamp: Instant) -> Option<(Self::RxToken<'_>, Self::TxToken<'_>)> {
         let mut lower = self.lower.borrow_mut();
+        let mut get_read_packet_context_data_fn = lower.get_read_packet_context_data_fn;
+        let mut get_read_packet_context_size_fn = lower.get_read_packet_context_size_fn;
+        let mut free_read_packet_context_size_fn = lower.free_read_packet_context_size_fn;
         match lower.recv() {
-            Ok((ptr, size)) => {
-                let mut buffer = vec![0; self.mtu];
-                // FIXME remove memcpy
-                unsafe { libc::memcpy(buffer.as_mut_ptr() as *mut libc::c_void, ptr, size)};
-                buffer.resize(size, 0);
-                let rx = RxToken { buffer };
+            Ok((context, read_ctx)) => {
+                let rx = RxToken {
+                    context,
+                    read_ctx,
+                    get_read_packet_context_data_fn,
+                    get_read_packet_context_size_fn,
+                    free_read_packet_context_size_fn
+                };
                 let tx = TxToken {
                     lower: self.lower.clone(),
                 };
@@ -173,7 +164,11 @@ impl Device for ContextInterface {
 
 #[doc(hidden)]
 pub struct RxToken {
-    buffer: Vec<u8>,
+    context: *mut libc::c_void,
+    read_ctx: *mut libc::c_void,
+    get_read_packet_context_data_fn: unsafe extern "C" fn(*mut libc::c_void, *mut libc::c_void) -> *const libc::c_void,
+    get_read_packet_context_size_fn: unsafe extern "C" fn(*mut libc::c_void, *mut libc::c_void) -> libc::size_t,
+    free_read_packet_context_size_fn: unsafe extern "C" fn(*mut libc::c_void, *mut libc::c_void),
 }
 
 impl phy::RxToken for RxToken {
@@ -181,7 +176,18 @@ impl phy::RxToken for RxToken {
     where
         F: FnOnce(&mut [u8]) -> R,
     {
-        f(&mut self.buffer[..])
+        let data: *const libc::c_void = unsafe { (self.get_read_packet_context_data_fn)(self.context, self.read_ctx) };
+        let len: libc::size_t = unsafe { (self.get_read_packet_context_size_fn)(self.context, self.read_ctx) };
+        let buffer = unsafe { std::slice::from_raw_parts_mut(data as *mut u8, len as usize) };
+        f(buffer)
+    }
+}
+
+impl Drop for RxToken {
+    fn drop(&mut self) {
+        unsafe {
+            (self.free_read_packet_context_size_fn)(self.context, self.read_ctx);
+        }
     }
 }
 

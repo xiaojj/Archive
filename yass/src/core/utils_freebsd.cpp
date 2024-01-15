@@ -9,8 +9,6 @@
 
 #include <locale.h>
 #include <pthread_np.h>
-#include <sys/mman.h> // For mlockall.
-#include <sys/resource.h>
 #include <time.h> // For clock_gettime
 
 // TBD
@@ -21,18 +19,6 @@ bool SetCurrentThreadPriority(ThreadPriority /*priority*/) {
 bool SetCurrentThreadName(const std::string& name) {
   pthread_set_name_np(pthread_self(), name.c_str());
   return true;
-}
-
-bool MemoryLockAll() {
-  if (mlockall(MCL_CURRENT) == 0)
-    return true;
-  PLOG(WARNING) << "Failed to call mlockall";
-  struct rlimit rlim;
-  if (errno == ENOMEM && ::getrlimit(RLIMIT_MEMLOCK, &rlim) == 0) {
-    LOG(WARNING) << "Please Increase RLIMIT_MEMLOCK, soft limit: "
-      << rlim.rlim_cur << ", hard limit: " << rlim.rlim_max;
-  }
-  return false;
 }
 
 uint64_t GetMonotonicTime() {
@@ -57,11 +43,6 @@ uint64_t GetMonotonicTime() {
   }
   return static_cast<double>(ts.tv_sec - start_ts.tv_sec) * NS_PER_SECOND +
          ts.tv_nsec - start_ts.tv_nsec;
-}
-
-// TBD
-bool IsProgramConsole() {
-  return true;
 }
 
 bool SetUTF8Locale() {

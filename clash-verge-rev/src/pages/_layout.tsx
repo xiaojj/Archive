@@ -10,7 +10,7 @@ import { alpha, List, Paper, ThemeProvider } from "@mui/material";
 import { listen } from "@tauri-apps/api/event";
 import { appWindow } from "@tauri-apps/api/window";
 import { routers } from "./_routers";
-import { refreshClashInfo } from "@/services/api";
+import { getAxios } from "@/services/api";
 import { useVerge } from "@/hooks/use-verge";
 import LogoSvg from "@/assets/image/logo.svg?react";
 import { BaseErrorBoundary, Notice } from "@/components/base";
@@ -36,7 +36,7 @@ const Layout = () => {
   const { theme } = useCustomTheme();
 
   const { verge } = useVerge();
-  const { theme_blur, language } = verge || {};
+  const { language } = verge || {};
 
   const location = useLocation();
 
@@ -50,7 +50,7 @@ const Layout = () => {
 
     listen("verge://refresh-clash-config", async () => {
       // the clash info may be updated
-      await refreshClashInfo();
+      await getAxios(true);
       mutate("getProxies");
       mutate("getVersion");
       mutate("getClashConfig");
@@ -116,7 +116,7 @@ const Layout = () => {
           }}
           sx={[
             ({ palette }) => ({
-              bgcolor: alpha(palette.background.paper, theme_blur ? 0.8 : 1),
+              bgcolor: palette.background.paper,
             }),
           ]}
         >
