@@ -248,10 +248,6 @@ jobs:
         with:
           name: ${{ env.BUNDLE }} sha256 ${{ env.SHA256SUM }}
           path: apk/sha256sum.txt
-      - uses: actions/upload-artifact@v3
-        with:
-          name: ${{ env.BUNDLE }}
-          path: apk/app/build/outputs/apk/release/${{ env.BUNDLE }}
       - name: Upload naiveproxy assets
         if: ${{ github.event_name == 'release' }}
         working-directory: apk/app/build/outputs/apk/release
