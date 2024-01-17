@@ -53,6 +53,7 @@ interface IProxyItem {
   all?: string[];
   now?: string;
   hidden?: boolean;
+  icon?: string;
   provider?: string; // 记录是否来自provider
 }
 
@@ -60,10 +61,20 @@ type IProxyGroupItem = Omit<IProxyItem, "all"> & {
   all: IProxyItem[];
 };
 
-interface IProviderItem {
+interface IProxyProviderItem {
   name: string;
   type: string;
   proxies: IProxyItem[];
+  updatedAt: string;
+  vehicleType: string;
+}
+
+interface IRuleProviderItem {
+  name: string;
+  behavior: string;
+  format: string;
+  ruleCount: number;
+  type: string;
   updatedAt: string;
   vehicleType: string;
 }
@@ -154,11 +165,19 @@ interface IProfilesConfig {
   items?: IProfileItem[];
 }
 
+interface IVergeTestItem {
+  uid: string;
+  name?: string;
+  icon?: string;
+  url: string;
+}
+
 interface IVergeConfig {
   app_log_level?: "trace" | "debug" | "info" | "warn" | "error" | string;
   language?: string;
   tray_event?: "main_window" | "system_proxy" | "tun_mode" | string;
   env_type?: "bash" | "cmd" | "powershell" | string;
+  startup_script?: string;
   clash_core?: string;
   theme_mode?: "light" | "dark" | "system";
   traffic_graph?: boolean;
@@ -194,6 +213,7 @@ interface IVergeConfig {
   enable_builtin_enhanced?: boolean;
   auto_log_clean?: 0 | 1 | 2 | 3;
   proxy_layout_column?: number;
+  test_list?: IVergeTestItem[];
 }
 
 type IClashConfigValue = any;

@@ -2,25 +2,28 @@ package tunnel
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"net/netip"
+	"path/filepath"
 	"runtime"
 	"sync"
 	"time"
 
 	"github.com/jpillora/backoff"
 
-	N "github.com/Dreamacro/clash/common/net"
-	"github.com/Dreamacro/clash/component/nat"
-	P "github.com/Dreamacro/clash/component/process"
-	"github.com/Dreamacro/clash/component/resolver"
-	"github.com/Dreamacro/clash/component/sniffer"
-	C "github.com/Dreamacro/clash/constant"
-	"github.com/Dreamacro/clash/constant/provider"
-	icontext "github.com/Dreamacro/clash/context"
-	"github.com/Dreamacro/clash/log"
-	"github.com/Dreamacro/clash/tunnel/statistic"
+	N "github.com/metacubex/mihomo/common/net"
+	"github.com/metacubex/mihomo/component/nat"
+	P "github.com/metacubex/mihomo/component/process"
+	"github.com/metacubex/mihomo/component/resolver"
+	"github.com/metacubex/mihomo/component/sniffer"
+	C "github.com/metacubex/mihomo/constant"
+	"github.com/metacubex/mihomo/constant/features"
+	"github.com/metacubex/mihomo/constant/provider"
+	icontext "github.com/metacubex/mihomo/context"
+	"github.com/metacubex/mihomo/log"
+	"github.com/metacubex/mihomo/tunnel/statistic"
 )
 
 var (
@@ -46,8 +49,6 @@ var (
 	findProcessMode P.FindProcessMode
 
 	fakeIPRange netip.Prefix
-
-	procesCache string
 )
 
 type tunnel struct{}
@@ -332,7 +333,6 @@ func handleUDPConn(packet C.PacketAdapter) {
 	if !metadata.Resolved() {
 		ip, err := resolver.ResolveIP(context.Background(), metadata.Host)
 		if err != nil {
-			packet.Drop()
 			return
 		}
 		metadata.DstIP = ip
@@ -375,7 +375,6 @@ func handleUDPConn(packet C.PacketAdapter) {
 			cond.Broadcast()
 		}()
 
-		pCtx := icontext.NewPacketConnContext(metadata)
 		proxy, rule, err := resolveMetadata(metadata)
 		if err != nil {
 			log.Warnln("[UDP] Parse metadata failed: %s", err.Error())
@@ -402,7 +401,6 @@ func handleUDPConn(packet C.PacketAdapter) {
 		if err != nil {
 			return
 		}
-		pCtx.InjectPacketConn(rawPc)
 
 		pc := statistic.NewUDPTracker(rawPc, statistic.DefaultManager, metadata, rule, 0, 0, true)
 
@@ -412,6 +410,10 @@ func handleUDPConn(packet C.PacketAdapter) {
 		case rule != nil:
 			if rule.Payload() != "" {
 				log.Infoln("[UDP] %s --> %s match %s using %s", metadata.SourceDetail(), metadata.RemoteAddress(), fmt.Sprintf("%s(%s)", rule.RuleType().String(), rule.Payload()), rawPc.Chains().String())
+				if rawPc.Chains().Last() == "REJECT-DROP" {
+					pc.Close()
+					return
+				}
 			} else {
 				log.Infoln("[UDP] %s --> %s match %s using %s", metadata.SourceDetail(), metadata.RemoteAddress(), rule.Payload(), rawPc.Chains().String())
 			}
@@ -583,7 +585,7 @@ func handleTCPConn(connCtx C.ConnContext) {
 	peekMutex.Lock()
 	defer peekMutex.Unlock()
 	_ = conn.SetReadDeadline(time.Time{}) // reset
-	handleSocket(connCtx, remoteConn)
+	handleSocket(conn, remoteConn)
 }
 
 func shouldResolveIP(rule C.Rule, metadata *C.Metadata) bool {
@@ -594,8 +596,8 @@ func match(metadata *C.Metadata) (C.Proxy, C.Rule, error) {
 	configMux.RLock()
 	defer configMux.RUnlock()
 	var (
-		resolved     bool
-		processFound bool
+		resolved             bool
+		attemptProcessLookup = true
 	)
 
 	if node, ok := resolver.DefaultHosts.Search(metadata.Host, false); ok {
@@ -619,17 +621,26 @@ func match(metadata *C.Metadata) (C.Proxy, C.Rule, error) {
 			}()
 		}
 
-		if !findProcessMode.Off() && !processFound && (findProcessMode.Always() || rule.ShouldFindProcess()) {
-			pkg, err := P.FindPackageName(metadata)
-			if err != nil {
-				log.Debugln("[Process] find process %s: %v", metadata.String(), err)
-			} else {
-				metadata.Process = pkg
-				processFound = true
-				if procesCache != metadata.Process {
-					log.Debugln("[Process] %s from process %s", metadata.String(), metadata.Process)
+		if attemptProcessLookup && !findProcessMode.Off() && (findProcessMode.Always() || rule.ShouldFindProcess()) {
+			attemptProcessLookup = false
+			if !features.CMFA {
+				// normal check for process
+				uid, path, err := P.FindProcessName(metadata.NetWork.String(), metadata.SrcIP, int(metadata.SrcPort))
+				if err != nil {
+					log.Debugln("[Process] find process %s error: %v", metadata.String(), err)
+				} else {
+					metadata.Process = filepath.Base(path)
+					metadata.ProcessPath = path
+					metadata.Uid = uid
 				}
-				procesCache = metadata.Process
+			} else {
+				// check package names
+				pkg, err := P.FindPackageName(metadata)
+				if err != nil {
+					log.Debugln("[Process] find process %s error: %v", metadata.String(), err)
+				} else {
+					metadata.Process = pkg
+				}
 			}
 		}
 
@@ -674,6 +685,19 @@ func getRules(metadata *C.Metadata) []C.Rule {
 	}
 }
 
+func shouldStopRetry(err error) bool {
+	if errors.Is(err, resolver.ErrIPNotFound) {
+		return true
+	}
+	if errors.Is(err, resolver.ErrIPVersion) {
+		return true
+	}
+	if errors.Is(err, resolver.ErrIPv6Disabled) {
+		return true
+	}
+	return false
+}
+
 func retry[T any](ctx context.Context, ft func(context.Context) (T, error), fe func(err error)) (t T, err error) {
 	b := &backoff.Backoff{
 		Min:    10 * time.Millisecond,
@@ -686,6 +710,9 @@ func retry[T any](ctx context.Context, ft func(context.Context) (T, error), fe f
 		if err != nil {
 			if fe != nil {
 				fe(err)
+			}
+			if shouldStopRetry(err) {
+				return
 			}
 			select {
 			case <-time.After(b.Duration()):

@@ -8,15 +8,14 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
-	"time"
 
-	"github.com/Dreamacro/clash/adapter/inbound"
-	"github.com/Dreamacro/clash/component/dialer"
-	"github.com/Dreamacro/clash/component/iface"
-	C "github.com/Dreamacro/clash/constant"
-	LC "github.com/Dreamacro/clash/listener/config"
-	"github.com/Dreamacro/clash/listener/sing"
-	"github.com/Dreamacro/clash/log"
+	"github.com/metacubex/mihomo/adapter/inbound"
+	"github.com/metacubex/mihomo/component/dialer"
+	"github.com/metacubex/mihomo/component/iface"
+	C "github.com/metacubex/mihomo/constant"
+	LC "github.com/metacubex/mihomo/listener/config"
+	"github.com/metacubex/mihomo/listener/sing"
+	"github.com/metacubex/mihomo/log"
 
 	tun "github.com/metacubex/sing-tun"
 	"github.com/sagernet/sing/common"
@@ -95,6 +94,9 @@ func New(options LC.Tun, tunnel C.Tunnel, additions ...inbound.Addition) (l *Lis
 			inbound.WithSpecialRules(""),
 		}
 	}
+	if options.GSOMaxSize == 0 {
+		options.GSOMaxSize = 65536
+	}
 	tunName := options.Device
 	if tunName == "" || !checkTunName(tunName) {
 		tunName = CalculateInterfaceName(InterfaceName)
@@ -150,14 +152,18 @@ func New(options LC.Tun, tunnel C.Tunnel, additions ...inbound.Addition) (l *Lis
 		dnsAdds = append(dnsAdds, addrPort)
 	}
 
+	h, err := sing.NewListenerHandler(sing.ListenerConfig{
+		Tunnel:    tunnel,
+		Type:      C.TUN,
+		Additions: additions,
+	})
+	if err != nil {
+		return nil, err
+	}
+
 	handler := &ListenerHandler{
-		ListenerHandler: sing.ListenerHandler{
-			Tunnel:     tunnel,
-			Type:       C.TUN,
-			Additions:  additions,
-			UDPTimeout: time.Second * time.Duration(udpTimeout),
-		},
-		DnsAdds: dnsAdds,
+		ListenerHandler: h,
+		DnsAdds:         dnsAdds,
 	}
 	l = &Listener{
 		closed:  false,
@@ -201,6 +207,7 @@ func New(options LC.Tun, tunnel C.Tunnel, additions ...inbound.Addition) (l *Lis
 	tunOptions := tun.Options{
 		Name:                     tunName,
 		MTU:                      tunMTU,
+		GSO:                      options.GSO,
 		Inet4Address:             options.Inet4Address,
 		Inet6Address:             options.Inet6Address,
 		AutoRoute:                options.AutoRoute,
@@ -209,6 +216,8 @@ func New(options LC.Tun, tunnel C.Tunnel, additions ...inbound.Addition) (l *Lis
 		Inet6RouteAddress:        options.Inet6RouteAddress,
 		Inet4RouteExcludeAddress: options.Inet4RouteExcludeAddress,
 		Inet6RouteExcludeAddress: options.Inet6RouteExcludeAddress,
+		IncludeInterface:         options.IncludeInterface,
+		ExcludeInterface:         options.ExcludeInterface,
 		IncludeUID:               includeUID,
 		ExcludeUID:               excludeUID,
 		IncludeAndroidUser:       options.IncludeAndroidUser,
@@ -233,10 +242,7 @@ func New(options LC.Tun, tunnel C.Tunnel, additions ...inbound.Addition) (l *Lis
 	stackOptions := tun.StackOptions{
 		Context:                context.TODO(),
 		Tun:                    tunIf,
-		MTU:                    tunOptions.MTU,
-		Name:                   tunOptions.Name,
-		Inet4Address:           tunOptions.Inet4Address,
-		Inet6Address:           tunOptions.Inet6Address,
+		TunOptions:             tunOptions,
 		EndpointIndependentNat: options.EndpointIndependentNat,
 		UDPTimeout:             udpTimeout,
 		Handler:                handler,
@@ -245,7 +251,7 @@ func New(options LC.Tun, tunnel C.Tunnel, additions ...inbound.Addition) (l *Lis
 
 	if options.FileDescriptor > 0 {
 		if tunName, err := getTunnelName(int32(options.FileDescriptor)); err != nil {
-			stackOptions.Name = tunName
+			stackOptions.TunOptions.Name = tunName
 			stackOptions.ForwarderBindInterface = true
 		}
 	}

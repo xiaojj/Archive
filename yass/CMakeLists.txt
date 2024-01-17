@@ -3774,6 +3774,8 @@ if (GUI)
           src/mac/YassAppDelegate.h
           src/mac/YassViewController.mm
           src/mac/YassViewController.h
+          src/mac/YassWindowController.mm
+          src/mac/YassWindowController.h
           src/mac/OptionViewController.mm
           src/mac/OptionViewController.h
           src/mac/utils.h
@@ -4279,7 +4281,7 @@ if (GUI)
 
       if (GUI_FLAVOUR STREQUAL "gtk3" OR GUI_FLAVOUR STREQUAL "gtk4")
         install(FILES
-          ${CMAKE_CURRENT_SOURCE_DIR}/src/gtk/yass.desktop
+          ${CMAKE_CURRENT_SOURCE_DIR}/src/gtk/it.gui.yass.desktop
           DESTINATION share/applications)
 
         install(FILES

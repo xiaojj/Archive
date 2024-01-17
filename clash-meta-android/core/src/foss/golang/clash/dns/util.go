@@ -11,15 +11,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Dreamacro/clash/common/cache"
-	N "github.com/Dreamacro/clash/common/net"
-	"github.com/Dreamacro/clash/common/nnip"
-	"github.com/Dreamacro/clash/common/picker"
-	"github.com/Dreamacro/clash/component/dialer"
-	"github.com/Dreamacro/clash/component/resolver"
-	C "github.com/Dreamacro/clash/constant"
-	"github.com/Dreamacro/clash/log"
-	"github.com/Dreamacro/clash/tunnel"
+	N "github.com/metacubex/mihomo/common/net"
+	"github.com/metacubex/mihomo/common/nnip"
+	"github.com/metacubex/mihomo/common/picker"
+	"github.com/metacubex/mihomo/component/dialer"
+	"github.com/metacubex/mihomo/component/resolver"
+	C "github.com/metacubex/mihomo/constant"
+	"github.com/metacubex/mihomo/log"
+	"github.com/metacubex/mihomo/tunnel"
 
 	D "github.com/miekg/dns"
 	"github.com/samber/lo"
@@ -51,7 +50,7 @@ func updateTTL(records []D.RR, ttl uint32) {
 	}
 }
 
-func putMsgToCache(c *cache.LruCache[string, *D.Msg], key string, q D.Question, msg *D.Msg) {
+func putMsgToCache(c dnsCache, key string, q D.Question, msg *D.Msg) {
 	// skip dns cache for acme challenge
 	if q.Qtype == D.TypeTXT && strings.HasPrefix(q.Name, "_acme-challenge.") {
 		log.Debugln("[DNS] dns cache ignored because of acme challenge for: %s", q.Name)
@@ -290,8 +289,6 @@ func listenPacket(ctx context.Context, proxyAdapter C.ProxyAdapter, proxyName st
 	return proxyAdapter.ListenPacketContext(ctx, metadata, opts...)
 }
 
-var errIPNotFound = errors.New("couldn't find ip")
-
 func batchExchange(ctx context.Context, clients []dnsClient, m *D.Msg) (msg *D.Msg, cache bool, err error) {
 	cache = true
 	fast, ctx := picker.WithTimeout[*D.Msg](ctx, resolver.DefaultDNSTimeout)
@@ -321,12 +318,12 @@ func batchExchange(ctx context.Context, clients []dnsClient, m *D.Msg) (msg *D.M
 				case D.TypeAAAA:
 					if len(ips) == 0 {
 						noIpMsg = m
-						return nil, errIPNotFound
+						return nil, resolver.ErrIPNotFound
 					}
 				case D.TypeA:
 					if len(ips) == 0 {
 						noIpMsg = m
-						return nil, errIPNotFound
+						return nil, resolver.ErrIPNotFound
 					}
 				}
 			}

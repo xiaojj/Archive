@@ -1,5 +1,6 @@
 {
   "Label-Proxies": "Proxies",
+  "Label-Test": "Test",
   "Label-Profiles": "Profiles",
   "Label-Connections": "Connections",
   "Label-Logs": "Logs",
@@ -11,10 +12,16 @@
   "Clear": "Clear",
   "Proxies": "Proxies",
   "Proxy Groups": "Proxy Groups",
+  "Test": "Test",
   "rule": "rule",
   "global": "global",
   "direct": "direct",
   "script": "script",
+
+  "Edit": "Edit",
+  "Icon": "Icon",
+  "Test URL": "Test URL",
+  "Test All": "Test All",
 
   "Profiles": "Profiles",
   "Profile URL": "Profile URL",
@@ -50,6 +57,8 @@
   "Filter conditions": "Filter conditions",
   "Refresh profiles": "Refresh profiles",
   "Rules": "Rules",
+  "Update All": "Update All",
+  "Update At": "Update At",
 
   "Type": "Type",
   "Name": "Name",
@@ -92,6 +101,8 @@
   "Theme Mode": "Theme Mode",
   "Tray Click Event": "Tray Click Event",
   "Copy Env Type": "Copy Env Type",
+  "Startup Script": "Startup Script",
+  "Browse": "Browse",
   "Show Main Window": "Show Main Window",
   "Theme Setting": "Theme Setting",
   "Layout Setting": "Layout Setting",

@@ -6,19 +6,18 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Dreamacro/clash/common/atomic"
-	"github.com/Dreamacro/clash/common/batch"
-	"github.com/Dreamacro/clash/common/singledo"
-	"github.com/Dreamacro/clash/common/utils"
-	C "github.com/Dreamacro/clash/constant"
-	"github.com/Dreamacro/clash/log"
+	"github.com/metacubex/mihomo/common/atomic"
+	"github.com/metacubex/mihomo/common/batch"
+	"github.com/metacubex/mihomo/common/singledo"
+	"github.com/metacubex/mihomo/common/utils"
+	C "github.com/metacubex/mihomo/constant"
+	"github.com/metacubex/mihomo/log"
 
 	"github.com/dlclark/regexp2"
 )
 
 const (
 	defaultURLTestTimeout = time.Second * 5
-	defaultURLTestURL     = "https://www.gstatic.com/generate_204"
 )
 
 type HealthCheckOption struct {
@@ -105,12 +104,6 @@ func (hc *HealthCheck) registerHealthCheckTask(url string, expectedStatus utils.
 		return
 	}
 
-	// due to the time-consuming nature of health checks, a maximum of defaultMaxTestURLNum URLs can be set for testing
-	if len(hc.extra) > C.DefaultMaxHealthCheckUrlNum {
-		log.Debugln("skip add url: %s to health check because it has reached the maximum limit: %d", url, C.DefaultMaxHealthCheckUrlNum)
-		return
-	}
-
 	option := &extraOption{filters: map[string]struct{}{}, expectedStatus: expectedStatus}
 	splitAndAddFiltersToExtra(filter, option)
 	hc.extra[url] = option
@@ -149,7 +142,6 @@ func (hc *HealthCheck) stop() {
 }
 
 func (hc *HealthCheck) check() {
-
 	if len(hc.proxies) == 0 {
 		return
 	}
@@ -183,13 +175,8 @@ func (hc *HealthCheck) execute(b *batch.Batch[bool], url, uid string, option *ex
 	}
 
 	var filterReg *regexp2.Regexp
-	var store = C.OriginalHistory
 	var expectedStatus utils.IntRanges[uint16]
 	if option != nil {
-		if url != hc.url {
-			store = C.ExtraHistory
-		}
-
 		expectedStatus = option.expectedStatus
 		if len(option.filters) != 0 {
 			filters := make([]string, 0, len(option.filters))
@@ -214,7 +201,7 @@ func (hc *HealthCheck) execute(b *batch.Batch[bool], url, uid string, option *ex
 			ctx, cancel := context.WithTimeout(context.Background(), defaultURLTestTimeout)
 			defer cancel()
 			log.Debugln("Health Checking, proxy: %s, url: %s, id: {%s}", p.Name(), url, uid)
-			_, _ = p.URLTest(ctx, url, expectedStatus, store)
+			_, _ = p.URLTest(ctx, url, expectedStatus)
 			log.Debugln("Health Checked, proxy: %s, url: %s, alive: %t, delay: %d ms uid: {%s}", p.Name(), url, p.AliveForTestUrl(url), p.LastDelayForTestUrl(url), uid)
 			return false, nil
 		})
@@ -226,10 +213,9 @@ func (hc *HealthCheck) close() {
 }
 
 func NewHealthCheck(proxies []C.Proxy, url string, interval uint, lazy bool, expectedStatus utils.IntRanges[uint16]) *HealthCheck {
-	if len(url) == 0 {
-		interval = 0
-		expectedStatus = nil
-		url = defaultURLTestURL
+	if url == "" {
+		// expectedStatus = nil
+		url = C.DefaultTestURL
 	}
 
 	return &HealthCheck{
