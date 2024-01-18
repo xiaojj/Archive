@@ -12,6 +12,8 @@ import com.v2ray.ang.AppConfig
 import com.v2ray.ang.AppConfig.ANG_CONFIG
 import com.v2ray.ang.AppConfig.HTTPS_PROTOCOL
 import com.v2ray.ang.AppConfig.HTTP_PROTOCOL
+import com.v2ray.ang.AppConfig.WIREGUARD_LOCAL_ADDRESS_V4
+import com.v2ray.ang.AppConfig.WIREGUARD_LOCAL_MTU
 import com.v2ray.ang.R
 import com.v2ray.ang.dto.*
 import com.v2ray.ang.dto.V2rayConfig.Companion.DEFAULT_SECURITY
@@ -432,6 +434,28 @@ object AngConfigManager {
                     queryParam["security"] ?: "", allowInsecure,
                     queryParam["sni"] ?: sni, fingerprint, queryParam["alpn"], pbk, sid, spx
                 )
+            } else if (str.startsWith(EConfigType.WIREGUARD.protocolScheme)) {
+                val uri = URI(Utils.fixIllegalUrl(str))
+                config = ServerConfig.create(EConfigType.WIREGUARD)
+                config.remarks = Utils.urlDecode(uri.fragment ?: "")
+
+                if (uri.rawQuery != null) {
+                    val queryParam = uri.rawQuery.split("&")
+                        .associate { it.split("=").let { (k, v) -> k to Utils.urlDecode(v) } }
+
+                    config.outboundBean?.settings?.let { wireguard ->
+                        wireguard.secretKey = uri.userInfo
+                        wireguard.address =
+                            (queryParam["address"] ?: WIREGUARD_LOCAL_ADDRESS_V4).replace(" ", "")
+                                .split(",")
+                        wireguard.peers?.get(0)?.publicKey = queryParam["publickey"] ?: ""
+                        wireguard.peers?.get(0)?.endpoint = "${uri.idnHost}:${uri.port}"
+                        wireguard.mtu = Utils.parseInt(queryParam["mtu"] ?: WIREGUARD_LOCAL_MTU)
+                        wireguard.reserved =
+                            (queryParam["reserved"] ?: "0,0,0").replace(" ", "").split(",")
+                                .map { it.toInt() }
+                    }
+                }
             }
             if (config == null) {
                 return R.string.toast_incorrect_protocol
@@ -443,7 +467,8 @@ object AngConfigManager {
                     ?.getServerAddress() == removedSelectedServer.getProxyOutbound()
                     ?.getServerAddress() &&
                 config.getProxyOutbound()
-                    ?.getServerPort() == removedSelectedServer.getProxyOutbound()?.getServerPort()
+                    ?.getServerPort() == removedSelectedServer.getProxyOutbound()
+                    ?.getServerPort()
             ) {
                 mainStorage?.encode(KEY_SELECTED_SERVER, guid)
             }
@@ -571,7 +596,11 @@ object AngConfigManager {
         try {
             val config = MmkvManager.decodeServerConfig(guid) ?: return ""
             val outbound = config.getProxyOutbound() ?: return ""
-            val streamSetting = outbound.streamSettings ?: return ""
+            val streamSetting =
+                outbound.streamSettings ?: V2rayConfig.OutboundBean.StreamSettingsBean()
+            if (config.configType != EConfigType.WIREGUARD) {
+                if (outbound.streamSettings == null) return ""
+            }
             return config.configType.protocolScheme + when (config.configType) {
                 EConfigType.VMESS -> {
                     val vmessQRCode = VmessQRCode()
@@ -600,7 +629,8 @@ object AngConfigManager {
                     Utils.encode(json)
                 }
 
-                EConfigType.CUSTOM, EConfigType.WIREGUARD -> ""
+                EConfigType.CUSTOM -> ""
+
                 EConfigType.SHADOWSOCKS -> {
                     val remark = "#" + Utils.urlEncode(config.remarks)
                     val pw =
@@ -675,7 +705,8 @@ object AngConfigManager {
                             dicQuery["spx"] = Utils.urlEncode(tlsSetting.spiderX!!)
                         }
                     }
-                    dicQuery["type"] = streamSetting.network.ifEmpty { V2rayConfig.DEFAULT_NETWORK }
+                    dicQuery["type"] =
+                        streamSetting.network.ifEmpty { V2rayConfig.DEFAULT_NETWORK }
 
                     outbound.getTransportSettingDetails()?.let { transportDetails ->
                         when (streamSetting.network) {
@@ -731,6 +762,36 @@ object AngConfigManager {
                     val url = String.format(
                         "%s@%s:%s",
                         outbound.getPassword(),
+                        Utils.getIpv6Address(outbound.getServerAddress()!!),
+                        outbound.getServerPort()
+                    )
+                    url + query + remark
+                }
+
+                EConfigType.WIREGUARD -> {
+                    val remark = "#" + Utils.urlEncode(config.remarks)
+
+                    val dicQuery = HashMap<String, String>()
+                    dicQuery["publickey"] =
+                        Utils.urlEncode(outbound.settings?.peers?.get(0)?.publicKey.toString())
+                    dicQuery["reserved"] = Utils.urlEncode(
+                        Utils.removeWhiteSpace(outbound.settings?.reserved?.joinToString())
+                            .toString()
+                    )
+                    dicQuery["address"] = Utils.urlEncode(
+                        Utils.removeWhiteSpace((outbound.settings?.address as List<*>).joinToString())
+                            .toString()
+                    )
+                    if (outbound.settings?.mtu != null) {
+                        dicQuery["mtu"] = outbound.settings?.mtu.toString()
+                    }
+                    val query = "?" + dicQuery.toList().joinToString(
+                        separator = "&",
+                        transform = { it.first + "=" + it.second })
+
+                    val url = String.format(
+                        "%s@%s:%s",
+                        Utils.urlEncode(outbound.getPassword().toString()),
                         Utils.getIpv6Address(outbound.getServerAddress()!!),
                         outbound.getServerPort()
                     )
@@ -861,17 +922,19 @@ object AngConfigManager {
                 return 0
             }
             val removedSelectedServer =
-                    if (!TextUtils.isEmpty(subid) && !append) {
-                        MmkvManager.decodeServerConfig(mainStorage?.decodeString(KEY_SELECTED_SERVER) ?: "")?.let {
-                            if (it.subscriptionId == subid) {
-                                return@let it
-                            }
-                            return@let null
+                if (!TextUtils.isEmpty(subid) && !append) {
+                    MmkvManager.decodeServerConfig(
+                        mainStorage?.decodeString(KEY_SELECTED_SERVER) ?: ""
+                    )?.let {
+                        if (it.subscriptionId == subid) {
+                            return@let it
                         }
-                    } else {
-                        null
+                        return@let null
                     }
-            if(!append) {
+                } else {
+                    null
+                }
+            if (!append) {
                 MmkvManager.removeServerViaSubid(subid)
             }
 //            var servers = server
