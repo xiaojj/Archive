@@ -18,11 +18,12 @@
 #include "base/threading/thread_restrictions.h"
 #include "build/build_config.h"
 
-#if !BUILDFLAG(USE_ALLOCATOR_SHIM) && defined(LIBC_GLIBC)
+#if !BUILDFLAG(USE_ALLOCATOR_SHIM) && \
+    !defined(MEMORY_TOOL_REPLACES_ALLOCATOR) && defined(LIBC_GLIBC)
 extern "C" {
-void* __libc_malloc(size_t size);
-void __libc_free(void* ptr);
-}  // extern "C"
+void* __libc_malloc(size_t);
+void __libc_free(void*);
+}
 #endif
 
 namespace base {

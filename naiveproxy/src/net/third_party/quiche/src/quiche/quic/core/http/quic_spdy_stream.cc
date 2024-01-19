@@ -6,6 +6,7 @@
 
 #include <limits>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 
@@ -255,7 +256,9 @@ size_t QuicSpdyStream::WriteHeaders(
   MaybeProcessSentWebTransportHeaders(header_block);
 
   if (web_transport_ != nullptr &&
-      spdy_session_->perspective() == Perspective::IS_SERVER) {
+      spdy_session_->perspective() == Perspective::IS_SERVER &&
+      spdy_session_->SupportedWebTransportVersion() ==
+          WebTransportHttp3Version::kDraft02) {
     header_block["sec-webtransport-http3-draft"] = "draft02";
   }
 
@@ -1114,7 +1117,7 @@ void QuicSpdyStream::OnWebTransportStreamFrameType(
   QuicStreamOffset offset = sequencer()->NumBytesConsumed();
   sequencer()->MarkConsumed(header_length);
 
-  absl::optional<WebTransportHttp3Version> version =
+  std::optional<WebTransportHttp3Version> version =
       spdy_session_->SupportedWebTransportVersion();
   QUICHE_DCHECK(version.has_value());
   if (version == WebTransportHttp3Version::kDraft02) {
@@ -1304,7 +1307,10 @@ void QuicSpdyStream::MaybeProcessSentWebTransportHeaders(
     return;
   }
 
-  headers["sec-webtransport-http3-draft02"] = "1";
+  if (spdy_session_->SupportedWebTransportVersion() ==
+      WebTransportHttp3Version::kDraft02) {
+    headers["sec-webtransport-http3-draft02"] = "1";
+  }
 
   web_transport_ =
       std::make_unique<WebTransportHttp3>(spdy_session_, this, id());

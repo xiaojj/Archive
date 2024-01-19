@@ -26,7 +26,7 @@ NaivePaddingSocket::NaivePaddingSocket(StreamSocket* transport_socket,
     : transport_socket_(transport_socket),
       padding_type_(padding_type),
       direction_(direction),
-      read_buf_(base::MakeRefCounted<IOBuffer>(kMaxBufferSize)),
+      read_buf_(base::MakeRefCounted<IOBufferWithSize>(kMaxBufferSize)),
       framer_(kFirstPaddings) {}
 
 NaivePaddingSocket::~NaivePaddingSocket() {
@@ -190,7 +190,7 @@ int NaivePaddingSocket::WritePaddingV1(
     const NetworkTrafficAnnotationTag& traffic_annotation) {
   DCHECK(write_buf_ == nullptr);
 
-  auto padded = base::MakeRefCounted<IOBuffer>(kMaxBufferSize);
+  auto padded = base::MakeRefCounted<IOBufferWithSize>(kMaxBufferSize);
   int padding_size;
   if (direction_ == kServer) {
     if (buf_len < 100) {

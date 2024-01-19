@@ -277,11 +277,12 @@ int NaiveConnection::DoConnectServer() {
   LOG(INFO) << "Connection " << id_ << " to " << origin.ToString();
 
   // Ignores socket limit set by socket pool for this type of socket.
-  return InitSocketHandleForRawConnect2(
+  return InitSocketHandleForHttpRequest(
       std::move(endpoint), LOAD_IGNORE_LIMITS, MAXIMUM_PRIORITY, session_,
       proxy_info_, server_ssl_config_, proxy_ssl_config_, PRIVACY_MODE_DISABLED,
-      network_anonymization_key_, net_log_, server_socket_handle_.get(),
-      io_callback_);
+      network_anonymization_key_, SecureDnsPolicy::kDisable, SocketTag(),
+      net_log_, server_socket_handle_.get(), io_callback_,
+      ClientSocketPool::ProxyAuthCallback());
 }
 
 int NaiveConnection::DoConnectServerComplete(int result) {
@@ -340,7 +341,7 @@ void NaiveConnection::Pull(Direction from, Direction to) {
     return;
 
   int read_size = kBufferSize;
-  read_buffers_[from] = base::MakeRefCounted<IOBuffer>(kBufferSize);
+  read_buffers_[from] = base::MakeRefCounted<IOBufferWithSize>(kBufferSize);
 
   DCHECK(sockets_[from]);
   int rv = sockets_[from]->Read(

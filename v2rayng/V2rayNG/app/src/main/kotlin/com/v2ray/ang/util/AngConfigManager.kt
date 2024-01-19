@@ -22,6 +22,7 @@ import com.v2ray.ang.util.MmkvManager.KEY_SELECTED_SERVER
 import java.net.URI
 import java.util.*
 import com.v2ray.ang.extension.idnHost
+import com.v2ray.ang.extension.removeWhiteSpace
 import com.v2ray.ang.extension.toast
 
 object AngConfigManager {
@@ -446,13 +447,13 @@ object AngConfigManager {
                     config.outboundBean?.settings?.let { wireguard ->
                         wireguard.secretKey = uri.userInfo
                         wireguard.address =
-                            (queryParam["address"] ?: WIREGUARD_LOCAL_ADDRESS_V4).replace(" ", "")
+                            (queryParam["address"] ?: WIREGUARD_LOCAL_ADDRESS_V4).removeWhiteSpace()
                                 .split(",")
                         wireguard.peers?.get(0)?.publicKey = queryParam["publickey"] ?: ""
                         wireguard.peers?.get(0)?.endpoint = "${uri.idnHost}:${uri.port}"
                         wireguard.mtu = Utils.parseInt(queryParam["mtu"] ?: WIREGUARD_LOCAL_MTU)
                         wireguard.reserved =
-                            (queryParam["reserved"] ?: "0,0,0").replace(" ", "").split(",")
+                            (queryParam["reserved"] ?: "0,0,0").removeWhiteSpace().split(",")
                                 .map { it.toInt() }
                     }
                 }
@@ -973,5 +974,25 @@ object AngConfigManager {
         subStorage?.encode(subId, Gson().toJson(subItem))
 
         return true
+    }
+
+    fun appendCustomConfigServer(server: String?, subid: String): Int {
+        if (server == null) {
+            return 0
+        }
+        if (server.contains("inbounds")
+            && server.contains("outbounds")
+            && server.contains("routing")
+        ) {
+            val config = ServerConfig.create(EConfigType.CUSTOM)
+            config.remarks = System.currentTimeMillis().toString()
+            config.subscriptionId = subid
+            config.fullConfig = Gson().fromJson(server, V2rayConfig::class.java)
+            val key = MmkvManager.encodeServerConfig("", config)
+            serverRawStorage?.encode(key, server)
+            return 1
+        } else {
+            return 0
+        }
     }
 }

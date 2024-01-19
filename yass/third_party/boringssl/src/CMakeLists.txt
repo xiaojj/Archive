@@ -161,7 +161,7 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CLANG)
   # Note clang-cl is odd and sets both CLANG and MSVC. We base our configuration
   # primarily on our normal Clang one.
   # TODO(bbe) took out -Wmissing-field-initializers for pki - fix and put back or disable only for pki
-  set(C_CXX_FLAGS "-Wformat=2 -Wsign-compare -Wwrite-strings -Wvla -Wshadow -Wtype-limits")
+  set(C_CXX_FLAGS "-Wformat=2 -Wsign-compare -Wwrite-strings -Wvla -Wshadow -Wtype-limits -Wmissing-field-initializers")
   if(MSVC)
     # clang-cl sets different default warnings than clang. It also treats -Wall
     # as -Weverything, to match MSVC. Instead -W3 is the alias for -Wall.
@@ -658,11 +658,9 @@ if(APPLE)
 endif()
 
 add_library(pki ${PKI_SOURCES})
-target_compile_definitions(pki PRIVATE _BORINGSSL_LIBPKI_)
 target_link_libraries(pki crypto)
 
 add_executable(pki_test ${PKI_TEST_SOURCES})
-target_compile_definitions(pki_test PRIVATE _BORINGSSL_LIBPKI_)
 target_link_libraries(pki_test test_support_lib boringssl_gtest pki crypto)
 add_dependencies(all_tests pki_test)
 

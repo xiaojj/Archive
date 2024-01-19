@@ -63,7 +63,8 @@ BuildInfo::BuildInfo(const std::vector<std::string>& params)
       is_at_least_u_(false),
       targets_at_least_u_(false),
       codename_(""),
-      vulkan_deqp_level_(0) {}
+      vulkan_deqp_level_(0),
+      is_foldable_(false) {}
 
 // static
 BuildInfo* BuildInfo::GetInstance() {

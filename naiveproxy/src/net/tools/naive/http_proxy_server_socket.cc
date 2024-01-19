@@ -108,14 +108,6 @@ bool HttpProxyServerSocket::WasEverUsed() const {
   return was_ever_used_;
 }
 
-bool HttpProxyServerSocket::WasAlpnNegotiated() const {
-  if (transport_) {
-    return transport_->WasAlpnNegotiated();
-  }
-  NOTREACHED();
-  return false;
-}
-
 NextProto HttpProxyServerSocket::GetNegotiatedProtocol() const {
   if (transport_) {
     return transport_->GetNegotiatedProtocol();
@@ -263,7 +255,7 @@ int HttpProxyServerSocket::DoLoop(int last_io_result) {
 int HttpProxyServerSocket::DoHeaderRead() {
   next_state_ = STATE_HEADER_READ_COMPLETE;
 
-  handshake_buf_ = base::MakeRefCounted<IOBuffer>(kBufferSize);
+  handshake_buf_ = base::MakeRefCounted<IOBufferWithSize>(kBufferSize);
   return transport_->Read(handshake_buf_.get(), kBufferSize, io_callback_);
 }
 
@@ -284,9 +276,9 @@ std::optional<PaddingType> HttpProxyServerSocket::ParsePaddingHeaders(
     }
   }
 
-  std::vector<base::StringPiece> padding_type_strs = base::SplitStringPiece(
+  std::vector<std::string_view> padding_type_strs = base::SplitStringPiece(
       padding_type_request, ",", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
-  for (base::StringPiece padding_type_str : padding_type_strs) {
+  for (std::string_view padding_type_str : padding_type_strs) {
     std::optional<PaddingType> padding_type =
         ParsePaddingType(padding_type_str);
     if (!padding_type.has_value()) {
@@ -434,7 +426,7 @@ int HttpProxyServerSocket::DoHeaderWrite() {
   // Adds padding.
   int padding_size = base::RandInt(kMinPaddingSize, kMaxPaddingSize);
   header_write_size_ = kResponseHeaderSize + padding_size + 4;
-  handshake_buf_ = base::MakeRefCounted<IOBuffer>(header_write_size_);
+  handshake_buf_ = base::MakeRefCounted<IOBufferWithSize>(header_write_size_);
   char* p = handshake_buf_->data();
   std::memcpy(p, kResponseHeader, kResponseHeaderSize);
   FillNonindexHeaderValue(base::RandUint64(), p + kResponseHeaderSize,

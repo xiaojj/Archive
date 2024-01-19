@@ -16,7 +16,7 @@ env:
   SCCACHE_CACHE_SIZE: 200M
 jobs:
   cache-toolchains-posix:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
       - name: Cache toolchains (Linux, OpenWrt, Android)
@@ -93,7 +93,7 @@ jobs:
       - run: EXTRA_FLAGS='target_cpu="arm64"' ./get-clang.sh
   linux:
     needs: cache-toolchains-posix
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     strategy:
       fail-fast: false
       matrix:
@@ -164,7 +164,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   android:
     needs: cache-toolchains-posix
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     strategy:
       fail-fast: false
       matrix:
@@ -407,7 +407,7 @@ jobs:
       - run: ccache -s
   openwrt:
     needs: cache-toolchains-posix
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     strategy:
       fail-fast: false
       matrix:

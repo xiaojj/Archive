@@ -14,7 +14,7 @@ android {
             keyPassword = System.getenv("KEYSTORE_PASS")
         }
     }
-    
+
     buildTypes {
         getByName("release") {
             proguardFiles(

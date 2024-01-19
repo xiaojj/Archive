@@ -5,10 +5,10 @@
 
 #include <optional>
 #include <string>
+#include <string_view>
 
 #include "base/logging.h"
 #include "base/rand_util.h"
-#include "base/strings/string_piece_forward.h"
 #include "base/strings/string_util.h"
 #include "net/base/proxy_string_util.h"
 #include "net/http/http_request_headers.h"
@@ -54,7 +54,7 @@ NaiveProxyDelegate::NaiveProxyDelegate(
     : extra_headers_(extra_headers) {
   InitializeNonindexCodes();
 
-  std::vector<base::StringPiece> padding_type_strs;
+  std::vector<std::string_view> padding_type_strs;
   for (PaddingType padding_type : supported_padding_types) {
     padding_type_strs.push_back(ToString(padding_type));
   }

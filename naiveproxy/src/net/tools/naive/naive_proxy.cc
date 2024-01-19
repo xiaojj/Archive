@@ -119,7 +119,7 @@ void NaiveProxy::DoConnect() {
       static_cast<NaiveProxyDelegate*>(session_->context().proxy_delegate);
   DCHECK(proxy_delegate);
   DCHECK(!proxy_info_.is_empty());
-  const auto& proxy_server = proxy_info_.proxy_server();
+  const auto& proxy_server = proxy_info_.proxy_chain().GetProxyServer(0);
   auto padding_detector_delegate = std::make_unique<PaddingDetectorDelegate>(
       proxy_delegate, proxy_server, protocol_);
 

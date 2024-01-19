@@ -6,8 +6,7 @@
 
 #include <optional>
 #include <string>
-
-#include "base/strings/string_piece_forward.h"
+#include <string_view>
 
 namespace net {
 enum class ClientProtocol {
@@ -45,7 +44,7 @@ enum class PaddingType {
 };
 
 // Returns empty if `str` is invalid.
-std::optional<PaddingType> ParsePaddingType(base::StringPiece str);
+std::optional<PaddingType> ParsePaddingType(std::string_view str);
 
 const char* ToString(PaddingType value);
 

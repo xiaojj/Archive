@@ -356,6 +356,76 @@ TEST_P(QuicPacketCreatorTest, SerializeConnectionClose) {
   ProcessPacket(serialized);
 }
 
+TEST_P(QuicPacketCreatorTest, SerializePacketWithPadding) {
+  creator_.set_encryption_level(ENCRYPTION_FORWARD_SECURE);
+
+  creator_.AddFrame(QuicFrame(QuicWindowUpdateFrame()), NOT_RETRANSMISSION);
+  creator_.AddFrame(QuicFrame(QuicPaddingFrame()), NOT_RETRANSMISSION);
+  EXPECT_CALL(delegate_, OnSerializedPacket(_))
+      .WillOnce(Invoke(this, &QuicPacketCreatorTest::SaveSerializedPacket));
+  creator_.FlushCurrentPacket();
+  ASSERT_TRUE(serialized_packet_->encrypted_buffer);
+
+  EXPECT_EQ(kDefaultMaxPacketSize, serialized_packet_->encrypted_length);
+
+  DeleteSerializedPacket();
+}
+
+TEST_P(QuicPacketCreatorTest, SerializeLargerPacketWithPadding) {
+  creator_.set_encryption_level(ENCRYPTION_FORWARD_SECURE);
+  const QuicByteCount packet_size = 100 + kDefaultMaxPacketSize;
+  creator_.SetMaxPacketLength(packet_size);
+
+  creator_.AddFrame(QuicFrame(QuicWindowUpdateFrame()), NOT_RETRANSMISSION);
+  creator_.AddFrame(QuicFrame(QuicPaddingFrame()), NOT_RETRANSMISSION);
+  EXPECT_CALL(delegate_, OnSerializedPacket(_))
+      .WillOnce(Invoke(this, &QuicPacketCreatorTest::SaveSerializedPacket));
+  creator_.FlushCurrentPacket();
+  ASSERT_TRUE(serialized_packet_->encrypted_buffer);
+
+  EXPECT_EQ(packet_size, serialized_packet_->encrypted_length);
+
+  DeleteSerializedPacket();
+}
+
+TEST_P(QuicPacketCreatorTest, IncreaseMaxPacketLengthWithFramesPending) {
+  if (!GetQuicRestartFlag(quic_allow_control_frames_while_procesing)) {
+    // When this flag is not set, the call to SetMaxPacketLength()
+    // is an error which triggers a QUICHE_DCHECK.
+    return;
+  }
+
+  creator_.set_encryption_level(ENCRYPTION_FORWARD_SECURE);
+  const QuicByteCount packet_size = 100 + kDefaultMaxPacketSize;
+
+  // Since the creator has a frame queued, the packet size will not change.
+  creator_.AddFrame(QuicFrame(QuicWindowUpdateFrame()), NOT_RETRANSMISSION);
+  creator_.SetMaxPacketLength(packet_size);
+  creator_.AddFrame(QuicFrame(QuicPaddingFrame()), NOT_RETRANSMISSION);
+  EXPECT_CALL(delegate_, OnSerializedPacket(_))
+      .WillOnce(Invoke(this, &QuicPacketCreatorTest::SaveSerializedPacket));
+  creator_.FlushCurrentPacket();
+  ASSERT_TRUE(serialized_packet_->encrypted_buffer);
+
+  EXPECT_EQ(kDefaultMaxPacketSize, serialized_packet_->encrypted_length);
+
+  DeleteSerializedPacket();
+
+  // Now that the previous packet was generated, the next on will use
+  // the new larger size.
+  creator_.AddFrame(QuicFrame(QuicWindowUpdateFrame()), NOT_RETRANSMISSION);
+  creator_.AddFrame(QuicFrame(QuicPaddingFrame()), NOT_RETRANSMISSION);
+  EXPECT_CALL(delegate_, OnSerializedPacket(_))
+      .WillOnce(Invoke(this, &QuicPacketCreatorTest::SaveSerializedPacket));
+  creator_.FlushCurrentPacket();
+  ASSERT_TRUE(serialized_packet_->encrypted_buffer);
+  EXPECT_EQ(packet_size, serialized_packet_->encrypted_length);
+
+  EXPECT_EQ(packet_size, serialized_packet_->encrypted_length);
+
+  DeleteSerializedPacket();
+}
+
 TEST_P(QuicPacketCreatorTest, ConsumeCryptoDataToFillCurrentPacket) {
   std::string data = "crypto data";
   QuicFrame frame;
@@ -2866,7 +2936,7 @@ TEST_F(QuicPacketCreatorMultiplePacketsTest,
   QuicStreamId stream_id = QuicUtils::GetFirstBidirectionalStreamId(
       framer_.transport_version(), Perspective::IS_CLIENT);
 
-  if (GetQuicRestartFlag(quic_opport_bundle_qpack_decoder_data2)) {
+  if (GetQuicRestartFlag(quic_opport_bundle_qpack_decoder_data3)) {
     EXPECT_CALL(delegate_, GetFlowControlSendWindowSize(stream_id))
         .WillOnce(Return(data.length() - 1));
   } else {
@@ -2875,7 +2945,7 @@ TEST_F(QuicPacketCreatorMultiplePacketsTest,
 
   QuicConsumedData consumed = creator_.ConsumeData(stream_id, data, 0u, FIN);
 
-  if (GetQuicRestartFlag(quic_opport_bundle_qpack_decoder_data2)) {
+  if (GetQuicRestartFlag(quic_opport_bundle_qpack_decoder_data3)) {
     EXPECT_EQ(consumed.bytes_consumed, data.length() - 1);
     EXPECT_FALSE(consumed.fin_consumed);
   } else {
@@ -2896,7 +2966,7 @@ TEST_F(QuicPacketCreatorMultiplePacketsTest,
   QuicStreamId stream_id = QuicUtils::GetFirstBidirectionalStreamId(
       framer_.transport_version(), Perspective::IS_CLIENT);
 
-  if (GetQuicRestartFlag(quic_opport_bundle_qpack_decoder_data2)) {
+  if (GetQuicRestartFlag(quic_opport_bundle_qpack_decoder_data3)) {
     EXPECT_CALL(delegate_, GetFlowControlSendWindowSize(stream_id))
         .WillOnce(Return(data.length()));
   } else {
@@ -3986,11 +4056,12 @@ TEST_F(QuicPacketCreatorMultiplePacketsTest,
   // Send some stream data.
   EXPECT_CALL(delegate_, ShouldGeneratePacket(_, _))
       .WillRepeatedly(Return(true));
-  QuicConsumedData consumed = creator_.ConsumeData(
-      QuicUtils::GetFirstBidirectionalStreamId(creator_.transport_version(),
-                                               Perspective::IS_CLIENT),
-      "foo", 0, NO_FIN);
-  EXPECT_EQ(3u, consumed.bytes_consumed);
+  EXPECT_EQ(3u, creator_
+                    .ConsumeData(QuicUtils::GetFirstBidirectionalStreamId(
+                                     creator_.transport_version(),
+                                     Perspective::IS_CLIENT),
+                                 "foo", 0, NO_FIN)
+                    .bytes_consumed);
   EXPECT_TRUE(creator_.HasPendingFrames());
   {
     // Set the same address via context which should not trigger flush.
@@ -4000,11 +4071,12 @@ TEST_F(QuicPacketCreatorMultiplePacketsTest,
     ASSERT_EQ(server_connection_id, creator_.GetServerConnectionId());
     EXPECT_TRUE(creator_.HasPendingFrames());
     // Queue another STREAM_FRAME.
-    QuicConsumedData consumed = creator_.ConsumeData(
-        QuicUtils::GetFirstBidirectionalStreamId(creator_.transport_version(),
-                                                 Perspective::IS_CLIENT),
-        "foo", 0, FIN);
-    EXPECT_EQ(3u, consumed.bytes_consumed);
+    EXPECT_EQ(3u, creator_
+                      .ConsumeData(QuicUtils::GetFirstBidirectionalStreamId(
+                                       creator_.transport_version(),
+                                       Perspective::IS_CLIENT),
+                                   "foo", 0, FIN)
+                      .bytes_consumed);
   }
   // After exiting the scope, the last queued frame should be flushed.
   EXPECT_TRUE(creator_.HasPendingFrames());
@@ -4025,11 +4097,12 @@ TEST_F(QuicPacketCreatorMultiplePacketsTest,
   // Send some stream data.
   EXPECT_CALL(delegate_, ShouldGeneratePacket(_, _))
       .WillRepeatedly(Return(true));
-  QuicConsumedData consumed = creator_.ConsumeData(
-      QuicUtils::GetFirstBidirectionalStreamId(creator_.transport_version(),
-                                               Perspective::IS_CLIENT),
-      "foo", 0, NO_FIN);
-  EXPECT_EQ(3u, consumed.bytes_consumed);
+  EXPECT_EQ(3u, creator_
+                    .ConsumeData(QuicUtils::GetFirstBidirectionalStreamId(
+                                     creator_.transport_version(),
+                                     Perspective::IS_CLIENT),
+                                 "foo", 0, NO_FIN)
+                    .bytes_consumed);
 
   QuicSocketAddress peer_addr1(QuicIpAddress::Any4(), 12346);
   EXPECT_CALL(delegate_, OnSerializedPacket(_))
@@ -4054,11 +4127,12 @@ TEST_F(QuicPacketCreatorMultiplePacketsTest,
     ASSERT_EQ(server_connection_id, creator_.GetServerConnectionId());
     EXPECT_FALSE(creator_.HasPendingFrames());
     // Queue another STREAM_FRAME.
-    QuicConsumedData consumed = creator_.ConsumeData(
-        QuicUtils::GetFirstBidirectionalStreamId(creator_.transport_version(),
-                                                 Perspective::IS_CLIENT),
-        "foo", 0, FIN);
-    EXPECT_EQ(3u, consumed.bytes_consumed);
+    EXPECT_EQ(3u, creator_
+                      .ConsumeData(QuicUtils::GetFirstBidirectionalStreamId(
+                                       creator_.transport_version(),
+                                       Perspective::IS_CLIENT),
+                                   "foo", 0, FIN)
+                      .bytes_consumed);
     EXPECT_TRUE(creator_.HasPendingFrames());
   }
   // After exiting the scope, the last queued frame should be flushed.
@@ -4079,11 +4153,12 @@ TEST_F(QuicPacketCreatorMultiplePacketsTest,
   // Send some stream data.
   EXPECT_CALL(delegate_, ShouldGeneratePacket(_, _))
       .WillRepeatedly(Return(true));
-  QuicConsumedData consumed = creator_.ConsumeData(
-      QuicUtils::GetFirstBidirectionalStreamId(creator_.transport_version(),
-                                               Perspective::IS_CLIENT),
-      "foo", 0, NO_FIN);
-  EXPECT_EQ(3u, consumed.bytes_consumed);
+  EXPECT_EQ(3u, creator_
+                    .ConsumeData(QuicUtils::GetFirstBidirectionalStreamId(
+                                     creator_.transport_version(),
+                                     Perspective::IS_CLIENT),
+                                 "foo", 0, NO_FIN)
+                    .bytes_consumed);
   EXPECT_TRUE(creator_.HasPendingFrames());
 
   QuicSocketAddress peer_addr1(QuicIpAddress::Any4(), 12346);
@@ -4103,11 +4178,12 @@ TEST_F(QuicPacketCreatorMultiplePacketsTest,
         ASSERT_EQ(server_connection_id2, creator_.GetServerConnectionId());
         EXPECT_CALL(delegate_, ShouldGeneratePacket(_, _))
             .WillRepeatedly(Return(true));
-        QuicConsumedData consumed = creator_.ConsumeData(
-            QuicUtils::GetFirstBidirectionalStreamId(
-                creator_.transport_version(), Perspective::IS_CLIENT),
-            "foo", 0, NO_FIN);
-        EXPECT_EQ(3u, consumed.bytes_consumed);
+        EXPECT_EQ(3u, creator_
+                          .ConsumeData(QuicUtils::GetFirstBidirectionalStreamId(
+                                           creator_.transport_version(),
+                                           Perspective::IS_CLIENT),
+                                       "foo", 0, NO_FIN)
+                          .bytes_consumed);
         EXPECT_TRUE(creator_.HasPendingFrames());
         // This should trigger another OnSerializedPacket() with the 2nd
         // address.

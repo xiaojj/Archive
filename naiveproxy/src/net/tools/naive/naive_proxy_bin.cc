@@ -137,7 +137,7 @@ std::unique_ptr<base::Value::Dict> GetConstants() {
 
 class MultipleListenCollector : public base::DuplicateSwitchHandler {
  public:
-  void ResolveDuplicate(base::StringPiece key,
+  void ResolveDuplicate(std::string_view key,
                         base::CommandLine::StringPieceType new_value,
                         base::CommandLine::StringType& out_value) override {
     out_value = new_value;
@@ -580,8 +580,8 @@ int main(int argc, char* argv[]) {
 
   // content/app/content_main.cc: RunContentProcess()
   //   content/app/content_main_runner_impl.cc: Run()
-  base::FeatureList::InitializeInstance(
-      "PartitionConnectionsByNetworkIsolationKey", std::string());
+  base::FeatureList::InitInstance("PartitionConnectionsByNetworkIsolationKey",
+                                  std::string());
 
   base::allocator::PartitionAllocSupport::Get()
       ->ReconfigureAfterFeatureListInit(/*process_type=*/"");

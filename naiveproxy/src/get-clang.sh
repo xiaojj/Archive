@@ -4,7 +4,7 @@ set -ex
 . ./get-sysroot.sh
 
 if [ "$SYSROOT_ARCH" -a ! -d ./"$WITH_SYSROOT/lib" ]; then
-  ./build/linux/sysroot_scripts/sysroot-creator.sh build "$SYSROOT_ARCH"
+  ./build/linux/sysroot_scripts/sysroot_creator.py build "$SYSROOT_ARCH"
 fi
 
 if [ "$OPENWRT_FLAGS" ]; then

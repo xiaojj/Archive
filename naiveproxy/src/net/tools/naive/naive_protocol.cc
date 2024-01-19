@@ -22,7 +22,7 @@ const char* ToString(ClientProtocol value) {
   }
 }
 
-std::optional<PaddingType> ParsePaddingType(base::StringPiece str) {
+std::optional<PaddingType> ParsePaddingType(std::string_view str) {
   if (str == "0") {
     return PaddingType::kNone;
   } else if (str == "1") {
