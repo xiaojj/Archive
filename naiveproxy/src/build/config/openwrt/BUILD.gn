@@ -64,7 +64,21 @@ config("compiler") {
   } else {
     assert(false, "Architecture not supported")
   }
-  cflags += [ "--target=$arch-openwrt-linux-$abi" ]
+  cflags += [
+    "--target=$arch-openwrt-linux-$abi",
+
+    # musl malloc() alignment is 4*sizeof(size_t), i.e.
+    # 16 bytes on 32-bit CPUs, and 32 bytes on 64-bit CPUs. See
+    # https://git.musl-libc.org/cgit/musl/tree/src/malloc/oldmalloc/malloc_impl.h
+    # And https://www.openwall.com/lists/musl/2019/07/07/2 for its rationale.
+    # But Clang is unaware of this information and produces
+    #   #define __STDCPP_DEFAULT_NEW_ALIGNMENT__ 4U
+    # for the i486-openwrt-linux-musl target.
+    # This further causes static_asserts in
+    # src/third_party/protobuf/src/google/protobuf/arenastring.cc to fail.
+    # However, PartitionAlloc does not support larger than 16 alignment.
+    "-fnew-alignment=16",
+  ]
   ldflags += [ "--target=$arch-openwrt-linux-$abi" ]
 
   # Assign any flags set for the C compiler to asmflags so that they are sent

@@ -1,13 +1,17 @@
-use crate::config::{ClashCore, IVerge, WindowState};
-use crate::core::tasks::{jobs::ProfilesJobGuard, JobsManager};
-use crate::{config::Config, core::*, utils::init, utils::server};
-use crate::{log_err, trace_err};
+use crate::{
+    config::{ClashCore, Config, IVerge, WindowState},
+    core::{
+        tasks::{jobs::ProfilesJobGuard, JobsManager},
+        *,
+    },
+    log_err, trace_err,
+    utils::{init, server},
+};
 use anyhow::Result;
 use semver::Version;
 use serde_yaml::Mapping;
 use std::net::TcpListener;
-use tauri::api::process::Command;
-use tauri::{App, AppHandle, Manager};
+use tauri::{api::process::Command, App, AppHandle, Manager};
 
 pub fn find_unused_port() -> Result<u16> {
     match TcpListener::bind("127.0.0.1:0") {
@@ -142,8 +146,6 @@ pub fn create_window(app_handle: &AppHandle) {
 
     #[cfg(target_os = "windows")]
     {
-        use std::time::Duration;
-        use tokio::time::sleep;
         use window_shadows::set_shadow;
 
         match builder
@@ -161,6 +163,7 @@ pub fn create_window(app_handle: &AppHandle) {
                         trace_err!(win.set_fullscreen(true), "set win fullscreen");
                     }
                 }
+                trace_err!(set_shadow(&win, true), "set win shadow");
                 log::trace!("try to calculate the monitor size");
                 let center = (|| -> Result<bool> {
                     let mut center = false;
@@ -182,22 +185,22 @@ pub fn create_window(app_handle: &AppHandle) {
                     trace_err!(win.center(), "set win center");
                 }
 
-                log::trace!("try to create window");
-                let app_handle = app_handle.clone();
+                // log::trace!("try to create window");
+                // let app_handle = app_handle.clone();
 
                 // 加点延迟避免界面闪一下
-                tauri::async_runtime::spawn(async move {
-                    // sleep(Duration::from_millis(888)).await;
+                //     tauri::async_runtime::spawn(async move {
+                //         // sleep(Duration::from_millis(888)).await;
 
-                    if let Some(window) = app_handle.get_window("main") {
-                        trace_err!(set_shadow(&window, true), "set win shadow");
-                        trace_err!(window.show(), "set win visible");
-                        trace_err!(window.unminimize(), "set win unminimize");
-                        trace_err!(window.set_focus(), "set win focus");
-                    } else {
-                        log::error!(target: "app", "failed to create window, get_window is None")
-                    }
-                });
+                //         if let Some(window) = app_handle.get_window("main") {
+                //             trace_err!(set_shadow(&window, true), "set win shadow");
+                //             trace_err!(window.show(), "set win visible");
+                //             trace_err!(window.unminimize(), "set win unminimize");
+                //             trace_err!(window.set_focus(), "set win focus");
+                //         } else {
+                //             log::error!(target: "app", "failed to create window, get_window is None")
+                //         }
+                //     });
             }
             Err(err) => log::error!(target: "app", "failed to create window, {err}"),
         }

@@ -1,5 +1,5 @@
 import { BaseDialog, DialogRef } from "@/components/base";
-import { useNotification } from "@/hooks/use-notification";
+import { NotificationType, useNotification } from "@/hooks/use-notification";
 import { useVerge } from "@/hooks/use-verge";
 import { closeAllConnections } from "@/services/api";
 import {
@@ -70,16 +70,28 @@ export const ClashCoreViewer = forwardRef<DialogRef>((props, ref) => {
         ...each,
         latest:
           each.core === "clash"
-            ? results["clash_premium"]
+            ? `n${results["clash_premium"]}`
             : results[each.core.replace(/-/g, "_") as keyof typeof results],
       }));
       setValidCores(buf);
-      useNotification(t("Success"), `Successfully check updates`);
+      useNotification({
+        title: t("Success"),
+        body: t("Successfully check updates"),
+        type: NotificationType.Success,
+      });
     } catch (e) {
       if (e instanceof Error) {
-        useNotification(t("Error"), e.message);
+        useNotification({
+          title: t("Error"),
+          body: e.message,
+          type: NotificationType.Error,
+        });
       } else if (typeof e === "string") {
-        useNotification(t("Error"), e);
+        useNotification({
+          title: t("Error"),
+          body: e,
+          type: NotificationType.Error,
+        });
       } else {
         console.error(e);
       }
@@ -93,15 +105,23 @@ export const ClashCoreViewer = forwardRef<DialogRef>((props, ref) => {
     try {
       setRestartLoading(true);
       await restartSidecar();
-      useNotification(t("Success"), `Successfully restart core`);
+      useNotification({
+        title: t("Success"),
+        body: t("Successfully restart core"),
+        type: NotificationType.Success,
+      });
     } catch (err: any) {
-      useNotification(t("Error"), err?.message || err.toString());
+      useNotification({
+        title: t("Error"),
+        body: err.message || err.toString(),
+        type: NotificationType.Error,
+      });
     } finally {
       setRestartLoading(false);
     }
   });
 
-  useAsyncEffect(async () => {
+  const getCoreVersions = async () => {
     try {
       const versions = await Promise.all(
         VALID_CORE.reduce(
@@ -119,14 +139,23 @@ export const ClashCoreViewer = forwardRef<DialogRef>((props, ref) => {
       );
     } catch (e) {
       if (e instanceof Error) {
-        useNotification(t("Error"), `Failed to get core version: ${e.message}`);
+        useNotification({
+          title: t("Error"),
+          body: `Failed to get core version: ${e.message}`,
+          type: NotificationType.Error,
+        });
       } else if (typeof e === "string") {
-        useNotification(t("Error"), `Failed to get core version: ${e}`);
+        useNotification({
+          title: t("Error"),
+          body: `Failed to get core version: ${e}`,
+          type: NotificationType.Error,
+        });
       } else {
         console.error(e);
       }
     }
-  }, []);
+  };
+  useAsyncEffect(getCoreVersions, []);
 
   return (
     <BaseDialog
@@ -180,6 +209,9 @@ export const ClashCoreViewer = forwardRef<DialogRef>((props, ref) => {
               if (state === "start") setLock(true);
               else setLock(false);
             }}
+            onCoreUpdated={() => {
+              getCoreVersions();
+            }}
           />
         ))}
       </List>
@@ -194,11 +226,13 @@ function CoreElement({
   core,
   lock,
   onCoreChanged,
+  onCoreUpdated,
 }: {
   selected: boolean;
   core: Core;
   lock: boolean;
   onCoreChanged: (core: string, state: "start" | "finish") => void;
+  onCoreUpdated?: (core: string) => void;
 }) {
   const { t } = useTranslation();
   const { mutateVerge } = useVerge();
@@ -218,9 +252,17 @@ function CoreElement({
         mutate("getClashConfig");
         mutate("getVersion");
       }, 100);
-      useNotification(t("Success"), `Successfully switch to ${core}`);
+      useNotification({
+        title: t("Success"),
+        body: `Successfully switch to ${core}`,
+        type: NotificationType.Success,
+      });
     } catch (err: any) {
-      useNotification(t("Error"), err?.message || err.toString());
+      useNotification({
+        title: t("Error"),
+        body: err.message || err.toString(),
+        type: NotificationType.Error,
+      });
     } finally {
       setLoading(false);
       onCoreChanged(core, "finish");
@@ -232,9 +274,17 @@ function CoreElement({
       await grantPermission(core);
       // 自动重启
       if (selected) await restartSidecar();
-      useNotification(t("Success"), `Successfully grant permission to ${core}`);
+      useNotification({
+        title: t("Success"),
+        body: `Successfully grant permission to ${core}`,
+        type: NotificationType.Success,
+      });
     } catch (err: any) {
-      useNotification(t("Error"), err?.message || err.toString());
+      useNotification({
+        title: t("Error"),
+        body: err.message || err.toString(),
+        type: NotificationType.Error,
+      });
     }
   });
 
@@ -249,9 +299,18 @@ function CoreElement({
           mutate("getClashConfig");
           mutate("getVersion");
         }, 100);
-        useNotification(t("Success"), `Successfully updated to ${core}`);
+        useNotification({
+          title: t("Success"),
+          body: `Successfully update core ${core}`,
+          type: NotificationType.Success,
+        });
+        onCoreUpdated?.(core);
       } catch (err: any) {
-        useNotification(t("Error"), err?.message || err.toString());
+        useNotification({
+          title: t("Error"),
+          body: err.message || err.toString(),
+          type: NotificationType.Error,
+        });
       } finally {
         setUpdateCoreLoading(false);
       }

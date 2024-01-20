@@ -12,8 +12,8 @@
 
 #include "base/strings/string_piece.h"
 #include "net/base/net_errors.h"
+#include "net/base/proxy_chain.h"
 #include "net/base/proxy_delegate.h"
-#include "net/base/proxy_server.h"
 #include "net/http/http_request_headers.h"
 #include "net/proxy_resolution/proxy_retry_info.h"
 #include "net/tools/naive/naive_protocol.h"
@@ -41,7 +41,7 @@ class NaiveProxyDelegate : public ProxyDelegate {
   void OnFallback(const ProxyChain& bad_proxy, int net_error) override {}
 
   // This only affects h2 proxy client socket.
-  void OnBeforeTunnelRequest(const ProxyChain& proxy_server,
+  void OnBeforeTunnelRequest(const ProxyChain& proxy_chain,
                              size_t chain_index,
                              HttpRequestHeaders* extra_headers) override;
 
@@ -52,7 +52,7 @@ class NaiveProxyDelegate : public ProxyDelegate {
 
   // Returns empty if the padding type has not been negotiated.
   std::optional<PaddingType> GetProxyServerPaddingType(
-      const ProxyServer& proxy_server);
+      const ProxyChain& proxy_chain);
 
  private:
   std::optional<PaddingType> ParsePaddingHeaders(
@@ -61,7 +61,7 @@ class NaiveProxyDelegate : public ProxyDelegate {
   HttpRequestHeaders extra_headers_;
 
   // Empty value means padding type has not been negotiated.
-  std::map<ProxyServer, std::optional<PaddingType>> padding_type_by_server_;
+  std::map<ProxyChain, std::optional<PaddingType>> padding_type_by_server_;
 };
 
 class ClientPaddingDetectorDelegate {
@@ -74,7 +74,7 @@ class ClientPaddingDetectorDelegate {
 class PaddingDetectorDelegate : public ClientPaddingDetectorDelegate {
  public:
   PaddingDetectorDelegate(NaiveProxyDelegate* naive_proxy_delegate,
-                          const ProxyServer& proxy_server,
+                          const ProxyChain& proxy_chain,
                           ClientProtocol client_protocol);
   ~PaddingDetectorDelegate() override;
 
@@ -84,7 +84,7 @@ class PaddingDetectorDelegate : public ClientPaddingDetectorDelegate {
 
  private:
   NaiveProxyDelegate* naive_proxy_delegate_;
-  const ProxyServer& proxy_server_;
+  const ProxyChain& proxy_chain_;
   ClientProtocol client_protocol_;
 
   std::optional<PaddingType> detected_client_padding_type_;

@@ -1,13 +1,13 @@
 use crate::{
     config::*,
     core::{tasks::jobs::ProfilesJobGuard, updater::ManifestVersionLatest, *},
-    feat,
+    feat, ret_err,
     utils::{
         candy, dirs, help,
         resolve::{self, save_window_state},
     },
+    wrap_err,
 };
-use crate::{ret_err, wrap_err};
 use anyhow::{Context, Result};
 use chrono::Local;
 use log::debug;
@@ -93,7 +93,7 @@ pub fn patch_profile(index: String, profile: PrfItem) -> CmdResult {
 }
 
 #[tauri::command]
-pub fn view_profile(index: String) -> CmdResult {
+pub fn view_profile(app_handle: tauri::AppHandle, index: String) -> CmdResult {
     let file = {
         wrap_err!(Config::profiles().latest().get_item(&index))?
             .file
@@ -106,7 +106,7 @@ pub fn view_profile(index: String) -> CmdResult {
         ret_err!("the file not found");
     }
 
-    wrap_err!(help::open_file(path))
+    wrap_err!(help::open_file(app_handle, path))
 }
 
 #[tauri::command]

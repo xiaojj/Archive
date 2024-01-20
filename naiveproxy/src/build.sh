@@ -90,8 +90,7 @@ esac
 
 if [ "$target_cpu" = "mipsel" -o "$target_cpu" = "mips64el" ]; then
   flags="$flags"'
-    use_thin_lto=false
-    chrome_pgo_phase=0'
+  use_thin_lto=false'
 fi
 
 # OpenWrt static builds are bad with Clang 18+ and ThinLTO.

@@ -80,7 +80,7 @@ func ParseProxyGroup(config map[string]any, proxyMap map[string]C.Proxy, provide
 		return nil, fmt.Errorf("%s: %w", groupName, errMissProxy)
 	}
 
-	expectedStatus, err := utils.NewIntRanges[uint16](groupOption.ExpectedStatus)
+	expectedStatus, err := utils.NewUnsignedRanges[uint16](groupOption.ExpectedStatus)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", groupName, err)
 	}
@@ -92,9 +92,11 @@ func ParseProxyGroup(config map[string]any, proxyMap map[string]C.Proxy, provide
 	groupOption.ExpectedStatus = status
 	testUrl := groupOption.URL
 
-	if groupOption.URL == "" {
-		groupOption.URL = C.DefaultTestURL
-		testUrl = groupOption.URL
+	if groupOption.Type != "select" && groupOption.Type != "relay" {
+		if groupOption.URL == "" {
+			groupOption.URL = C.DefaultTestURL
+			testUrl = groupOption.URL
+		}
 	}
 
 	if len(GroupProxies) != 0 {

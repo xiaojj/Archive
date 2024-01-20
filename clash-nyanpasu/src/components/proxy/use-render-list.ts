@@ -11,10 +11,10 @@ import {
 } from "./use-head-state";
 
 export interface IRenderItem {
-  // 组 ｜ head ｜ item ｜ empty | item col
-  type: 0 | 1 | 2 | 3 | 4;
+  // 组 ｜ head ｜ item ｜ empty | item col | item bottom | empty-padding
+  type: 0 | 1 | 2 | 3 | 4 | 5 | 6;
   key: string;
-  group: IProxyGroupItem;
+  group?: IProxyGroupItem;
   proxy?: IProxyItem;
   col?: number;
   proxyCol?: IProxyItem[];
@@ -89,7 +89,7 @@ export const useRenderList = (mode: string) => {
 
         // 支持多列布局
         if (col > 1) {
-          return ret.concat(
+          const lists = ret.concat(
             groupList(proxies, col).map((proxyCol) => ({
               type: 4,
               key: `col-${group.name}-${proxyCol[0].name}`,
@@ -99,9 +99,18 @@ export const useRenderList = (mode: string) => {
               proxyCol,
             })),
           );
+
+          lists.push({
+            type: 5,
+            key: `footer-${group.name}`,
+            group,
+            headState,
+          });
+
+          return lists;
         }
 
-        return ret.concat(
+        const lists = ret.concat(
           proxies.map((proxy) => ({
             type: 2,
             key: `${group.name}-${proxy!.name}`,
@@ -110,11 +119,27 @@ export const useRenderList = (mode: string) => {
             headState,
           })),
         );
+
+        lists.push({
+          type: 5,
+          key: `footer-${group.name}`,
+        });
+
+        return lists;
       }
+
       return ret;
     });
 
     if (!useRule) return retList.slice(1);
+
+    console.log(retList);
+
+    retList.push({
+      type: 6,
+      key: `empty-padding`,
+    });
+
     return retList;
   }, [headStates, proxiesData, mode, col]);
 

@@ -2,9 +2,6 @@ name: Dev Build
 
 on:
   workflow_dispatch:
-  # push:
-  #   branches:
-  #     - dev
   schedule:
     - cron: "15 0 * * *" # 每天 08:15 UTC+8 自动构建
 env:
@@ -32,20 +29,19 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          ref: dev # Dev branch
 
       - name: install Rust stable
-        uses: dtolnay/rust-toolchain@stable
+        run: rustup install stable --profile minimal && rustup default stable
 
-      - name: Rust Cache
-        uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: src-tauri
+          workspaces: "./backend/"
+          prefix-key: "rust-stable"
           key: ${{ matrix.targets.os }}
+          shared-key: "release"
 
       - name: Install the missing rust target (macOS Only)
-        if: startsWith(matrix.targets.os, 'macos-')
+        if: startsWith(matrix.targets.os, 'macos-') && matrix.targets.category == 'aarch64'
         run: |
           rustup target add aarch64-apple-darwin
 
@@ -154,14 +150,13 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          ref: dev # Dev branch
       - name: Set Env
         run: |
           echo "BUILDTIME=$(TZ=Asia/Shanghai date)" >> $GITHUB_ENV
+          echo "CURRENT_GIT_SHA=$(git rev-parse HEAD)" >> $GITHUB_ENV
         shell: bash
       - name: Update Tag
-        uses: richardsimko/update-tag@v1.0.11
+        uses: greenhat616/update-tag@v1
         with:
           tag_name: pre-release
         env:
@@ -192,8 +187,6 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          ref: dev # Dev branch
       - uses: pnpm/action-setup@v2
         name: Install pnpm
         with:
