@@ -24,9 +24,6 @@ case "$board" in
 		[ "$PHYNBR" = "0" ] && macaddr_add $addr 2 > /sys${DEVPATH}/macaddress
 		[ "$PHYNBR" = "1" ] && macaddr_add $addr 3 > /sys${DEVPATH}/macaddress
 		;;
-	cmcc,rax3000m-nand-ubootmod)
-		[ "$PHYNBR" = "1" ] && mtd_get_mac_binary Factory 0xa > /sys${DEVPATH}/macaddress
-		;;
 	cetron,ct3003*)
 		addr=$(mtd_get_mac_binary "art" 0)
 		[ "$PHYNBR" = "0" ] && macaddr_add $addr 1 > /sys${DEVPATH}/macaddress
@@ -40,6 +37,11 @@ case "$board" in
 	h3c,magic-nx30-pro)
 		addr=$(mtd_get_mac_ascii pdt_data_1 ethaddr)
 		[ "$PHYNBR" = "0" ] && macaddr_add $addr 2 > /sys${DEVPATH}/macaddress
+		[ "$PHYNBR" = "1" ] && macaddr_add $addr 3 > /sys${DEVPATH}/macaddress
+		;;
+	imou,lc-hx3001)
+		addr=$(mtd_get_mac_ascii u-boot-env mac)
+		[ "$PHYNBR" = "0" ] && macaddr_add $addr 1 > /sys${DEVPATH}/macaddress
 		[ "$PHYNBR" = "1" ] && macaddr_add $addr 3 > /sys${DEVPATH}/macaddress
 		;;
 	jcg,q30-pro|\

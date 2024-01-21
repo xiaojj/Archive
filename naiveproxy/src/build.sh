@@ -83,22 +83,23 @@ fi
 
 case "$EXTRA_FLAGS" in
 *target_os=\"android\"*)
+  # default_min_sdk_version=24: 26 introduces unnecessary snew symbols
+  # is_high_end_android=true: Does not optimize for size, Uses PGO profiles
   flags="$flags"'
+    default_min_sdk_version=24
     is_high_end_android=true'
   ;;
 esac
 
-if [ "$target_cpu" = "mipsel" -o "$target_cpu" = "mips64el" ]; then
-  flags="$flags"'
-  use_thin_lto=false'
-fi
-
 # OpenWrt static builds are bad with Clang 18+ and ThinLTO.
 # Segfaults in fstack-protector on ARM.
+# See https://github.com/llvm/llvm-project/issues/64999
 case "$EXTRA_FLAGS" in
 *build_static=true*)
-  flags="$flags"'
-    use_thin_lto=false'
+  if [ "$target_cpu" = "arm" ]; then
+    flags="$flags"'
+      use_thin_lto=false'
+  fi
   ;;
 esac
 

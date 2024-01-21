@@ -66,7 +66,7 @@ assert test_https_server(HTTPS_SERVER_HOSTNAME,
                          HTTP_SERVER_PORT), 'https server not up'
 
 
-def start_naive(naive_args):
+def start_naive(naive_args, config_file):
     with_qemu = None
     if argv.target_cpu == 'arm64':
         with_qemu = 'aarch64'
@@ -83,10 +83,14 @@ def start_naive(naive_args):
         if not with_qemu:
             if not os.path.exists(os.path.join(argv.rootfs, 'naive')):
                 shutil.copy2(argv.naive, argv.rootfs)
+            # bwrap isolates filesystem, config_file needs a copy inside.
+            if config_file is not None:
+                shutil.copy2(config_file, argv.rootfs)
             cmdline = ['bwrap', '--die-with-parent', '--bind', argv.rootfs, '/',
-                       '--proc', '/proc', '--dev', '/dev', '/naive']
+                       '--proc', '/proc', '--dev', '/dev', '--chdir', '/', '/naive']
         else:
-            cmdline = [f'qemu-{with_qemu}-static', '-L', argv.rootfs, argv.naive]
+            cmdline = [f'qemu-{with_qemu}-static',
+                       '-L', argv.rootfs, argv.naive]
     else:
         cmdline = [argv.naive]
     cmdline.extend(naive_args)
@@ -109,7 +113,7 @@ def start_naive(naive_args):
 
         line = proc.stderr.readline().strip()
         print(line)
-        if 'Failed to listen: ' in line:
+        if 'Failed to listen' in line:
             timeout.cancel()
             print('terminate pid', proc.pid)
             proc.terminate()
@@ -147,12 +151,11 @@ def test_naive_once(proxy, *args, **kwargs):
 
     proxy = proxy.format_map(port_dict)
 
-    config_file = kwargs.get('config_file', 'config.json')
-    if argv.rootfs:
-        config_file = os.path.join(argv.rootfs, config_file)
+    config_file = kwargs.get('config_file')
     config_content = kwargs.get('config_content')
     if config_content is not None:
         config_content = config_content.format_map(port_dict)
+        print(f"Writing {repr(config_content)} to {config_file}")
         with open(config_file, 'w') as f:
             f.write('{')
             f.write(config_content)
@@ -161,7 +164,7 @@ def test_naive_once(proxy, *args, **kwargs):
     naive_procs = []
 
     def cleanup():
-        if config_content is not None:
+        if config_file is not None:
             os.remove(config_file)
         for naive_proc in naive_procs:
             print('terminate pid', naive_proc.pid)
@@ -169,7 +172,7 @@ def test_naive_once(proxy, *args, **kwargs):
 
     for args_instance in args:
         naive_args = args_instance.format_map(port_dict).split()
-        naive_proc = start_naive(naive_args)
+        naive_proc = start_naive(naive_args, config_file)
         if naive_proc == 'Failed to listen':
             cleanup()
             return 'Failed to listen'
@@ -187,18 +190,20 @@ def test_naive_once(proxy, *args, **kwargs):
 
 def test_naive(label, proxy, *args, **kwargs):
     RETRIES = 5
+    result = None
     for i in range(RETRIES):
         result = test_naive_once(proxy, *args, **kwargs)
         if result == 'Failed to listen':
+            result = False
             print('Retrying...')
             time.sleep(1)
             continue
-        if result:
-            print('** TEST PASS:', label, end='\n\n')
-            return True
-        return result
-    print('** TEST FAIL:', label, end='\n\n')
-    sys.exit(1)
+        break
+    if result is True:
+        print('** TEST PASS:', label, end='\n\n')
+    else:
+        print('** TEST FAIL:', label, end='\n\n')
+        sys.exit(1)
 
 
 test_naive('Default config', 'socks5h://127.0.0.1:1080',
@@ -206,7 +211,8 @@ test_naive('Default config', 'socks5h://127.0.0.1:1080',
 
 test_naive('Default config file', 'socks5h://127.0.0.1:{PORT1}',
            '',
-           config_content='"listen":"socks://127.0.0.1:{PORT1}","log":""')
+           config_content='"listen":"socks://127.0.0.1:{PORT1}","log":""',
+           config_file='config.json')
 
 test_naive('Custom config file', 'socks5h://127.0.0.1:{PORT1}',
            'custom.json',

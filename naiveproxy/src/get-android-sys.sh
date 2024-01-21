@@ -7,6 +7,7 @@ if [ "$WITH_ANDROID_IMG" -a ! -d out/sysroot-build/android/"$WITH_ANDROID_IMG"/s
   curl -O https://dl.google.com/android/repository/sys-img/android/$WITH_ANDROID_IMG.zip
   mkdir -p $WITH_ANDROID_IMG/mount
   unzip $WITH_ANDROID_IMG.zip '*/system.img' -d $WITH_ANDROID_IMG
+  # Need mount -t ext4 -o ro,loop,offset=0x100000 for API level of 26+
   sudo mount $WITH_ANDROID_IMG/*/system.img $WITH_ANDROID_IMG/mount
   rootfs=out/sysroot-build/android/$WITH_ANDROID_IMG
   mkdir -p $rootfs/system/bin $rootfs/system/etc

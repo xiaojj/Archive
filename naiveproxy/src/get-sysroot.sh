@@ -54,6 +54,8 @@ case "$target_os" in
   ;;
   android)
     WITH_SYSROOT=
+    # https://dl.google.com/android/repository/sys-img/android/sys-img.xml
+    # https://dl.google.com/android/repository/sys-img/google_apis/sys-img.xml
     case "$target_cpu" in
       x64) WITH_ANDROID_IMG=x86_64-24_r08;;
       x86) WITH_ANDROID_IMG=x86-24_r08;;
