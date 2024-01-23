@@ -653,6 +653,8 @@ target_link_libraries(decrepit_test test_support_lib boringssl_gtest
                       decrepit crypto)
 add_dependencies(all_tests decrepit_test)
 
+endif (BORINGSSL_BUILD_TESTS)
+
 if(APPLE)
   set(PKI_CXX_FLAGS "-fno-aligned-new")
 endif()
@@ -660,13 +662,23 @@ endif()
 add_library(pki ${PKI_SOURCES})
 target_link_libraries(pki crypto)
 
+# The PKI library requires C++17.
+set_target_properties(
+  pki
+  PROPERTIES
+  CXX_STANDARD 17
+  CXX_STANDARD_REQUIRED YES
+  COMPILE_FLAGS "${PKI_CXX_FLAGS}")
+
+if (BORINGSSL_BUILD_TESTS)
+
 add_executable(pki_test ${PKI_TEST_SOURCES})
 target_link_libraries(pki_test test_support_lib boringssl_gtest pki crypto)
 add_dependencies(all_tests pki_test)
 
 # The PKI library requires C++17.
 set_target_properties(
-  pki pki_test
+  pki_test
   PROPERTIES
   CXX_STANDARD 17
   CXX_STANDARD_REQUIRED YES
