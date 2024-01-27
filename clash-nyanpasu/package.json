@@ -31,7 +31,7 @@
     "upload:osx-aarch64": "tsx scripts/osx-aarch64-upload.ts",
     "generate:manifest": "run-p generate:manifest:*",
     "generate:manifest:latest-version": "tsx scripts/generate-latest-version.ts",
-    "prepare": "husky install",
+    "prepare": "husky",
     "prepare:nightly": "tsx scripts/prepare-nightly.ts"
   },
   "prettier": {
@@ -59,7 +59,7 @@
     "axios": "1.6.7",
     "dayjs": "1.11.10",
     "framer-motion": "11.0.3",
-    "i18next": "23.7.19",
+    "i18next": "23.7.20",
     "lodash-es": "4.17.21",
     "monaco-editor": "0.45.0",
     "react": "18.2.0",
@@ -119,7 +119,7 @@
     "prettier": "3.2.4",
     "prettier-plugin-toml": "2.0.1",
     "sass": "1.70.0",
-    "shikiji": "0.10.1",
+    "shikiji": "0.10.2",
     "stylelint": "16.2.0",
     "stylelint-config-html": "1.1.0",
     "stylelint-config-recess-order": "4.4.0",
