@@ -1,0 +1,13 @@
+export const getTransferRate: () => string[];
+export const getServerHost: () => string;
+export const getServerSNI: () => string;
+export const getServerPort: () => number;
+export const getUsername: () => string;
+export const getPassword: () => string;
+export const getCipher: () => string;
+export const getCipherStrings: () => string[];
+export const getTimeout: () => number;
+export const init: () => void;
+export const destroy: () => void;
+export const startWorker: (cb: (err_code: number) => void) => void;
+export const stopWorker: (cb: () => void) => void;

@@ -15,16 +15,15 @@ require (
 	github.com/gobwas/ws v1.3.2
 	github.com/gofrs/uuid/v5 v5.0.0
 	github.com/insomniacslk/dhcp v0.0.0-20231206064809-8c70d406f6d2
-	github.com/jpillora/backoff v1.0.0
 	github.com/klauspost/cpuid/v2 v2.2.6
 	github.com/lunixbochs/struc v0.0.0-20200707160740-784aaebc1d40
 	github.com/mdlayher/netlink v1.7.2
 	github.com/metacubex/gopacket v1.1.20-0.20230608035415-7e2f98a3e759
 	github.com/metacubex/quic-go v0.41.1-0.20240120014142-a02f4a533d4a
-	github.com/metacubex/sing-quic v0.0.0-20240122125415-d6eb83bc6ec4
+	github.com/metacubex/sing-quic v0.0.0-20240130040922-cbe613c88f20
 	github.com/metacubex/sing-shadowsocks v0.2.6
 	github.com/metacubex/sing-shadowsocks2 v0.2.0
-	github.com/metacubex/sing-tun v0.2.0
+	github.com/metacubex/sing-tun v0.2.1-0.20240130042529-1f983547e9d4
 	github.com/metacubex/sing-vmess v0.1.9-0.20231207122118-72303677451f
 	github.com/metacubex/sing-wireguard v0.0.0-20231209125515-0594297f7232
 	github.com/miekg/dns v1.1.57
