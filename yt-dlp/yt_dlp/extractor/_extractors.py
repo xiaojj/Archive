@@ -1247,7 +1247,10 @@ from .nexx import (
     NexxIE,
     NexxEmbedIE,
 )
-from .nfb import NFBIE
+from .nfb import (
+    NFBIE,
+    NFBSeriesIE,
+)
 from .nfhsnetwork import NFHSNetworkIE
 from .nfl import (
     NFLIE,
@@ -1284,6 +1287,7 @@ from .niconico import (
     NicovideoTagURLIE,
     NiconicoLiveIE,
 )
+from .ninaprotocol import NinaProtocolIE
 from .ninecninemedia import (
     NineCNineMediaIE,
     CPTwentyFourIE,

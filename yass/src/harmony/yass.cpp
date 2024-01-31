@@ -33,18 +33,11 @@ extern "C"
 bool OH_LOG_IsLoggable(unsigned int domain, const char *tag, HILOG_LogLevel level);
 
 static constexpr char kLogTag[] = YASS_APP_NAME;
-static constexpr unsigned int kLogDomain = 0x15b0;
+static constexpr unsigned int kLogDomain = 0x0;
 
-static napi_env setProtectFdCallbackEnv = nullptr;
 static napi_threadsafe_function setProtectFdCallbackFunc = nullptr;
 
 struct AsyncProtectFdEx_t {
-  napi_async_work work_item;
-  int fd;
-  int write_end;
-};
-
-struct SetProtectFdEx_t {
   int fd;
   int write_end;
 };
@@ -58,97 +51,35 @@ static void setProtectFdWriteResult(int fd, napi_status status) {
   }
 }
 
-static void setProtectFdExecuteWork(napi_env env, void *data) {
-  AsyncProtectFdEx_t *async_protect_fd_ex = (AsyncProtectFdEx_t *)data;
-
-  auto ctx = new SetProtectFdEx_t;
-  if (ctx == nullptr) {
-    LOG(WARNING) << "failed to allocate new ctx";
-    setProtectFdWriteResult(async_protect_fd_ex->fd, napi_queue_full);
-    return;
-  }
-
-  ctx->fd = async_protect_fd_ex->fd;
-  ctx->write_end = async_protect_fd_ex->write_end;
-
-  auto status = napi_acquire_threadsafe_function(setProtectFdCallbackFunc);
-  if (status != napi_ok) {
-    LOG(WARNING) << "napi_acquire_threadsafe_function: " << status;
-    setProtectFdWriteResult(async_protect_fd_ex->fd, status);
-    return;
-  }
-
-  status = napi_call_threadsafe_function(setProtectFdCallbackFunc, ctx, napi_tsfn_blocking);
-  if (status != napi_ok) {
-    LOG(WARNING) << "napi_call_threadsafe_function: " << status;
-    setProtectFdWriteResult(async_protect_fd_ex->fd, status);
-    return;
-  }
-
-  status = napi_release_threadsafe_function(setProtectFdCallbackFunc, napi_tsfn_release);
-
-  if (status != napi_ok) {
-    LOG(WARNING) << "napi_release_threadsafe_function: " << status;
-    setProtectFdWriteResult(async_protect_fd_ex->fd, status);
-    return;
-  }
-}
-
-// This function runs on the main thread after `ExecuteWork` exited.
-static void setProtectFdOnWorkComplete(napi_env env, napi_status status, void *data) {
-  AsyncProtectFdEx_t *async_protect_fd_ex = (AsyncProtectFdEx_t *)data;
-
-  status = napi_delete_async_work(env, async_protect_fd_ex->work_item);
-  if (status != napi_ok) {
-    LOG(WARNING) << "napi_delete_async_work: " << status;
-    return;
-  }
-
-  delete async_protect_fd_ex;
-}
-
 int setProtectFd(int fd) {
-  napi_env env = setProtectFdCallbackEnv;
-  if (env == nullptr) {
-    LOG(WARNING) << "null env";
-    return -1;
-  }
-
-  napi_value work_name;
-  // Specify a name to describe this asynchronous operation.
-  auto status = napi_create_string_utf8(env, kAsyncResourceName, NAPI_AUTO_LENGTH, &work_name);
-  if (status != napi_ok) {
-    LOG(WARNING) << "napi_create_string_utf8: " << status;
-    return -1;
-  }
-  AsyncProtectFdEx_t *async_protect_fd_ex = new AsyncProtectFdEx_t;
-  napi_async_work work_item;
-
-  status = napi_create_async_work(env, nullptr, work_name,
-    setProtectFdExecuteWork, setProtectFdOnWorkComplete, async_protect_fd_ex,
-    &work_item); // OUT: THE handle to the async work item
-  if (status != napi_ok) {
-    delete async_protect_fd_ex;
-    LOG(WARNING) << "napi_create_async_work: " << status;
-    return -1;
-  }
-
   int pipefd[2] = {-1, -1};
   if (pipe(pipefd) == -1) {
     PLOG(WARNING) << "create pipe failed";
     return -1;
   };
   int read_end = pipefd[0];
-  async_protect_fd_ex->work_item = work_item;
-  async_protect_fd_ex->fd = fd;
-  async_protect_fd_ex->write_end = pipefd[1];
 
-  // Queue the work item for execution.
-  status = napi_queue_async_work(env, work_item);
+  auto ctx = std::make_unique<AsyncProtectFdEx_t>();
+  ctx->fd = fd;
+  ctx->write_end = pipefd[1];
+
+  auto status = napi_acquire_threadsafe_function(setProtectFdCallbackFunc);
   if (status != napi_ok) {
-    IGNORE_EINTR(close(pipefd[0]));
-    IGNORE_EINTR(close(pipefd[1]));
-    LOG(WARNING) << "napi_create_async_work: " << status;
+    LOG(WARNING) << "napi_acquire_threadsafe_function: " << status;
+    return -1;
+  }
+
+  auto ctx_raw = ctx.release();
+  status = napi_call_threadsafe_function(setProtectFdCallbackFunc, ctx_raw, napi_tsfn_blocking);
+  if (status != napi_ok) {
+    LOG(WARNING) << "napi_call_threadsafe_function: " << status;
+    delete ctx_raw;
+    return -1;
+  }
+
+  status = napi_release_threadsafe_function(setProtectFdCallbackFunc, napi_tsfn_release);
+  if (status != napi_ok) {
+    LOG(WARNING) << "napi_release_threadsafe_function: " << status;
     return -1;
   }
 
@@ -179,24 +110,45 @@ static napi_value setProtectFdCallingJSCallback(napi_env env, napi_callback_info
   return nullptr;
 }
 
-static void setProtectFdCallingJS(napi_env env, napi_value js_cb, void *context, void *data) {
-  // This parameter is not used.
-  (void)context;
-
-  auto ctx = reinterpret_cast<SetProtectFdEx_t*>(data);
+static void setProtectFdCallingJS(napi_env env, napi_value /*js_cb*/, void *context, void *data) {
+  std::unique_ptr<AsyncProtectFdEx_t> ctx(reinterpret_cast<AsyncProtectFdEx_t*>(data));
   int fd_value = ctx->fd;
   int write_end = ctx->write_end;
-  delete ctx;
 
-  if (env == nullptr) {
-    LOG(WARNING) << "null env";
+  auto cb_ref = reinterpret_cast<napi_ref>(context);
+
+  napi_value cb;
+  auto status = napi_get_reference_value(env, cb_ref, &cb);
+  if (status != napi_ok) {
+    LOG(WARNING) << "napi_get_reference_value: " << status;
+    setProtectFdWriteResult(fd_value, status);
     return;
   }
 
-  napi_value undefined;
-  napi_status status = napi_get_undefined(env, &undefined);
+  napi_valuetype type;
+  status = napi_typeof(env, cb, &type);
   if (status != napi_ok) {
-    LOG(WARNING) << "napi_get_undefined: " << status;
+    LOG(WARNING) << "napi_typeof failed: " << status;
+    setProtectFdWriteResult(fd_value, status);
+    return;
+  }
+
+  if (type != napi_function) {
+    LOG(WARNING) << "napi_typeof unexpected: " << type;
+    setProtectFdWriteResult(fd_value, status);
+    return;
+  }
+
+  if (env == nullptr) {
+    LOG(WARNING) << "null env";
+    setProtectFdWriteResult(fd_value, status);
+    return;
+  }
+
+  napi_value global;
+  status = napi_get_global(env, &global);
+  if (status != napi_ok) {
+    LOG(WARNING) << "napi_get_global: " << status;
     setProtectFdWriteResult(fd_value, status);
     return;
   }
@@ -218,12 +170,21 @@ static void setProtectFdCallingJS(napi_env env, napi_value js_cb, void *context,
   }
 
   napi_value argv[] = { fd, callback };
-  status = napi_call_function(env, undefined, js_cb, std::size(argv), argv, nullptr);
+  status = napi_call_function(env, global, cb, std::size(argv), argv, nullptr);
   if (status != napi_ok) {
     LOG(WARNING) << "napi_call_function: " << status;
     setProtectFdWriteResult(fd_value, status);
     return;
   }
+
+  status = napi_delete_reference(env, cb_ref);
+  if (status != napi_ok) {
+    LOG(WARNING) << "napi_delete_reference: " << status;
+    setProtectFdWriteResult(fd_value, status);
+    return;
+  }
+
+  setProtectFdWriteResult(fd_value, status);
 }
 
 static napi_value setProtectFdCallback(napi_env env, napi_callback_info info) {
@@ -250,6 +211,13 @@ static napi_value setProtectFdCallback(napi_env env, napi_callback_info info) {
     return nullptr;
   }
 
+  napi_ref cb_ref;
+  status = napi_create_reference(env, cb, 1, &cb_ref);
+  if (status != napi_ok) {
+    napi_throw_error(env, nullptr, "napi_create_reference failed");
+    return nullptr;
+  }
+
   napi_value work_name;
   // Specify a name to describe this asynchronous operation.
   status = napi_create_string_utf8(env, kAsyncResourceName, NAPI_AUTO_LENGTH, &work_name);
@@ -260,15 +228,13 @@ static napi_value setProtectFdCallback(napi_env env, napi_callback_info info) {
 
   // Create a thread-safe N-API callback function correspond to the C/C++ callback function
   status = napi_create_threadsafe_function(env, cb, nullptr, work_name, 0, 1, nullptr,
-      nullptr, nullptr, setProtectFdCallingJS, // the C/C++ callback function
+      nullptr, cb_ref, setProtectFdCallingJS, // the C/C++ callback function
       &setProtectFdCallbackFunc // out: the asynchronous thread-safe JavaScript function
   );
   if (status != napi_ok) {
     napi_throw_error(env, nullptr, "napi_create_threadsafe_function failed");
     return nullptr;
   }
-
-  setProtectFdCallbackEnv = env;
 
   return nullptr;
 }
@@ -432,40 +398,76 @@ static napi_value stopTun2proxy(napi_env env, napi_callback_info info) {
 }
 
 static constexpr char kAsyncStartWorkerResourceName[] = "Thread-safe StartWorker";
+struct AsyncStartCtx {
+  asio::error_code ec;
+  int port_num;
+};
 
-static void startWorkerCallingJS(napi_env env, napi_value js_cb, void *context, void *data) {
-  napi_ref thiz_ref = reinterpret_cast<napi_ref>(context);
+static void startWorkerCallingJS(napi_env env, napi_value /*js_cb*/, void *context, void *data) {
+  napi_ref cb_ref = reinterpret_cast<napi_ref>(context);
 
-  int err_code = reinterpret_cast<uintptr_t>(data);
+  std::unique_ptr<AsyncStartCtx> ctx(reinterpret_cast<AsyncStartCtx*>(data));
+  std::ostringstream ss;
+  if (ctx->ec) {
+    ss << ctx->ec;
+  }
+  std::string ec_str = ss.str();
+  int port_num = ctx->port_num;
 
   if (env == nullptr) {
     LOG(WARNING) << "null env";
     return;
   }
 
-  napi_value thiz;
-  napi_status status = napi_get_reference_value(env, thiz_ref, &thiz);
+  napi_value global;
+  auto status = napi_get_global(env, &global);
+  if (status != napi_ok) {
+    LOG(WARNING) << "napi_get_global: " << status;
+    return;
+  }
+
+  napi_value cb;
+  status = napi_get_reference_value(env, cb_ref, &cb);
   if (status != napi_ok) {
     LOG(WARNING) << "napi_get_reference_value: " << status;
     return;
   }
 
-  napi_value error_code;
-  status = napi_create_int32(env, err_code, &error_code);
+  napi_valuetype type;
+  status = napi_typeof(env, cb, &type);
+  if (status != napi_ok) {
+    LOG(WARNING) << "napi_typeof failed: " << status;
+    return;
+  }
+
+  if (type != napi_function) {
+    LOG(WARNING) << "napi_typeof unexpected: " << type;
+    return;
+  }
+
+  napi_value err_msg;
+  status = napi_create_string_utf8(env, ec_str.c_str(), NAPI_AUTO_LENGTH, &err_msg);
+  if (status != napi_ok) {
+    LOG(WARNING) << "napi_create_string_utf8: " << status;
+    return;
+  }
+
+  napi_value port;
+  status = napi_create_int32(env, port_num, &port);
   if (status != napi_ok) {
     LOG(WARNING) << "napi_create_int32: " << status;
     return;
   }
 
   napi_value result;
-  napi_value argv[] = { error_code };
-  status = napi_call_function(env, thiz, js_cb, std::size(argv), argv, &result);
+  napi_value argv[] = { err_msg, port };
+  status = napi_call_function(env, global, cb, std::size(argv), argv, &result);
   if (status != napi_ok) {
     LOG(WARNING) << "napi_call_function: " << status;
     return;
   }
 
-  status = napi_delete_reference(env, thiz_ref);
+  status = napi_delete_reference(env, cb_ref);
   if (status != napi_ok) {
     LOG(WARNING) << "napi_delete_reference: " << status;
     return;
@@ -479,8 +481,7 @@ static napi_value startWorker(napi_env env, napi_callback_info info) {
 
   napi_value args[1] {};
   size_t argc = std::size(args);
-  napi_value thiz;
-  status = napi_get_cb_info(env, info, &argc, args, &thiz, nullptr);
+  status = napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
   if (status != napi_ok || argc != std::size(args)) {
     napi_throw_error(env, nullptr, "napi_get_cb_info failed");
     return nullptr;
@@ -499,8 +500,8 @@ static napi_value startWorker(napi_env env, napi_callback_info info) {
     return nullptr;
   }
 
-  napi_ref thiz_ref;
-  status = napi_create_reference(env, thiz, 1, &thiz_ref);
+  napi_ref cb_ref;
+  status = napi_create_reference(env, cb, 1, &cb_ref);
   if (status != napi_ok) {
     napi_throw_error(env, nullptr, "napi_create_reference failed");
     return nullptr;
@@ -518,7 +519,7 @@ static napi_value startWorker(napi_env env, napi_callback_info info) {
 
   // Create a thread-safe N-API callback function correspond to the C/C++ callback function
   status = napi_create_threadsafe_function(env, cb, nullptr, work_name, 0, 1, nullptr,
-      nullptr, thiz_ref, startWorkerCallingJS, // the C/C++ callback function
+      nullptr, cb_ref, startWorkerCallingJS, // the C/C++ callback function
       &startWorkerCallbackFunc // out: the asynchronous thread-safe JavaScript function
   );
   if (status != napi_ok) {
@@ -530,17 +531,28 @@ static napi_value startWorker(napi_env env, napi_callback_info info) {
     if (!ec) {
       config::SaveConfig();
     }
+    std::unique_ptr<AsyncStartCtx> ctx = std::make_unique<AsyncStartCtx>();
+    ctx->ec = ec;
+    ctx->port_num = ec ? 0 : g_worker->GetLocalPort();
 
     auto status = napi_acquire_threadsafe_function(startWorkerCallbackFunc);
     if (status != napi_ok) {
       LOG(WARNING) << "napi_acquire_threadsafe_function: " << status;
     }
 
-    status = napi_call_threadsafe_function(startWorkerCallbackFunc, (void*)(uintptr_t)ec.value(), napi_tsfn_blocking);
+    auto ctx_raw = ctx.release();
+    status = napi_call_threadsafe_function(startWorkerCallbackFunc, ctx_raw, napi_tsfn_blocking);
     if (status != napi_ok) {
       LOG(WARNING) << "napi_call_threadsafe_function: " << status;
+      delete ctx_raw;
     }
 
+    status = napi_release_threadsafe_function(startWorkerCallbackFunc, napi_tsfn_release);
+    if (status != napi_ok) {
+      LOG(WARNING) << "napi_release_threadsafe_function: " << status;
+    }
+
+    // release callback
     status = napi_release_threadsafe_function(startWorkerCallbackFunc, napi_tsfn_release);
     if (status != napi_ok) {
       LOG(WARNING) << "napi_release_threadsafe_function: " << status;
@@ -551,28 +563,48 @@ static napi_value startWorker(napi_env env, napi_callback_info info) {
 
 static constexpr char kAsyncStopWorkerResourceName[] = "Thread-safe StopWorker";
 
-static void stopWorkerCallingJS(napi_env env, napi_value js_cb, void *context, void *data) {
-  napi_ref thiz_ref = reinterpret_cast<napi_ref>(context);
+static void stopWorkerCallingJS(napi_env env, napi_value /*js_cb*/, void *context, void *data) {
+  napi_ref cb_ref = reinterpret_cast<napi_ref>(context);
 
   if (env == nullptr) {
     LOG(WARNING) << "null env";
     return;
   }
 
-  napi_value thiz;
-  napi_status status = napi_get_reference_value(env, thiz_ref, &thiz);
+  napi_value global;
+  auto status = napi_get_global(env, &global);
+  if (status != napi_ok) {
+    LOG(WARNING) << "napi_get_global: " << status;
+    return;
+  }
+
+  napi_value cb;
+  status = napi_get_reference_value(env, cb_ref, &cb);
   if (status != napi_ok) {
     LOG(WARNING) << "napi_get_reference_value: " << status;
     return;
   }
 
-  status = napi_call_function(env, thiz, js_cb, 0, nullptr, nullptr);
+  napi_valuetype type;
+  status = napi_typeof(env, cb, &type);
+  if (status != napi_ok) {
+    LOG(WARNING) << "napi_typeof failed: " << status;
+    return;
+  }
+
+  if (type != napi_function) {
+    LOG(WARNING) << "napi_typeof unexpected: " << type;
+    return;
+  }
+
+  napi_value result;
+  status = napi_call_function(env, global, cb, 0, nullptr, &result);
   if (status != napi_ok) {
     LOG(WARNING) << "napi_call_function: " << status;
     return;
   }
 
-  status = napi_delete_reference(env, thiz_ref);
+  status = napi_delete_reference(env, cb_ref);
   if (status != napi_ok) {
     LOG(WARNING) << "napi_delete_reference: " << status;
     return;
@@ -584,8 +616,7 @@ static napi_value stopWorker(napi_env env, napi_callback_info info) {
 
   napi_value args[1] {};
   size_t argc = std::size(args);
-  napi_value thiz;
-  status = napi_get_cb_info(env, info, &argc, args, &thiz, nullptr);
+  status = napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
   if (status != napi_ok || argc != std::size(args)) {
     napi_throw_error(env, nullptr, "napi_get_cb_info failed");
     return nullptr;
@@ -604,8 +635,8 @@ static napi_value stopWorker(napi_env env, napi_callback_info info) {
     return nullptr;
   }
 
-  napi_ref thiz_ref;
-  status = napi_create_reference(env, thiz, 1, &thiz_ref);
+  napi_ref cb_ref;
+  status = napi_create_reference(env, cb, 1, &cb_ref);
   if (status != napi_ok) {
     napi_throw_error(env, nullptr, "napi_create_reference failed");
     return nullptr;
@@ -623,7 +654,7 @@ static napi_value stopWorker(napi_env env, napi_callback_info info) {
 
   // Create a thread-safe N-API callback function correspond to the C/C++ callback function
   status = napi_create_threadsafe_function(env, cb, nullptr, work_name, 0, 1, nullptr,
-      nullptr, thiz_ref, stopWorkerCallingJS, // the C/C++ callback function
+      nullptr, cb_ref, stopWorkerCallingJS, // the C/C++ callback function
       &stopWorkerCallbackFunc // out: the asynchronous thread-safe JavaScript function
   );
   if (status != napi_ok) {
@@ -642,6 +673,12 @@ static napi_value stopWorker(napi_env env, napi_callback_info info) {
       LOG(WARNING) << "napi_call_threadsafe_function: " << status;
     }
 
+    status = napi_release_threadsafe_function(stopWorkerCallbackFunc, napi_tsfn_release);
+    if (status != napi_ok) {
+      LOG(WARNING) << "napi_release_threadsafe_function: " << status;
+    }
+
+    // release callback
     status = napi_release_threadsafe_function(stopWorkerCallbackFunc, napi_tsfn_release);
     if (status != napi_ok) {
       LOG(WARNING) << "napi_release_threadsafe_function: " << status;
@@ -670,7 +707,7 @@ static uint64_t g_last_sync_time;
 static uint64_t g_last_tx_bytes;
 static uint64_t g_last_rx_bytes;
 
-// return { rx_rate, tx_rate }
+// return { tx_rate, rx_rate }
 static napi_value getTransferRate(napi_env env, napi_callback_info info) {
   uint64_t sync_time = GetMonotonicTime();
   uint64_t delta_time = sync_time - g_last_sync_time;
@@ -727,6 +764,13 @@ static napi_value getTransferRate(napi_env env, napi_callback_info info) {
     napi_throw_error(env, nullptr, "napi_set_element failed");
     return nullptr;
   }
+
+  std::stringstream ss;
+  ss << "Connected connections";
+  ss << " tx rate: " << rx_rate;
+  ss << " rx rate: " << tx_rate;
+
+  VLOG(1) << ss.str();
 
   return results;
 }
@@ -788,13 +832,13 @@ static napi_value saveConfig(napi_env env, napi_callback_info info) {
                                                        username, password, method,
                                                        local_host, local_port, timeout);
 
-  if (err_msg.empty()) {
+  napi_value result;
+  status = napi_create_string_utf8(env, err_msg.c_str(), err_msg.size(), &result);
+  if (status != napi_ok) {
+    napi_throw_error(env, nullptr, "napi_create_string_utf8 failed");
     return nullptr;
   }
-
-  // should me use throw?
-  napi_throw_error(env, nullptr, err_msg.c_str());
-  return nullptr;
+  return result;
 }
 
 static napi_value getServerHost(napi_env env, napi_callback_info info) {
@@ -907,6 +951,67 @@ static napi_value getTimeout(napi_env env, napi_callback_info info) {
 }
 
 static napi_value initRoutine(napi_env env, napi_callback_info info) {
+  napi_value args[2] {};
+  size_t argc = std::size(args);
+  auto status = napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
+  if (status != napi_ok || argc != std::size(args)) {
+    napi_throw_error(env, nullptr, "napi_get_cb_info failed");
+    return nullptr;
+  }
+
+  napi_value cache_path = args[0];
+  napi_value data_path = args[1];
+
+  napi_valuetype type;
+  status = napi_typeof(env, cache_path, &type);
+  if (status != napi_ok) {
+    napi_throw_error(env, nullptr, "napi_typeof failed");
+    return nullptr;
+  }
+
+  if (type != napi_string) {
+    napi_throw_error(env, nullptr, "mismatched argument type, expected: napi_string");
+    return nullptr;
+  }
+
+  status = napi_typeof(env, data_path, &type);
+  if (status != napi_ok) {
+    napi_throw_error(env, nullptr, "napi_typeof failed");
+    return nullptr;
+  }
+
+  if (type != napi_string) {
+    napi_throw_error(env, nullptr, "mismatched argument type, expected: napi_string");
+    return nullptr;
+  }
+
+  char cache_path_buf[PATH_MAX+1];
+  size_t cache_path_size;
+  status = napi_get_value_string_utf8(env, cache_path, cache_path_buf, sizeof(cache_path_buf), &cache_path_size);
+  if (status != napi_ok) {
+    napi_throw_error(env, nullptr, "napi_get_value_string_utf8 failed");
+    return nullptr;
+  }
+
+  char data_path_buf[PATH_MAX+1];
+  size_t data_path_size;
+  status = napi_get_value_string_utf8(env, data_path, data_path_buf, sizeof(data_path_buf), &data_path_size);
+  if (status != napi_ok) {
+    napi_throw_error(env, nullptr, "napi_get_value_string_utf8 failed");
+    return nullptr;
+  }
+
+  std::string exe_path;
+  GetExecutablePath(&exe_path);
+  SetExecutablePath(exe_path);
+
+  h_cache_dir = std::string(cache_path_buf, cache_path_size);
+  h_data_dir = std::string(data_path_buf, data_path_size);
+
+  LOG(INFO) << "exe path: " << exe_path;
+  LOG(INFO) << "cache dir: " << h_cache_dir;
+  LOG(INFO) << "data dir: " << h_data_dir;
+
   LOG(INFO) << "yass: init";
 
   CRYPTO_library_init();

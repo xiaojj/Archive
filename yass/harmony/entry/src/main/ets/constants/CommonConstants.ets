@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-2.0
+/* Copyright (c) 2024 Chilledheart  */
+
 /**
  * Common constants for all features.
  */
@@ -176,6 +179,11 @@ export class CommonConstants {
    * Detail column list width percentage setting.
    */
   static readonly DETAIL_LIST_WIDTH_PERCENT: string = '93.3%';
+
+  /**
+   * Detail column input width percentage setting.
+   */
+  static readonly DETAIL_INPUT_WIDTH_PERCENT: string = '50.0%';
 
   /**
    * Divider stroke width.
