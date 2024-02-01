@@ -31,12 +31,12 @@ func (s *MTCP) dialRemote(remote *lb.Node) (net.Conn, error) {
 
 func (s *MTCP) HandleTCPConn(c net.Conn, remote *lb.Node) error {
 	defer c.Close()
-	mctpc, err := s.dialRemote(remote)
+	mtcpc, err := s.dialRemote(remote)
 	if err != nil {
 		return err
 	}
-	s.L.Infof("HandleTCPConn from:%s to:%s", c.LocalAddr(), remote.Address)
-	return transport(c, mctpc, remote.Label)
+	s.l.Infof("HandleTCPConn from:%s to:%s", c.LocalAddr(), remote.Address)
+	return NewRelayConn(c, mtcpc, s.cs).Transport(remote.Label)
 }
 
 type MTCPServer struct {
@@ -121,7 +121,6 @@ func (s *MTCPServer) ListenAndServe() error {
 			return e
 		}
 		go func(c net.Conn) {
-			defer c.Close()
 			remote := s.raw.GetRemote()
 			if err := s.raw.HandleTCPConn(c, remote); err != nil {
 				s.L.Errorf("HandleTCPConn meet error from:%s to:%s err:%s", c.RemoteAddr(), remote.Address, err)

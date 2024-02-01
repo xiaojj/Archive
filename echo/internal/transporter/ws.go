@@ -37,8 +37,8 @@ func (s *Ws) HandleTCPConn(c net.Conn, remote *lb.Node) error {
 		return err
 	}
 	defer wsc.Close()
-	s.L.Infof("HandleTCPConn from %s to %s", c.LocalAddr(), remote.Address)
-	return transport(c, wsc, remote.Label)
+	s.l.Infof("HandleTCPConn from %s to %s", c.LocalAddr(), remote.Address)
+	return NewRelayConn(c, wsc, s.cs).Transport(remote.Label)
 }
 
 type WSServer struct {
@@ -73,7 +73,6 @@ func (s *WSServer) HandleRequest(w http.ResponseWriter, req *http.Request) {
 	if err != nil {
 		return
 	}
-	defer wsc.Close()
 
 	remote := s.raw.GetRemote()
 	if err := s.raw.HandleTCPConn(wsc, remote); err != nil {
