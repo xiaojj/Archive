@@ -13,7 +13,9 @@ import (
 	"github.com/xtaci/smux"
 	"go.uber.org/zap"
 
+	"github.com/Ehco1996/ehco/internal/conn"
 	"github.com/Ehco1996/ehco/internal/constant"
+	"github.com/Ehco1996/ehco/internal/metrics"
 	mytls "github.com/Ehco1996/ehco/internal/tls"
 	"github.com/Ehco1996/ehco/internal/web"
 	"github.com/Ehco1996/ehco/pkg/lb"
@@ -30,7 +32,7 @@ func (s *Mwss) dialRemote(remote *lb.Node) (net.Conn, error) {
 	if err != nil {
 		return nil, err
 	}
-	web.HandShakeDuration.WithLabelValues(remote.Label).Observe(float64(time.Since(t1).Milliseconds()))
+	metrics.HandShakeDuration.WithLabelValues(remote.Label).Observe(float64(time.Since(t1).Milliseconds()))
 	return mwssc, nil
 }
 
@@ -42,13 +44,15 @@ func (s *Mwss) HandleTCPConn(c net.Conn, remote *lb.Node) error {
 	}
 	defer mwsc.Close()
 	s.l.Infof("HandleTCPConn from:%s to:%s", c.LocalAddr(), remote.Address)
-	return NewRelayConn(c, mwsc, s.cs).Transport(remote.Label)
+	relayConn := conn.NewRelayConn(s.relayLabel, c, mwsc)
+	s.cmgr.AddConnection(relayConn)
+	return relayConn.Transport(remote.Label)
 }
 
 type MWSSServer struct {
 	raw        *Raw
 	httpServer *http.Server
-	L          *zap.SugaredLogger
+	l          *zap.SugaredLogger
 
 	connChan chan net.Conn
 	errChan  chan error
@@ -57,7 +61,7 @@ type MWSSServer struct {
 func NewMWSSServer(listenAddr string, raw *Raw, l *zap.SugaredLogger) *MWSSServer {
 	s := &MWSSServer{
 		raw:      raw,
-		L:        l,
+		l:        l,
 		errChan:  make(chan error, 1),
 		connChan: make(chan net.Conn, 1024),
 	}
@@ -91,7 +95,7 @@ func (s *MWSSServer) ListenAndServe() error {
 		go func(c net.Conn) {
 			remote := s.raw.GetRemote()
 			if err := s.raw.HandleTCPConn(c, remote); err != nil {
-				s.L.Errorf("HandleTCPConn meet error from:%s to:%s err:%s", c.RemoteAddr(), remote.Address, err)
+				s.l.Errorf("HandleTCPConn meet error from:%s to:%s err:%s", c.RemoteAddr(), remote.Address, err)
 			}
 		}(conn)
 	}
@@ -100,7 +104,7 @@ func (s *MWSSServer) ListenAndServe() error {
 func (s *MWSSServer) HandleRequest(w http.ResponseWriter, r *http.Request) {
 	conn, _, _, err := ws.UpgradeHTTP(r, w)
 	if err != nil {
-		s.L.Error(err)
+		s.l.Error(err)
 		return
 	}
 	s.mux(conn)
@@ -113,25 +117,25 @@ func (s *MWSSServer) mux(conn net.Conn) {
 	cfg.KeepAliveDisabled = true
 	session, err := smux.Server(conn, cfg)
 	if err != nil {
-		s.L.Debugf("server err %s - %s : %s", conn.RemoteAddr(), s.httpServer.Addr, err)
+		s.l.Debugf("server err %s - %s : %s", conn.RemoteAddr(), s.httpServer.Addr, err)
 		return
 	}
 	defer session.Close()
 
-	s.L.Debugf("session init %s  %s", conn.RemoteAddr(), s.httpServer.Addr)
-	defer s.L.Debugf("session close %s >-< %s", conn.RemoteAddr(), s.httpServer.Addr)
+	s.l.Debugf("session init %s  %s", conn.RemoteAddr(), s.httpServer.Addr)
+	defer s.l.Debugf("session close %s >-< %s", conn.RemoteAddr(), s.httpServer.Addr)
 
 	for {
 		stream, err := session.AcceptStream()
 		if err != nil {
-			s.L.Errorf("accept stream err: %s", err)
+			s.l.Errorf("accept stream err: %s", err)
 			break
 		}
 		select {
 		case s.connChan <- stream:
 		default:
 			stream.Close()
-			s.L.Infof("%s - %s: connection queue is full", conn.RemoteAddr(), conn.LocalAddr())
+			s.l.Infof("%s - %s: connection queue is full", conn.RemoteAddr(), conn.LocalAddr())
 		}
 	}
 }

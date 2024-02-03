@@ -9,8 +9,9 @@ import (
 	"github.com/xtaci/smux"
 	"go.uber.org/zap"
 
+	"github.com/Ehco1996/ehco/internal/conn"
 	"github.com/Ehco1996/ehco/internal/constant"
-	"github.com/Ehco1996/ehco/internal/web"
+	"github.com/Ehco1996/ehco/internal/metrics"
 	"github.com/Ehco1996/ehco/pkg/lb"
 )
 
@@ -25,7 +26,7 @@ func (s *MTCP) dialRemote(remote *lb.Node) (net.Conn, error) {
 	if err != nil {
 		return nil, err
 	}
-	web.HandShakeDuration.WithLabelValues(remote.Label).Observe(float64(time.Since(t1).Milliseconds()))
+	metrics.HandShakeDuration.WithLabelValues(remote.Label).Observe(float64(time.Since(t1).Milliseconds()))
 	return mtcpc, nil
 }
 
@@ -36,14 +37,16 @@ func (s *MTCP) HandleTCPConn(c net.Conn, remote *lb.Node) error {
 		return err
 	}
 	s.l.Infof("HandleTCPConn from:%s to:%s", c.LocalAddr(), remote.Address)
-	return NewRelayConn(c, mtcpc, s.cs).Transport(remote.Label)
+	relayConn := conn.NewRelayConn(s.relayLabel, c, mtcpc)
+	s.cmgr.AddConnection(relayConn)
+	return relayConn.Transport(remote.Label)
 }
 
 type MTCPServer struct {
 	raw        *Raw
 	listenAddr string
 	listener   net.Listener
-	L          *zap.SugaredLogger
+	l          *zap.SugaredLogger
 
 	errChan  chan error
 	connChan chan net.Conn
@@ -51,7 +54,7 @@ type MTCPServer struct {
 
 func NewMTCPServer(listenAddr string, raw *Raw, l *zap.SugaredLogger) *MTCPServer {
 	return &MTCPServer{
-		L:          l,
+		l:          l,
 		raw:        raw,
 		listenAddr: listenAddr,
 		errChan:    make(chan error, 1),
@@ -66,25 +69,25 @@ func (s *MTCPServer) mux(conn net.Conn) {
 	cfg.KeepAliveDisabled = true
 	session, err := smux.Server(conn, cfg)
 	if err != nil {
-		s.L.Debugf("server err %s - %s : %s", conn.RemoteAddr(), s.listenAddr, err)
+		s.l.Debugf("server err %s - %s : %s", conn.RemoteAddr(), s.listenAddr, err)
 		return
 	}
 	defer session.Close()
 
-	s.L.Debugf("session init %s  %s", conn.RemoteAddr(), s.listenAddr)
-	defer s.L.Debugf("session close %s >-< %s", conn.RemoteAddr(), s.listenAddr)
+	s.l.Debugf("session init %s  %s", conn.RemoteAddr(), s.listenAddr)
+	defer s.l.Debugf("session close %s >-< %s", conn.RemoteAddr(), s.listenAddr)
 
 	for {
 		stream, err := session.AcceptStream()
 		if err != nil {
-			s.L.Errorf("accept stream err: %s", err)
+			s.l.Errorf("accept stream err: %s", err)
 			break
 		}
 		select {
 		case s.connChan <- stream:
 		default:
 			stream.Close()
-			s.L.Infof("%s - %s: connection queue is full", conn.RemoteAddr(), conn.LocalAddr())
+			s.l.Infof("%s - %s: connection queue is full", conn.RemoteAddr(), conn.LocalAddr())
 		}
 	}
 }
@@ -123,7 +126,7 @@ func (s *MTCPServer) ListenAndServe() error {
 		go func(c net.Conn) {
 			remote := s.raw.GetRemote()
 			if err := s.raw.HandleTCPConn(c, remote); err != nil {
-				s.L.Errorf("HandleTCPConn meet error from:%s to:%s err:%s", c.RemoteAddr(), remote.Address, err)
+				s.l.Errorf("HandleTCPConn meet error from:%s to:%s err:%s", c.RemoteAddr(), remote.Address, err)
 			}
 		}(conn)
 	}

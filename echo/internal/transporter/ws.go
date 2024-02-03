@@ -10,7 +10,9 @@ import (
 	"github.com/gorilla/mux"
 	"go.uber.org/zap"
 
+	"github.com/Ehco1996/ehco/internal/conn"
 	"github.com/Ehco1996/ehco/internal/constant"
+	"github.com/Ehco1996/ehco/internal/metrics"
 	"github.com/Ehco1996/ehco/internal/web"
 	"github.com/Ehco1996/ehco/pkg/lb"
 )
@@ -26,7 +28,7 @@ func (s *Ws) dialRemote(remote *lb.Node) (net.Conn, error) {
 	if err != nil {
 		return nil, err
 	}
-	web.HandShakeDuration.WithLabelValues(remote.Label).Observe(float64(time.Since(t1).Milliseconds()))
+	metrics.HandShakeDuration.WithLabelValues(remote.Label).Observe(float64(time.Since(t1).Milliseconds()))
 	return wsc, nil
 }
 
@@ -38,17 +40,19 @@ func (s *Ws) HandleTCPConn(c net.Conn, remote *lb.Node) error {
 	}
 	defer wsc.Close()
 	s.l.Infof("HandleTCPConn from %s to %s", c.LocalAddr(), remote.Address)
-	return NewRelayConn(c, wsc, s.cs).Transport(remote.Label)
+	relayConn := conn.NewRelayConn(s.relayLabel, c, wsc)
+	s.cmgr.AddConnection(relayConn)
+	return relayConn.Transport(remote.Label)
 }
 
 type WSServer struct {
 	raw        *Raw
-	L          *zap.SugaredLogger
+	l          *zap.SugaredLogger
 	httpServer *http.Server
 }
 
 func NewWSServer(listenAddr string, raw *Raw, l *zap.SugaredLogger) *WSServer {
-	s := &WSServer{raw: raw, L: l}
+	s := &WSServer{raw: raw, l: l}
 	mux := mux.NewRouter()
 	mux.HandleFunc("/", web.MakeIndexF())
 	mux.HandleFunc("/ws/", s.HandleRequest)
@@ -76,6 +80,6 @@ func (s *WSServer) HandleRequest(w http.ResponseWriter, req *http.Request) {
 
 	remote := s.raw.GetRemote()
 	if err := s.raw.HandleTCPConn(wsc, remote); err != nil {
-		s.L.Errorf("HandleTCPConn meet error from:%s to:%s err:%s", wsc.RemoteAddr(), remote.Address, err)
+		s.l.Errorf("HandleTCPConn meet error from:%s to:%s err:%s", wsc.RemoteAddr(), remote.Address, err)
 	}
 }
