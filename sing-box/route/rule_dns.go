@@ -114,7 +114,7 @@ func NewDefaultDNSRule(router adapter.Router, logger log.ContextLogger, options 
 	}
 	if len(options.GeoIP) > 0 {
 		item := NewGeoIPItem(router, logger, false, options.GeoIP)
-		rule.destinationAddressItems = append(rule.destinationAddressItems, item)
+		rule.destinationIPCIDRItems = append(rule.destinationIPCIDRItems, item)
 		rule.allItems = append(rule.allItems, item)
 	}
 	if len(options.SourceIPCIDR) > 0 {
@@ -130,7 +130,7 @@ func NewDefaultDNSRule(router adapter.Router, logger log.ContextLogger, options 
 		if err != nil {
 			return nil, E.Cause(err, "ip_cidr")
 		}
-		rule.destinationAddressItems = append(rule.destinationAddressItems, item)
+		rule.destinationIPCIDRItems = append(rule.destinationIPCIDRItems, item)
 		rule.allItems = append(rule.allItems, item)
 	}
 	if options.SourceIPIsPrivate {
@@ -140,7 +140,7 @@ func NewDefaultDNSRule(router adapter.Router, logger log.ContextLogger, options 
 	}
 	if options.IPIsPrivate {
 		item := NewIPIsPrivateItem(false)
-		rule.destinationAddressItems = append(rule.destinationAddressItems, item)
+		rule.destinationIPCIDRItems = append(rule.destinationIPCIDRItems, item)
 		rule.allItems = append(rule.allItems, item)
 	}
 	if len(options.SourcePort) > 0 {
@@ -231,7 +231,7 @@ func (r *DefaultDNSRule) RewriteTTL() *uint32 {
 }
 
 func (r *DefaultDNSRule) WithAddressLimit() bool {
-	if len(r.destinationAddressItems) > 0 {
+	if len(r.destinationIPCIDRItems) > 0 {
 		return true
 	}
 	for _, rawRule := range r.items {
@@ -247,9 +247,9 @@ func (r *DefaultDNSRule) WithAddressLimit() bool {
 }
 
 func (r *DefaultDNSRule) Match(metadata *adapter.InboundContext) bool {
-	metadata.IgnoreDestinationAddressMatch = true
+	metadata.IgnoreDestinationIPCIDRMatch = true
 	defer func() {
-		metadata.IgnoreDestinationAddressMatch = false
+		metadata.IgnoreDestinationIPCIDRMatch = false
 	}()
 	return r.abstractDefaultRule.Match(metadata)
 }
@@ -320,9 +320,9 @@ func (r *LogicalDNSRule) WithAddressLimit() bool {
 }
 
 func (r *LogicalDNSRule) Match(metadata *adapter.InboundContext) bool {
-	metadata.IgnoreDestinationAddressMatch = true
+	metadata.IgnoreDestinationIPCIDRMatch = true
 	defer func() {
-		metadata.IgnoreDestinationAddressMatch = false
+		metadata.IgnoreDestinationIPCIDRMatch = false
 	}()
 	return r.MatchAddressLimit(metadata)
 }

@@ -15,6 +15,7 @@ type abstractDefaultRule struct {
 	sourceAddressItems      []RuleItem
 	sourcePortItems         []RuleItem
 	destinationAddressItems []RuleItem
+	destinationIPCIDRItems  []RuleItem
 	destinationPortItems    []RuleItem
 	allItems                []RuleItem
 	ruleSetItem             RuleItem
@@ -83,9 +84,19 @@ func (r *abstractDefaultRule) Match(metadata *adapter.InboundContext) bool {
 		}
 	}
 
-	if !metadata.IgnoreDestinationAddressMatch && len(r.destinationAddressItems) > 0 && !metadata.DestinationAddressMatch {
+	if len(r.destinationAddressItems) > 0 && !metadata.DestinationAddressMatch {
 		metadata.DidMatch = true
 		for _, item := range r.destinationAddressItems {
+			if item.Match(metadata) {
+				metadata.DestinationAddressMatch = true
+				break
+			}
+		}
+	}
+
+	if !metadata.IgnoreDestinationIPCIDRMatch && len(r.destinationIPCIDRItems) > 0 && !metadata.DestinationAddressMatch {
+		metadata.DidMatch = true
+		for _, item := range r.destinationIPCIDRItems {
 			if item.Match(metadata) {
 				metadata.DestinationAddressMatch = true
 				break
@@ -120,7 +131,7 @@ func (r *abstractDefaultRule) Match(metadata *adapter.InboundContext) bool {
 		return r.invert
 	}
 
-	if !metadata.IgnoreDestinationAddressMatch && len(r.destinationAddressItems) > 0 && !metadata.DestinationAddressMatch {
+	if ((!metadata.IgnoreDestinationIPCIDRMatch || len(r.destinationIPCIDRItems) > 0) || len(r.destinationAddressItems) > 0) && !metadata.DestinationAddressMatch {
 		return r.invert
 	}
 

@@ -138,7 +138,7 @@ go build -o xray.exe -trimpath -ldflags "-s -w -buildid=" ./main
 CGO_ENABLED=0 go build -o xray -trimpath -ldflags "-s -w -buildid=" ./main
 ```
 
-### General
+### Reproducible Releases
 
 ```bash
 make
