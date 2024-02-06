@@ -131,7 +131,7 @@ func (r *abstractDefaultRule) Match(metadata *adapter.InboundContext) bool {
 		return r.invert
 	}
 
-	if ((!metadata.IgnoreDestinationIPCIDRMatch || len(r.destinationIPCIDRItems) > 0) || len(r.destinationAddressItems) > 0) && !metadata.DestinationAddressMatch {
+	if ((!metadata.IgnoreDestinationIPCIDRMatch && len(r.destinationIPCIDRItems) > 0) || len(r.destinationAddressItems) > 0) && !metadata.DestinationAddressMatch {
 		return r.invert
 	}
 

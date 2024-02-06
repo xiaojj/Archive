@@ -59,7 +59,11 @@ func (r *Router) matchDNS(ctx context.Context, allowFakeIP bool, index int) (con
 				if _, isFakeIP := transport.(adapter.FakeIPTransport); isFakeIP && !allowFakeIP {
 					continue
 				}
-				r.dnsLogger.DebugContext(ctx, "match[", ruleIndex, "] ", rule.String(), " => ", detour)
+				displayRuleIndex := ruleIndex
+				if index != -1 {
+					displayRuleIndex += index + 1
+				}
+				r.dnsLogger.DebugContext(ctx, "match[", displayRuleIndex, "] ", rule.String(), " => ", detour)
 				if rule.DisableCache() {
 					ctx = dns.ContextWithDisableCache(ctx, true)
 				}
