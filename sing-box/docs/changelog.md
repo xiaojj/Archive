@@ -18,7 +18,7 @@ See [Migration](/migration/#process_path-format-update-on-windows).
 
 **3**:
 
-See [Address Filter Filds](/configuration/dns/rule#address-filter-fields).
+See [Address Filter Fields](/configuration/dns/rule#address-filter-fields).
 
 #### 1.8.5
 
