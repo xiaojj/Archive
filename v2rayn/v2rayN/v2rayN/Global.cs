@@ -30,7 +30,6 @@ namespace v2rayN
 
         public const string PromotionUrl = @"aHR0cHM6Ly85LjIzNDQ1Ni54eXovYWJjLmh0bWw=";
         public const string ConfigFileName = "guiNConfig.json";
-        public const string ConfigDB = "guiNDB.db";
         public const string CoreConfigFileName = "config.json";
         public const string CorePreConfigFileName = "configPre.json";
         public const string CoreSpeedtestConfigFileName = "configSpeedtest.json";
@@ -118,6 +117,7 @@ namespace v2rayN
             @"http://cachefly.cachefly.net/100mb.test",
             @"http://cachefly.cachefly.net/10mb.test"
         };
+
         public static readonly List<string> SpeedPingTestUrls = new() {
             @"https://www.google.com/generate_204",
         };
@@ -187,14 +187,5 @@ namespace v2rayN
         public static readonly List<string> TuicCongestionControls = new() { "cubic", "new_reno", "bbr" };
 
         #endregion const
-
-        #region global variable
-
-        public static int StatePort { get; set; }
-        public static Job ProcessJob { get; set; }
-        public static bool ShowInTaskbar { get; set; }
-        public static string ExePathKey { get; set; }
-
-        #endregion global variable
     }
 }

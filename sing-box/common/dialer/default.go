@@ -3,7 +3,6 @@ package dialer
 import (
 	"context"
 	"net"
-	"runtime/debug"
 	"time"
 
 	"github.com/sagernet/sing-box/adapter"
@@ -161,29 +160,15 @@ func (d *DefaultDialer) ListenPacketCompat(network, address string) (net.PacketC
 }
 
 func trackConn(conn net.Conn, err error) (net.Conn, error) {
-	if err != nil {
-		return nil, err
-	}
-	if conn == nil {
-		debug.PrintStack()
-		return nil, E.New("system dialer returned (nil, nil)")
-	}
-	if !conntrack.Enabled {
-		return conn, nil
+	if !conntrack.Enabled || err != nil {
+		return conn, err
 	}
 	return conntrack.NewConn(conn)
 }
 
 func trackPacketConn(conn net.PacketConn, err error) (net.PacketConn, error) {
-	if err != nil {
-		return nil, err
-	}
-	if conn == nil {
-		debug.PrintStack()
-		return nil, E.New("system dialer returned (nil, nil)")
-	}
-	if !conntrack.Enabled {
-		return conn, nil
+	if !conntrack.Enabled || err != nil {
+		return conn, err
 	}
 	return conntrack.NewPacketConn(conn)
 }

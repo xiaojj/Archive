@@ -35,6 +35,7 @@ namespace v2rayN.ViewModels
         private readonly PaletteHelper _paletteHelper = new();
         private Dictionary<string, bool> _dicHeaderSort = new();
         private Action<EViewAction> _updateView;
+        private bool _showInTaskbar;
 
         #endregion private prop
 
@@ -568,7 +569,7 @@ namespace v2rayN.ViewModels
 
             AutoHideStartup();
 
-            Global.ShowInTaskbar = true;
+            _showInTaskbar = true;
         }
 
         private void Init()
@@ -635,7 +636,7 @@ namespace v2rayN.ViewModels
             {
                 Application.Current.Dispatcher.Invoke((Action)(() =>
                 {
-                    if (!Global.ShowInTaskbar)
+                    if (!_showInTaskbar)
                     {
                         return;
                     }
@@ -1183,7 +1184,7 @@ namespace v2rayN.ViewModels
                 _noticeHandler?.SendMessage(msg, true);
                 Application.Current.Dispatcher.Invoke((Action)(() =>
                 {
-                    if (!Global.ShowInTaskbar)
+                    if (!_showInTaskbar)
                     {
                         return;
                     }
@@ -1618,6 +1619,8 @@ namespace v2rayN.ViewModels
             {
                 _noticeHandler?.SendMessage(ResUI.TipChangeRouting, true);
                 Reload();
+                NotifyIcon = MainFormHandler.Instance.GetNotifyIcon(_config);
+                AppIcon = MainFormHandler.Instance.GetAppIcon(_config);
             }
         }
 
@@ -1656,7 +1659,7 @@ namespace v2rayN.ViewModels
 
         public void ShowHideWindow(bool? blShow)
         {
-            var bl = blShow ?? !Global.ShowInTaskbar;
+            var bl = blShow ?? !_showInTaskbar;
             if (bl)
             {
                 //Application.Current.MainWindow.ShowInTaskbar = true;
@@ -1675,7 +1678,7 @@ namespace v2rayN.ViewModels
                 //IntPtr windowHandle = new WindowInteropHelper(Application.Current.MainWindow).Handle;
                 //Utils.RegWriteValue(Global.MyRegPath, Utils.WindowHwndKey, Convert.ToString((long)windowHandle));
             }
-            Global.ShowInTaskbar = bl;
+            _showInTaskbar = bl;
         }
 
         private void RestoreUI()

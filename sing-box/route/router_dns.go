@@ -207,6 +207,7 @@ func (r *Router) Lookup(ctx context.Context, domain string, strategy dns.DomainS
 			}
 		} else if len(resultAddrs) == 0 {
 			r.dnsLogger.ErrorContext(ctx, "lookup failed for ", domain, ": empty result")
+			err = dns.RCodeNameError
 		}
 		if !addressLimit || err == nil {
 			break
