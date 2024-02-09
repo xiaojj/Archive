@@ -22,8 +22,12 @@ func (s *BoxService) Pause() {
 }
 
 func (s *BoxService) pause() {
+	s.pauseAccess.Lock()
+	defer s.pauseAccess.Unlock()
+
 	s.pauseManager.DevicePause()
 	_ = s.instance.Router().ResetNetwork()
+	s.pauseTimer = nil
 }
 
 func (s *BoxService) Wake() {
@@ -33,6 +37,7 @@ func (s *BoxService) Wake() {
 	if s.pauseTimer != nil {
 		s.pauseTimer.Stop()
 		s.pauseTimer = nil
+		return
 	}
 
 	s.pauseManager.DeviceWake()
