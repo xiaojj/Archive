@@ -2,6 +2,15 @@
 icon: material/alert-decagram
 ---
 
+#### 1.9.0-alpha.5
+
+* Fixes and improvements
+
+#### 1.9.0-alpha.3
+
+* Update `quic-go` to v0.41.0
+* Fixes and improvements
+
 #### 1.9.0-alpha.2
 
 * Add support for `client-subnet` DNS options **1**
