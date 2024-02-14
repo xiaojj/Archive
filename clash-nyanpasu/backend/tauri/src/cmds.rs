@@ -330,6 +330,12 @@ pub async fn clash_api_get_proxy_delay(
 pub async fn get_proxies() -> CmdResult<crate::core::clash::proxies::Proxies> {
     use crate::core::clash::proxies::ProxiesGuard;
     use crate::core::clash::proxies::ProxiesGuardExt;
+    {
+        let guard = ProxiesGuard::global().read();
+        if guard.is_updated() {
+            return Ok(guard.inner().clone());
+        }
+    }
     match ProxiesGuard::global().update().await {
         Ok(_) => {
             let proxies = ProxiesGuard::global().read().inner().clone();
