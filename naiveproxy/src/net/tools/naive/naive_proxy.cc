@@ -60,14 +60,9 @@ NaiveProxy::NaiveProxy(std::unique_ptr<ServerSocket> listen_socket,
       net::MutableNetworkTrafficAnnotationTag(traffic_annotation_));
 
   // See HttpStreamFactory::Job::DoInitConnectionImpl()
-  proxy_ssl_config_.disable_cert_verification_network_fetches = true;
   server_ssl_config_.alpn_protos = session_->GetAlpnProtos();
-  proxy_ssl_config_.alpn_protos = session_->GetAlpnProtos();
   server_ssl_config_.application_settings = session_->GetApplicationSettings();
-  proxy_ssl_config_.application_settings = session_->GetApplicationSettings();
   server_ssl_config_.ignore_certificate_errors =
-      session_->params().ignore_certificate_errors;
-  proxy_ssl_config_.ignore_certificate_errors =
       session_->params().ignore_certificate_errors;
   // TODO(https://crbug.com/964642): Also enable 0-RTT for TLS proxies.
   server_ssl_config_.early_data_enabled = session_->params().enable_early_data;
@@ -142,7 +137,7 @@ void NaiveProxy::DoConnect() {
   const auto& nak = network_anonymization_keys_[tunnel_session_id];
   auto connection_ptr = std::make_unique<NaiveConnection>(
       last_id_, protocol_, std::move(padding_detector_delegate), proxy_info_,
-      server_ssl_config_, proxy_ssl_config_, resolver_, session_, nak, net_log_,
+      server_ssl_config_, resolver_, session_, nak, net_log_,
       std::move(socket), traffic_annotation_);
   auto* connection = connection_ptr.get();
   connection_by_id_[connection->id()] = std::move(connection_ptr);

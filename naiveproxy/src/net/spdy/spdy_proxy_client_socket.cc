@@ -386,10 +386,8 @@ int SpdyProxyClientSocket::DoSendRequest() {
 
   if (proxy_delegate_) {
     HttpRequestHeaders proxy_delegate_headers;
-    proxy_delegate_->OnBeforeTunnelRequestServerOnly(
-        proxy_chain_, proxy_chain_index_, &proxy_delegate_headers);
-    proxy_delegate_->OnBeforeTunnelRequestServerOnly(
-        proxy_chain_, proxy_chain_index_, &proxy_delegate_headers);
+    proxy_delegate_->OnBeforeTunnelRequest(proxy_chain_, proxy_chain_index_,
+                                           &proxy_delegate_headers);
     if (proxy_delegate_headers.HasHeader("fastopen")) {
       proxy_delegate_headers.RemoveHeader("fastopen");
       use_fastopen_ = true;
@@ -444,7 +442,7 @@ int SpdyProxyClientSocket::DoReadReplyComplete(int result) {
       response_.headers.get());
 
   if (proxy_delegate_) {
-    int rv = proxy_delegate_->OnTunnelHeadersReceivedServerOnly(
+    int rv = proxy_delegate_->OnTunnelHeadersReceived(
         proxy_chain_, proxy_chain_index_, *response_.headers);
     if (rv != OK) {
       DCHECK_NE(ERR_IO_PENDING, rv);

@@ -1,14 +1,13 @@
 package power
 
-// modify from https://github.com/NeilSeligmann/G15Manager/blob/39a1b772ae8e215e316257ce57783839cb56f857/system/power/event.go
+// modify from https://github.com/golang/go/blob/b634f6fdcbebee23b7da709a243f3db217b64776/src/runtime/os_windows.go#L257
 
 import (
+	"runtime"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
 )
-
-// adapted from https://golang.org/src/runtime/os_windows.go
 
 var (
 	libPowrProf                              = windows.NewLazySystemDLL("powrprof.dll")
@@ -18,10 +17,10 @@ var (
 
 func NewEventListener(cb func(Type)) (func(), error) {
 	if err := powerRegisterSuspendResumeNotification.Find(); err != nil {
-		return nil, err
+		return nil, err // Running on Windows 7, where we don't need it anyway.
 	}
 	if err := powerUnregisterSuspendResumeNotification.Find(); err != nil {
-		return nil, nil
+		return nil, err // Running on Windows 7, where we don't need it anyway.
 	}
 
 	// Defines the type of event
@@ -69,5 +68,7 @@ func NewEventListener(cb func(Type)) (func(), error) {
 		_, _, _ = powerUnregisterSuspendResumeNotification.Call(
 			uintptr(unsafe.Pointer(&handle)),
 		)
+		runtime.KeepAlive(params)
+		runtime.KeepAlive(handle)
 	}, nil
 }

@@ -39,6 +39,7 @@ import("//build/config/sanitizers/sanitizers.gni")
 import("//build/config/sysroot.gni")
 import("//build/config/ui.gni")
 import("//build/timestamp.gni")
+import("//build/util/process_version.gni")
 import("//build_overrides/build.gni")
 
 if (is_mac) {
@@ -217,6 +218,9 @@ component("base") {
     "allocator/dispatcher/internal/dispatch_data.h",
     "allocator/dispatcher/internal/dispatcher_internal.h",
     "allocator/dispatcher/internal/tools.h",
+    "allocator/dispatcher/memory_tagging.cc",
+    "allocator/dispatcher/memory_tagging.h",
+    "allocator/dispatcher/notification_data.h",
     "allocator/dispatcher/reentry_guard.cc",
     "allocator/dispatcher/reentry_guard.h",
     "allocator/dispatcher/subsystem.h",
@@ -264,7 +268,6 @@ component("base") {
     "containers/contains.h",
     "containers/cxx20_erase.h",
     "containers/cxx20_erase_internal.h",
-    "containers/cxx20_erase_map.h",
     "containers/cxx20_erase_vector.h",
     "containers/enum_set.h",
     "containers/extend.h",
@@ -273,6 +276,7 @@ component("base") {
     "containers/flat_map.h",
     "containers/flat_set.h",
     "containers/flat_tree.h",
+    "containers/heap_array.h",
     "containers/id_map.h",
     "containers/intrusive_heap.cc",
     "containers/intrusive_heap.h",
@@ -344,11 +348,14 @@ component("base") {
     "functional/callback_internal.cc",
     "functional/callback_internal.h",
     "functional/callback_tags.h",
+    "functional/concurrent_callbacks.h",
+    "functional/concurrent_closures.cc",
+    "functional/concurrent_closures.h",
     "functional/disallow_unretained.h",
     "functional/function_ref.h",
-    "functional/not_fn.h",
     "functional/overloaded.h",
     "functional/unretained_traits.h",
+    "gtest_prod_util.cc",
     "gtest_prod_util.h",
     "hash/hash.cc",
     "hash/hash.h",
@@ -380,6 +387,7 @@ component("base") {
     "logging.h",
     "macros/concat.h",
     "macros/if.h",
+    "macros/is_empty.h",
     "macros/remove_parens.h",
     "macros/uniquify.h",
     "memory/aligned_memory.cc",
@@ -509,6 +517,7 @@ component("base") {
     "metrics/user_metrics.h",
     "metrics/user_metrics_action.h",
     "no_destructor.h",
+    "not_fatal_until.h",
     "notreached.h",
     "observer_list.h",
     "observer_list_internal.cc",
@@ -746,6 +755,8 @@ component("base") {
     "task/sequence_manager/work_queue.h",
     "task/sequence_manager/work_queue_sets.cc",
     "task/sequence_manager/work_queue_sets.h",
+    "task/sequence_manager/work_tracker.cc",
+    "task/sequence_manager/work_tracker.h",
     "task/sequenced_task_runner.cc",
     "task/sequenced_task_runner.h",
     "task/sequenced_task_runner_helpers.h",
@@ -801,6 +812,8 @@ component("base") {
     "task/thread_pool/thread_group.h",
     "task/thread_pool/thread_group_impl.cc",
     "task/thread_pool/thread_group_impl.h",
+    "task/thread_pool/thread_group_worker_delegate.cc",
+    "task/thread_pool/thread_group_worker_delegate.h",
     "task/thread_pool/thread_pool_impl.cc",
     "task/thread_pool/thread_pool_impl.h",
     "task/thread_pool/thread_pool_instance.cc",
@@ -809,6 +822,8 @@ component("base") {
     "task/thread_pool/worker_thread.cc",
     "task/thread_pool/worker_thread.h",
     "task/thread_pool/worker_thread_observer.h",
+    "task/thread_pool/worker_thread_semaphore.cc",
+    "task/thread_pool/worker_thread_semaphore.h",
     "task/thread_pool/worker_thread_set.cc",
     "task/thread_pool/worker_thread_set.h",
     "task/thread_pool/worker_thread_waitable_event.cc",
@@ -1007,6 +1022,10 @@ component("base") {
     sources += [ "threading/platform_thread_cros.cc" ]
   }
 
+  if (is_chromeos_ash) {
+    sources += [ "feature_visitor.h" ]
+  }
+
   if (is_linux || is_chromeos || is_android) {
     sources += [
       "files/file_path_watcher_inotify.cc",
@@ -1029,6 +1048,7 @@ component("base") {
   ]
 
   deps = [
+    ":check_version_internal",
     ":message_pump_buildflags",
     "//base/allocator:buildflags",
     "//base/allocator/partition_allocator:raw_ptr",
@@ -1139,10 +1159,6 @@ component("base") {
       "android/library_loader/anchor_functions.h",
       "android/library_loader/library_loader_hooks.h",
       "android/path_utils.h",
-      "android/reached_addresses_bitset.cc",
-      "android/reached_addresses_bitset.h",
-      "android/reached_code_profiler.cc",
-      "android/reached_code_profiler.h",
       "android/scoped_hardware_buffer_fence_sync.cc",
       "android/scoped_hardware_buffer_fence_sync.h",
       "android/scoped_hardware_buffer_handle.cc",
@@ -1211,12 +1227,6 @@ component("base") {
       ]
     }
 
-    if (current_cpu != "arm" && current_cpu != "arm64") {
-      # The reached code profiler is only supported on Android arm arch.
-      sources -= [ "android/reached_code_profiler.cc" ]
-      sources += [ "android/reached_code_profiler_stub.cc" ]
-    }
-
     # This is actually a linker script, but it can be added to the link in the
     # same way as a library.
     libs += [ "android/library_loader/anchor_functions.lds" ]
@@ -1257,7 +1267,6 @@ component("base") {
       "android/library_loader/library_loader_hooks.cc",
       "android/library_loader/library_loader_hooks.h",
       "android/native_uma_recorder.cc",
-      "android/scoped_java_ref.cc",
       "android/scoped_java_ref.h",
       "android/trace_event_binding.cc",
       "android/trace_event_binding.h",
@@ -1266,6 +1275,7 @@ component("base") {
       ":base_jni",
       ":process_launcher_jni",
     ]
+    public_deps += [ "//third_party/jni_zero:jni_zero_utils" ]
   }  # is_android || is_robolectric
 
   # Chromeos.
@@ -1277,7 +1287,7 @@ component("base") {
 
     sources += [ "power_monitor/power_monitor_device_source_chromeos.cc" ]
 
-    if (current_cpu == "x64") {
+    if (current_cpu == "x64" || current_cpu == "arm64") {
       sources += [
         "profiler/frame_pointer_unwinder.cc",
         "profiler/frame_pointer_unwinder.h",
@@ -2275,7 +2285,6 @@ component("base") {
       "trace_event/trace_config.h",
       "trace_event/trace_config_category_filter.cc",
       "trace_event/trace_config_category_filter.h",
-      "trace_event/trace_conversion_helper.h",
       "trace_event/trace_event.h",
       "trace_event/trace_event_impl.cc",
       "trace_event/trace_event_impl.h",
@@ -2578,4 +2587,33 @@ action("build_date") {
     rebase_path("$target_gen_dir/generated_build_date.h", root_build_dir),
     build_timestamp,
   ]
+}
+
+process_version("check_version_internal") {
+  template_file = "//base/check_version_internal.h.in"
+  output = "$target_gen_dir/check_version_internal.h"
+
+  # TODO(pbos): Consider moving chrome/VERSION into base/VERSION now that base
+  # depends on it. This dependency currently breaks webrtc which pulls in //base
+  # (but not //chrome). crbug.com/webrtc/13662 tracks removing webrtc's
+  # dependency on //base. For now we fake the check version far into the future.
+  # This breaks check_unittest.cc when built outside of chromium, but webrtc
+  # doesn't need to build base_unittests. If this is required in the future, but
+  # we haven't moved chrome/VERSION, we should ifdef out those tests.
+  if (build_with_chromium) {
+    sources = [ "//chrome/VERSION" ]
+    extra_args = [
+      "-e",
+      "VERSION_MAJOR=\"%s\" % (MAJOR)",
+      "-e",
+      "NEXT_VERSION_MAJOR=\"%d\" % (int(MAJOR) + 1)",
+    ]
+  } else {
+    extra_args = [
+      "-e",
+      "VERSION_MAJOR=\"9998\"",
+      "-e",
+      "NEXT_VERSION_MAJOR=\"9999\"",
+    ]
+  }
 }

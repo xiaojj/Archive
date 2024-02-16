@@ -13,6 +13,7 @@
 ^buildtools/deps_revisions.gni
 ^buildtools/third_party/eu-strip/bin/eu-strip
 ^buildtools/third_party/libc++/BUILD.gn
+^buildtools/third_party/libc++/__assertion_handler
 ^buildtools/third_party/libc++/__config_site
 ^buildtools/third_party/libc++abi/BUILD.gn
 ^buildtools/third_party/libc++abi/cxa_demangle_stub.cc

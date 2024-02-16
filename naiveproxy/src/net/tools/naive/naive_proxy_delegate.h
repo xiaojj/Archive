@@ -50,6 +50,9 @@ class NaiveProxyDelegate : public ProxyDelegate {
       size_t chain_index,
       const HttpResponseHeaders& response_headers) override;
 
+  void SetProxyResolutionService(
+      ProxyResolutionService* proxy_resolution_service) override {}
+
   // Returns empty if the padding type has not been negotiated.
   std::optional<PaddingType> GetProxyServerPaddingType(
       const ProxyChain& proxy_chain);
