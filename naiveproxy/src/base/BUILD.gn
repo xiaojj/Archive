@@ -1155,7 +1155,6 @@ component("base") {
       "android/content_uri_utils.h",
       "android/content_uri_utils_stub.cc",
       "android/jni_android.h",
-      "android/jni_android_stub.cc",
       "android/library_loader/anchor_functions.h",
       "android/library_loader/library_loader_hooks.h",
       "android/path_utils.h",
@@ -1163,7 +1162,6 @@ component("base") {
       "android/scoped_hardware_buffer_fence_sync.h",
       "android/scoped_hardware_buffer_handle.cc",
       "android/scoped_hardware_buffer_handle.h",
-      "android/scoped_java_ref.cc",
       "android/scoped_java_ref.h",
       "android/sys_utils.h",
       "debug/stack_trace_android.cc",
@@ -1199,6 +1197,7 @@ component("base") {
     deps += [
       "//third_party/ashmem",
       "//third_party/cpu_features:ndk_compat",
+      "//third_party/jni_zero:jni_zero_utils",
     ]
 
     # Needs to be a public config so that dependent targets link against it as

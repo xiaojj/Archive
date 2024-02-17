@@ -10,6 +10,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "absl/strings/string_view.h"
@@ -22,17 +23,22 @@ namespace moqt::test {
 
 namespace {
 
-bool IsObjectMessage(MoqtMessageType type) {
-  return (type == MoqtMessageType::kObjectWithPayloadLength ||
-          type == MoqtMessageType::kObjectWithoutPayloadLength);
+inline bool IsObjectMessage(MoqtMessageType type) {
+  return (type == MoqtMessageType::kObjectStream ||
+          type == MoqtMessageType::kObjectPreferDatagram ||
+          type == MoqtMessageType::kStreamHeaderTrack ||
+          type == MoqtMessageType::kStreamHeaderGroup);
+}
+
+inline bool IsObjectWithoutPayloadLength(MoqtMessageType type) {
+  return (type == MoqtMessageType::kObjectStream ||
+          type == MoqtMessageType::kObjectPreferDatagram);
 }
 
 std::vector<MoqtMessageType> message_types = {
-    MoqtMessageType::kObjectWithPayloadLength,
-    MoqtMessageType::kObjectWithoutPayloadLength,
-    MoqtMessageType::kClientSetup,
-    MoqtMessageType::kServerSetup,
-    MoqtMessageType::kSubscribeRequest,
+    MoqtMessageType::kObjectStream,
+    MoqtMessageType::kObjectPreferDatagram,
+    MoqtMessageType::kSubscribe,
     MoqtMessageType::kSubscribeOk,
     MoqtMessageType::kSubscribeError,
     MoqtMessageType::kUnsubscribe,
@@ -42,6 +48,10 @@ std::vector<MoqtMessageType> message_types = {
     MoqtMessageType::kAnnounceOk,
     MoqtMessageType::kAnnounceError,
     MoqtMessageType::kUnannounce,
+    MoqtMessageType::kClientSetup,
+    MoqtMessageType::kServerSetup,
+    MoqtMessageType::kStreamHeaderTrack,
+    MoqtMessageType::kStreamHeaderGroup,
     MoqtMessageType::kGoAway,
 };
 
@@ -110,10 +120,10 @@ class MoqtParserTestVisitor : public MoqtParserVisitor {
     MoqtServerSetup server_setup = message;
     last_message_ = TestMessageBase::MessageStructuredData(server_setup);
   }
-  void OnSubscribeRequestMessage(const MoqtSubscribeRequest& message) override {
+  void OnSubscribeMessage(const MoqtSubscribe& message) override {
     end_of_message_ = true;
     messages_received_++;
-    MoqtSubscribeRequest subscribe_request = message;
+    MoqtSubscribe subscribe_request = message;
     string0_ = std::string(subscribe_request.track_namespace);
     subscribe_request.track_namespace = absl::string_view(string0_);
     string1_ = std::string(subscribe_request.track_name);
@@ -128,54 +138,34 @@ class MoqtParserTestVisitor : public MoqtParserVisitor {
     end_of_message_ = true;
     messages_received_++;
     MoqtSubscribeOk subscribe_ok = message;
-    string0_ = std::string(subscribe_ok.track_namespace);
-    subscribe_ok.track_namespace = absl::string_view(string0_);
-    string1_ = std::string(subscribe_ok.track_name);
-    subscribe_ok.track_name = absl::string_view(string1_);
     last_message_ = TestMessageBase::MessageStructuredData(subscribe_ok);
   }
   void OnSubscribeErrorMessage(const MoqtSubscribeError& message) override {
     end_of_message_ = true;
     messages_received_++;
     MoqtSubscribeError subscribe_error = message;
-    string0_ = std::string(subscribe_error.track_namespace);
-    subscribe_error.track_namespace = absl::string_view(string0_);
-    string1_ = std::string(subscribe_error.track_name);
-    subscribe_error.track_name = absl::string_view(string1_);
-    string1_ = std::string(subscribe_error.reason_phrase);
-    subscribe_error.reason_phrase = absl::string_view(string1_);
+    string0_ = std::string(subscribe_error.reason_phrase);
+    subscribe_error.reason_phrase = absl::string_view(string0_);
     last_message_ = TestMessageBase::MessageStructuredData(subscribe_error);
   }
   void OnUnsubscribeMessage(const MoqtUnsubscribe& message) override {
     end_of_message_ = true;
     messages_received_++;
     MoqtUnsubscribe unsubscribe = message;
-    string0_ = std::string(unsubscribe.track_namespace);
-    unsubscribe.track_namespace = absl::string_view(string0_);
-    string1_ = std::string(unsubscribe.track_name);
-    unsubscribe.track_name = absl::string_view(string1_);
     last_message_ = TestMessageBase::MessageStructuredData(unsubscribe);
   }
   void OnSubscribeFinMessage(const MoqtSubscribeFin& message) override {
     end_of_message_ = true;
     messages_received_++;
     MoqtSubscribeFin subscribe_fin = message;
-    string0_ = std::string(subscribe_fin.track_namespace);
-    subscribe_fin.track_namespace = absl::string_view(string0_);
-    string1_ = std::string(subscribe_fin.track_name);
-    subscribe_fin.track_name = absl::string_view(string1_);
     last_message_ = TestMessageBase::MessageStructuredData(subscribe_fin);
   }
   void OnSubscribeRstMessage(const MoqtSubscribeRst& message) override {
     end_of_message_ = true;
     messages_received_++;
     MoqtSubscribeRst subscribe_rst = message;
-    string0_ = std::string(subscribe_rst.track_namespace);
-    subscribe_rst.track_namespace = absl::string_view(string0_);
-    string1_ = std::string(subscribe_rst.track_name);
-    subscribe_rst.track_name = absl::string_view(string1_);
-    string2_ = std::string(subscribe_rst.reason_phrase);
-    subscribe_rst.reason_phrase = absl::string_view(string2_);
+    string0_ = std::string(subscribe_rst.reason_phrase);
+    subscribe_rst.reason_phrase = absl::string_view(string0_);
     last_message_ = TestMessageBase::MessageStructuredData(subscribe_rst);
   }
   void OnAnnounceMessage(const MoqtAnnounce& message) override {
@@ -225,15 +215,17 @@ class MoqtParserTestVisitor : public MoqtParserVisitor {
     goaway.new_session_uri = absl::string_view(string0_);
     last_message_ = TestMessageBase::MessageStructuredData(goaway);
   }
-  void OnParsingError(absl::string_view reason) override {
+  void OnParsingError(MoqtError code, absl::string_view reason) override {
     QUIC_LOG(INFO) << "Parsing error: " << reason;
     parsing_error_ = reason;
+    parsing_error_code_ = code;
   }
 
   std::optional<absl::string_view> object_payload_;
   bool end_of_message_ = false;
   bool got_goaway_ = false;
   std::optional<absl::string_view> parsing_error_;
+  MoqtError parsing_error_code_;
   uint64_t messages_received_ = 0;
   std::optional<TestMessageBase::MessageStructuredData> last_message_;
   // Stored strings for last_message_. The visitor API does not promise the
@@ -250,40 +242,7 @@ class MoqtParserTest
         parser_(GetParam().uses_web_transport, visitor_) {}
 
   std::unique_ptr<TestMessageBase> MakeMessage(MoqtMessageType message_type) {
-    switch (message_type) {
-      case MoqtMessageType::kObjectWithPayloadLength:
-        return std::make_unique<ObjectMessageWithLength>();
-      case MoqtMessageType::kObjectWithoutPayloadLength:
-        return std::make_unique<ObjectMessageWithoutLength>();
-      case MoqtMessageType::kClientSetup:
-        return std::make_unique<ClientSetupMessage>(webtrans_);
-      case MoqtMessageType::kServerSetup:
-        return std::make_unique<ClientSetupMessage>(webtrans_);
-      case MoqtMessageType::kSubscribeRequest:
-        return std::make_unique<SubscribeRequestMessage>();
-      case MoqtMessageType::kSubscribeOk:
-        return std::make_unique<SubscribeOkMessage>();
-      case MoqtMessageType::kSubscribeError:
-        return std::make_unique<SubscribeErrorMessage>();
-      case MoqtMessageType::kUnsubscribe:
-        return std::make_unique<UnsubscribeMessage>();
-      case MoqtMessageType::kSubscribeFin:
-        return std::make_unique<SubscribeFinMessage>();
-      case MoqtMessageType::kSubscribeRst:
-        return std::make_unique<SubscribeRstMessage>();
-      case MoqtMessageType::kAnnounce:
-        return std::make_unique<AnnounceMessage>();
-      case moqt::MoqtMessageType::kAnnounceOk:
-        return std::make_unique<AnnounceOkMessage>();
-      case moqt::MoqtMessageType::kAnnounceError:
-        return std::make_unique<AnnounceErrorMessage>();
-      case moqt::MoqtMessageType::kUnannounce:
-        return std::make_unique<UnannounceMessage>();
-      case moqt::MoqtMessageType::kGoAway:
-        return std::make_unique<GoAwayMessage>();
-      default:
-        return nullptr;
-    }
+    return CreateTestMessage(message_type, webtrans_);
   }
 
   MoqtParserTestVisitor visitor_;
@@ -329,6 +288,10 @@ TEST_P(MoqtParserTest, TwoPartMessage) {
   // so splitting the message in half will prevent the first half from being
   // processed.
   size_t first_data_size = message->total_message_size() / 2;
+  if (message_type_ == MoqtMessageType::kStreamHeaderTrack) {
+    // The boundary happens to fall right after the stream header, so move it.
+    ++first_data_size;
+  }
   parser_.ProcessData(message->PacketSample().substr(0, first_data_size),
                       false);
   EXPECT_EQ(visitor_.messages_received_, 0);
@@ -357,7 +320,7 @@ TEST_P(MoqtParserTest, OneByteAtATime) {
   }
   EXPECT_EQ(visitor_.messages_received_,
             (IsObjectMessage(message_type_) ? (kObjectPayloadSize + 1) : 1));
-  if (message_type_ == MoqtMessageType::kObjectWithoutPayloadLength) {
+  if (IsObjectWithoutPayloadLength(message_type_)) {
     EXPECT_FALSE(visitor_.end_of_message_);
     parser_.ProcessData(absl::string_view(), true);  // Needs the FIN
     EXPECT_EQ(visitor_.messages_received_, kObjectPayloadSize + 2);
@@ -380,7 +343,7 @@ TEST_P(MoqtParserTest, OneByteAtATimeLongerVarints) {
   }
   EXPECT_EQ(visitor_.messages_received_,
             (IsObjectMessage(message_type_) ? (kObjectPayloadSize + 1) : 1));
-  if (message_type_ == MoqtMessageType::kObjectWithoutPayloadLength) {
+  if (IsObjectWithoutPayloadLength(message_type_)) {
     EXPECT_FALSE(visitor_.end_of_message_);
     parser_.ProcessData(absl::string_view(), true);  // Needs the FIN
     EXPECT_EQ(visitor_.messages_received_, kObjectPayloadSize + 2);
@@ -392,9 +355,12 @@ TEST_P(MoqtParserTest, OneByteAtATimeLongerVarints) {
 
 TEST_P(MoqtParserTest, EarlyFin) {
   std::unique_ptr<TestMessageBase> message = MakeMessage(message_type_);
-  parser_.ProcessData(
-      message->PacketSample().substr(0, message->total_message_size() / 2),
-      true);
+  size_t first_data_size = message->total_message_size() / 2;
+  if (message_type_ == MoqtMessageType::kStreamHeaderTrack) {
+    // The boundary happens to fall right after the stream header, so move it.
+    ++first_data_size;
+  }
+  parser_.ProcessData(message->PacketSample().substr(0, first_data_size), true);
   EXPECT_EQ(visitor_.messages_received_, 0);
   EXPECT_TRUE(visitor_.parsing_error_.has_value());
   EXPECT_EQ(*visitor_.parsing_error_, "FIN after incomplete message");
@@ -402,13 +368,18 @@ TEST_P(MoqtParserTest, EarlyFin) {
 
 TEST_P(MoqtParserTest, SeparateEarlyFin) {
   std::unique_ptr<TestMessageBase> message = MakeMessage(message_type_);
-  parser_.ProcessData(
-      message->PacketSample().substr(0, message->total_message_size() / 2),
-      false);
+  size_t first_data_size = message->total_message_size() / 2;
+  if (message_type_ == MoqtMessageType::kStreamHeaderTrack) {
+    // The boundary happens to fall right after the stream header, so move it.
+    ++first_data_size;
+  }
+  parser_.ProcessData(message->PacketSample().substr(0, first_data_size),
+                      false);
   parser_.ProcessData(absl::string_view(), true);
   EXPECT_EQ(visitor_.messages_received_, 0);
   EXPECT_TRUE(visitor_.parsing_error_.has_value());
   EXPECT_EQ(*visitor_.parsing_error_, "End of stream before complete message");
+  EXPECT_EQ(visitor_.parsing_error_code_, MoqtError::kProtocolViolation);
 }
 
 // Tests for message-specific error cases, and behaviors for a single message
@@ -423,11 +394,32 @@ class MoqtMessageSpecificTest : public quic::test::QuicTest {
   static constexpr bool kRawQuic = false;
 };
 
-TEST_F(MoqtMessageSpecificTest, ObjectNoLengthSeparateFin) {
+TEST_F(MoqtMessageSpecificTest, ObjectStreamSeparateFin) {
   // OBJECT can return on an unknown-length message even without receiving a
   // FIN.
   MoqtParser parser(kRawQuic, visitor_);
-  auto message = std::make_unique<ObjectMessageWithoutLength>();
+  auto message = std::make_unique<ObjectStreamMessage>();
+  parser.ProcessData(message->PacketSample(), false);
+  EXPECT_EQ(visitor_.messages_received_, 1);
+  EXPECT_TRUE(message->EqualFieldValues(*visitor_.last_message_));
+  EXPECT_TRUE(visitor_.object_payload_.has_value());
+  EXPECT_EQ(*(visitor_.object_payload_), "foo");
+  EXPECT_FALSE(visitor_.end_of_message_);
+
+  parser.ProcessData(absl::string_view(), true);  // send the FIN
+  EXPECT_EQ(visitor_.messages_received_, 2);
+  EXPECT_TRUE(message->EqualFieldValues(*visitor_.last_message_));
+  EXPECT_TRUE(visitor_.object_payload_.has_value());
+  EXPECT_EQ(*(visitor_.object_payload_), "");
+  EXPECT_TRUE(visitor_.end_of_message_);
+  EXPECT_FALSE(visitor_.parsing_error_.has_value());
+}
+
+TEST_F(MoqtMessageSpecificTest, ObjectPreferDatagramSeparateFin) {
+  // OBJECT can return on an unknown-length message even without receiving a
+  // FIN.
+  MoqtParser parser(kRawQuic, visitor_);
+  auto message = std::make_unique<ObjectPreferDatagramMessage>();
   parser.ProcessData(message->PacketSample(), false);
   EXPECT_EQ(visitor_.messages_received_, 1);
   EXPECT_TRUE(message->EqualFieldValues(*visitor_.last_message_));
@@ -448,7 +440,7 @@ TEST_F(MoqtMessageSpecificTest, ObjectNoLengthSeparateFin) {
 // message.
 TEST_F(MoqtMessageSpecificTest, ThreePartObject) {
   MoqtParser parser(kRawQuic, visitor_);
-  auto message = std::make_unique<ObjectMessageWithoutLength>();
+  auto message = std::make_unique<ObjectStreamMessage>();
   parser.ProcessData(message->PacketSample(), false);
   EXPECT_EQ(visitor_.messages_received_, 1);
   EXPECT_TRUE(message->EqualFieldValues(*visitor_.last_message_));
@@ -477,7 +469,7 @@ TEST_F(MoqtMessageSpecificTest, ThreePartObject) {
 // Send the part of header, rest of header + payload, plus payload.
 TEST_F(MoqtMessageSpecificTest, ThreePartObjectFirstIncomplete) {
   MoqtParser parser(kRawQuic, visitor_);
-  auto message = std::make_unique<ObjectMessageWithoutLength>();
+  auto message = std::make_unique<ObjectStreamMessage>();
 
   // first part
   parser.ProcessData(message->PacketSample().substr(0, 4), false);
@@ -492,12 +484,56 @@ TEST_F(MoqtMessageSpecificTest, ThreePartObjectFirstIncomplete) {
   EXPECT_TRUE(message->EqualFieldValues(*visitor_.last_message_));
   EXPECT_FALSE(visitor_.end_of_message_);
   EXPECT_TRUE(visitor_.object_payload_.has_value());
-  EXPECT_EQ(visitor_.object_payload_->length(), 95);
+  EXPECT_EQ(visitor_.object_payload_->length(), 94);
 
   // third part includes FIN
   parser.ProcessData("bar", true);
   EXPECT_EQ(visitor_.messages_received_, 2);
   EXPECT_TRUE(message->EqualFieldValues(*visitor_.last_message_));
+  EXPECT_TRUE(visitor_.end_of_message_);
+  EXPECT_TRUE(visitor_.object_payload_.has_value());
+  EXPECT_EQ(*(visitor_.object_payload_), "bar");
+  EXPECT_FALSE(visitor_.parsing_error_.has_value());
+}
+
+TEST_F(MoqtMessageSpecificTest, StreamHeaderGroupFollowOn) {
+  MoqtParser parser(kRawQuic, visitor_);
+  // first part
+  auto message1 = std::make_unique<StreamHeaderGroupMessage>();
+  parser.ProcessData(message1->PacketSample(), false);
+  EXPECT_EQ(visitor_.messages_received_, 1);
+  EXPECT_TRUE(message1->EqualFieldValues(*visitor_.last_message_));
+  EXPECT_TRUE(visitor_.end_of_message_);
+  EXPECT_TRUE(visitor_.object_payload_.has_value());
+  EXPECT_EQ(*(visitor_.object_payload_), "foo");
+  EXPECT_FALSE(visitor_.parsing_error_.has_value());
+  // second part
+  auto message2 = std::make_unique<StreamMiddlerGroupMessage>();
+  parser.ProcessData(message2->PacketSample(), false);
+  EXPECT_EQ(visitor_.messages_received_, 2);
+  EXPECT_TRUE(message2->EqualFieldValues(*visitor_.last_message_));
+  EXPECT_TRUE(visitor_.end_of_message_);
+  EXPECT_TRUE(visitor_.object_payload_.has_value());
+  EXPECT_EQ(*(visitor_.object_payload_), "bar");
+  EXPECT_FALSE(visitor_.parsing_error_.has_value());
+}
+
+TEST_F(MoqtMessageSpecificTest, StreamHeaderTrackFollowOn) {
+  MoqtParser parser(kRawQuic, visitor_);
+  // first part
+  auto message1 = std::make_unique<StreamHeaderTrackMessage>();
+  parser.ProcessData(message1->PacketSample(), false);
+  EXPECT_EQ(visitor_.messages_received_, 1);
+  EXPECT_TRUE(message1->EqualFieldValues(*visitor_.last_message_));
+  EXPECT_TRUE(visitor_.end_of_message_);
+  EXPECT_TRUE(visitor_.object_payload_.has_value());
+  EXPECT_EQ(*(visitor_.object_payload_), "foo");
+  EXPECT_FALSE(visitor_.parsing_error_.has_value());
+  // second part
+  auto message2 = std::make_unique<StreamMiddlerTrackMessage>();
+  parser.ProcessData(message2->PacketSample(), false);
+  EXPECT_EQ(visitor_.messages_received_, 2);
+  EXPECT_TRUE(message2->EqualFieldValues(*visitor_.last_message_));
   EXPECT_TRUE(visitor_.end_of_message_);
   EXPECT_TRUE(visitor_.object_payload_.has_value());
   EXPECT_EQ(*(visitor_.object_payload_), "bar");
@@ -517,6 +553,7 @@ TEST_F(MoqtMessageSpecificTest, SetupRoleAppearsTwice) {
   EXPECT_EQ(visitor_.messages_received_, 0);
   EXPECT_TRUE(visitor_.parsing_error_.has_value());
   EXPECT_EQ(*visitor_.parsing_error_, "ROLE parameter appears twice in SETUP");
+  EXPECT_EQ(visitor_.parsing_error_code_, MoqtError::kProtocolViolation);
 }
 
 TEST_F(MoqtMessageSpecificTest, SetupRoleIsMissing) {
@@ -531,6 +568,25 @@ TEST_F(MoqtMessageSpecificTest, SetupRoleIsMissing) {
   EXPECT_TRUE(visitor_.parsing_error_.has_value());
   EXPECT_EQ(*visitor_.parsing_error_,
             "ROLE parameter missing from CLIENT_SETUP message");
+  EXPECT_EQ(visitor_.parsing_error_code_, MoqtError::kProtocolViolation);
+}
+
+TEST_F(MoqtMessageSpecificTest, SetupRoleVarintLengthIsWrong) {
+  MoqtParser parser(kRawQuic, visitor_);
+  char setup[] = {
+      0x40, 0x40,                   // type
+      0x02, 0x01, 0x02,             // versions
+      0x02,                         // 2 parameters
+      0x00, 0x02, 0x03,             // role = both, but length is 2
+      0x01, 0x03, 0x66, 0x6f, 0x6f  // path = "foo"
+  };
+  parser.ProcessData(absl::string_view(setup, sizeof(setup)), false);
+  EXPECT_EQ(visitor_.messages_received_, 0);
+  EXPECT_TRUE(visitor_.parsing_error_.has_value());
+  EXPECT_EQ(*visitor_.parsing_error_,
+            "Parameter length does not match varint encoding");
+
+  EXPECT_EQ(visitor_.parsing_error_code_, MoqtError::kParameterLengthMismatch);
 }
 
 TEST_F(MoqtMessageSpecificTest, SetupPathFromServer) {
@@ -545,6 +601,7 @@ TEST_F(MoqtMessageSpecificTest, SetupPathFromServer) {
   EXPECT_EQ(visitor_.messages_received_, 0);
   EXPECT_TRUE(visitor_.parsing_error_.has_value());
   EXPECT_EQ(*visitor_.parsing_error_, "PATH parameter in SERVER_SETUP");
+  EXPECT_EQ(visitor_.parsing_error_code_, MoqtError::kProtocolViolation);
 }
 
 TEST_F(MoqtMessageSpecificTest, SetupPathAppearsTwice) {
@@ -561,6 +618,7 @@ TEST_F(MoqtMessageSpecificTest, SetupPathAppearsTwice) {
   EXPECT_TRUE(visitor_.parsing_error_.has_value());
   EXPECT_EQ(*visitor_.parsing_error_,
             "PATH parameter appears twice in CLIENT_SETUP");
+  EXPECT_EQ(visitor_.parsing_error_code_, MoqtError::kProtocolViolation);
 }
 
 TEST_F(MoqtMessageSpecificTest, SetupPathOverWebtrans) {
@@ -576,6 +634,7 @@ TEST_F(MoqtMessageSpecificTest, SetupPathOverWebtrans) {
   EXPECT_TRUE(visitor_.parsing_error_.has_value());
   EXPECT_EQ(*visitor_.parsing_error_,
             "WebTransport connection is using PATH parameter in SETUP");
+  EXPECT_EQ(visitor_.parsing_error_code_, MoqtError::kProtocolViolation);
 }
 
 TEST_F(MoqtMessageSpecificTest, SetupPathMissing) {
@@ -590,13 +649,14 @@ TEST_F(MoqtMessageSpecificTest, SetupPathMissing) {
   EXPECT_TRUE(visitor_.parsing_error_.has_value());
   EXPECT_EQ(*visitor_.parsing_error_,
             "PATH SETUP parameter missing from Client message over QUIC");
+  EXPECT_EQ(visitor_.parsing_error_code_, MoqtError::kProtocolViolation);
 }
 
-TEST_F(MoqtMessageSpecificTest, SubscribeRequestAuthorizationInfoTwice) {
+TEST_F(MoqtMessageSpecificTest, SubscribeAuthorizationInfoTwice) {
   MoqtParser parser(kWebTrans, visitor_);
-  char subscribe_request[] = {
-      0x03, 0x03, 0x66, 0x6f, 0x6f,  // track_namespace = "foo"
-      0x04, 0x61, 0x62, 0x63, 0x64,  // track_name = "abcd"
+  char subscribe[] = {
+      0x03, 0x01, 0x02, 0x03, 0x66, 0x6f, 0x6f,  // track_namespace = "foo"
+      0x04, 0x61, 0x62, 0x63, 0x64,              // track_name = "abcd"
       0x02, 0x04,                    // start_group = 4 (relative previous)
       0x01, 0x01,                    // start_object = 1 (absolute)
       0x00,                          // end_group = none
@@ -605,12 +665,12 @@ TEST_F(MoqtMessageSpecificTest, SubscribeRequestAuthorizationInfoTwice) {
       0x02, 0x03, 0x62, 0x61, 0x72,  // authorization_info = "bar"
       0x02, 0x03, 0x62, 0x61, 0x72,  // authorization_info = "bar"
   };
-  parser.ProcessData(
-      absl::string_view(subscribe_request, sizeof(subscribe_request)), false);
+  parser.ProcessData(absl::string_view(subscribe, sizeof(subscribe)), false);
   EXPECT_EQ(visitor_.messages_received_, 0);
   EXPECT_TRUE(visitor_.parsing_error_.has_value());
   EXPECT_EQ(*visitor_.parsing_error_,
             "AUTHORIZATION_INFO parameter appears twice in SUBSCRIBE_REQUEST");
+  EXPECT_EQ(visitor_.parsing_error_code_, MoqtError::kProtocolViolation);
 }
 
 TEST_F(MoqtMessageSpecificTest, AnnounceAuthorizationInfoTwice) {
@@ -626,22 +686,24 @@ TEST_F(MoqtMessageSpecificTest, AnnounceAuthorizationInfoTwice) {
   EXPECT_TRUE(visitor_.parsing_error_.has_value());
   EXPECT_EQ(*visitor_.parsing_error_,
             "AUTHORIZATION_INFO parameter appears twice in ANNOUNCE");
+  EXPECT_EQ(visitor_.parsing_error_code_, MoqtError::kProtocolViolation);
 }
 
 TEST_F(MoqtMessageSpecificTest, FinMidPayload) {
   MoqtParser parser(kRawQuic, visitor_);
-  auto message = std::make_unique<ObjectMessageWithLength>();
+  auto message = std::make_unique<StreamHeaderGroupMessage>();
   parser.ProcessData(
       message->PacketSample().substr(0, message->total_message_size() - 1),
       true);
-  EXPECT_EQ(visitor_.messages_received_, 1);
+  EXPECT_EQ(visitor_.messages_received_, 0);
   EXPECT_TRUE(visitor_.parsing_error_.has_value());
   EXPECT_EQ(*visitor_.parsing_error_, "Received FIN mid-payload");
+  EXPECT_EQ(visitor_.parsing_error_code_, MoqtError::kProtocolViolation);
 }
 
 TEST_F(MoqtMessageSpecificTest, PartialPayloadThenFin) {
   MoqtParser parser(kRawQuic, visitor_);
-  auto message = std::make_unique<ObjectMessageWithLength>();
+  auto message = std::make_unique<StreamHeaderTrackMessage>();
   parser.ProcessData(
       message->PacketSample().substr(0, message->total_message_size() - 1),
       false);
@@ -650,6 +712,7 @@ TEST_F(MoqtMessageSpecificTest, PartialPayloadThenFin) {
   EXPECT_TRUE(visitor_.parsing_error_.has_value());
   EXPECT_EQ(*visitor_.parsing_error_,
             "End of stream before complete OBJECT PAYLOAD");
+  EXPECT_EQ(visitor_.parsing_error_code_, MoqtError::kProtocolViolation);
 }
 
 TEST_F(MoqtMessageSpecificTest, DataAfterFin) {
@@ -658,6 +721,7 @@ TEST_F(MoqtMessageSpecificTest, DataAfterFin) {
   parser.ProcessData("foo", false);
   EXPECT_TRUE(visitor_.parsing_error_.has_value());
   EXPECT_EQ(*visitor_.parsing_error_, "Data after end of stream");
+  EXPECT_EQ(visitor_.parsing_error_code_, MoqtError::kProtocolViolation);
 }
 
 TEST_F(MoqtMessageSpecificTest, Setup2KB) {
@@ -676,6 +740,7 @@ TEST_F(MoqtMessageSpecificTest, Setup2KB) {
   EXPECT_EQ(visitor_.messages_received_, 0);
   EXPECT_TRUE(visitor_.parsing_error_.has_value());
   EXPECT_EQ(*visitor_.parsing_error_, "Cannot parse non-OBJECT messages > 2KB");
+  EXPECT_EQ(visitor_.parsing_error_code_, MoqtError::kGenericError);
 }
 
 TEST_F(MoqtMessageSpecificTest, UnknownMessageType) {
@@ -691,8 +756,9 @@ TEST_F(MoqtMessageSpecificTest, UnknownMessageType) {
 
 TEST_F(MoqtMessageSpecificTest, StartGroupIsNone) {
   MoqtParser parser(kRawQuic, visitor_);
-  char subscribe_request[] = {
-      0x03, 0x03, 0x66, 0x6f, 0x6f,  // track_name = "foo"
+  char subscribe[] = {
+      0x03, 0x01, 0x02,              // id and alias
+      0x03, 0x66, 0x6f, 0x6f,        // track_namespace = "foo"
       0x04, 0x61, 0x62, 0x63, 0x64,  // track_name = "abcd"
       0x00,                          // start_group = none
       0x01, 0x01,                    // start_object = 1 (absolute)
@@ -701,18 +767,18 @@ TEST_F(MoqtMessageSpecificTest, StartGroupIsNone) {
       0x01,                          // 1 parameter
       0x02, 0x03, 0x62, 0x61, 0x72,  // authorization_info = "bar"
   };
-  parser.ProcessData(
-      absl::string_view(subscribe_request, sizeof(subscribe_request)), false);
+  parser.ProcessData(absl::string_view(subscribe, sizeof(subscribe)), false);
   EXPECT_EQ(visitor_.messages_received_, 0);
   EXPECT_TRUE(visitor_.parsing_error_.has_value());
   EXPECT_EQ(*visitor_.parsing_error_,
-            "START_GROUP must not be None in SUBSCRIBE_REQUEST");
+            "START_GROUP must not be None in SUBSCRIBE");
 }
 
 TEST_F(MoqtMessageSpecificTest, StartObjectIsNone) {
   MoqtParser parser(kRawQuic, visitor_);
-  char subscribe_request[] = {
-      0x03, 0x03, 0x66, 0x6f, 0x6f,  // track_name = "foo"
+  char subscribe[] = {
+      0x03, 0x01, 0x02,              // id and alias
+      0x03, 0x66, 0x6f, 0x6f,        // track_namespace = "foo"
       0x04, 0x61, 0x62, 0x63, 0x64,  // track_name = "abcd"
       0x02, 0x04,                    // start_group = 4 (relative previous)
       0x00,                          // start_object = none
@@ -721,18 +787,18 @@ TEST_F(MoqtMessageSpecificTest, StartObjectIsNone) {
       0x01,                          // 1 parameter
       0x02, 0x03, 0x62, 0x61, 0x72,  // authorization_info = "bar"
   };
-  parser.ProcessData(
-      absl::string_view(subscribe_request, sizeof(subscribe_request)), false);
+  parser.ProcessData(absl::string_view(subscribe, sizeof(subscribe)), false);
   EXPECT_EQ(visitor_.messages_received_, 0);
   EXPECT_TRUE(visitor_.parsing_error_.has_value());
   EXPECT_EQ(*visitor_.parsing_error_,
-            "START_OBJECT must not be None in SUBSCRIBE_REQUEST");
+            "START_OBJECT must not be None in SUBSCRIBE");
 }
 
 TEST_F(MoqtMessageSpecificTest, EndGroupIsNoneEndObjectIsNoNone) {
   MoqtParser parser(kRawQuic, visitor_);
-  char subscribe_request[] = {
-      0x03, 0x03, 0x66, 0x6f, 0x6f,  // track_name = "foo"
+  char subscribe[] = {
+      0x03, 0x01, 0x02,              // id and alias
+      0x03, 0x66, 0x6f, 0x6f,        // track_namespace = "foo"
       0x04, 0x61, 0x62, 0x63, 0x64,  // track_name = "abcd"
       0x02, 0x04,                    // start_group = 4 (relative previous)
       0x01, 0x01,                    // start_object = 1 (absolute)
@@ -741,12 +807,11 @@ TEST_F(MoqtMessageSpecificTest, EndGroupIsNoneEndObjectIsNoNone) {
       0x01,                          // 1 parameter
       0x02, 0x03, 0x62, 0x61, 0x72,  // authorization_info = "bar"
   };
-  parser.ProcessData(
-      absl::string_view(subscribe_request, sizeof(subscribe_request)), false);
+  parser.ProcessData(absl::string_view(subscribe, sizeof(subscribe)), false);
   EXPECT_EQ(visitor_.messages_received_, 0);
   EXPECT_TRUE(visitor_.parsing_error_.has_value());
   EXPECT_EQ(*visitor_.parsing_error_,
-            "SUBSCRIBE_REQUEST end_group and end_object must be both None "
+            "SUBSCRIBE end_group and end_object must be both None "
             "or both non_None");
 }
 
@@ -760,59 +825,11 @@ TEST_F(MoqtMessageSpecificTest, AllMessagesTogether) {
   for (MoqtMessageType type : message_types) {
     // Each iteration, process from the halfway point of one message to the
     // halfway point of the next.
-    if (type == MoqtMessageType::kObjectWithoutPayloadLength) {
-      continue;  // Cannot be followed with another message.
+    if (IsObjectMessage(type)) {
+      continue;  // Objects cannot share a stream with other meessages.
     }
-    std::unique_ptr<TestMessageBase> message;
-    switch (type) {
-      case MoqtMessageType::kObjectWithPayloadLength:
-        message = std::make_unique<ObjectMessageWithLength>();
-        break;
-      case MoqtMessageType::kObjectWithoutPayloadLength:
-        continue;  // Cannot be followed with another message;
-      case MoqtMessageType::kClientSetup:
-        message = std::make_unique<ClientSetupMessage>(kRawQuic);
-        break;
-      case MoqtMessageType::kServerSetup:
-        message = std::make_unique<ClientSetupMessage>(kRawQuic);
-        break;
-      case MoqtMessageType::kSubscribeRequest:
-        message = std::make_unique<SubscribeRequestMessage>();
-        break;
-      case MoqtMessageType::kSubscribeOk:
-        message = std::make_unique<SubscribeOkMessage>();
-        break;
-      case MoqtMessageType::kSubscribeError:
-        message = std::make_unique<SubscribeErrorMessage>();
-        break;
-      case MoqtMessageType::kUnsubscribe:
-        message = std::make_unique<UnsubscribeMessage>();
-        break;
-      case MoqtMessageType::kSubscribeFin:
-        message = std::make_unique<SubscribeFinMessage>();
-        break;
-      case MoqtMessageType::kSubscribeRst:
-        message = std::make_unique<SubscribeRstMessage>();
-        break;
-      case MoqtMessageType::kAnnounce:
-        message = std::make_unique<AnnounceMessage>();
-        break;
-      case moqt::MoqtMessageType::kAnnounceOk:
-        message = std::make_unique<AnnounceOkMessage>();
-        break;
-      case moqt::MoqtMessageType::kAnnounceError:
-        message = std::make_unique<AnnounceErrorMessage>();
-        break;
-      case moqt::MoqtMessageType::kUnannounce:
-        message = std::make_unique<UnannounceMessage>();
-        break;
-      case moqt::MoqtMessageType::kGoAway:
-        message = std::make_unique<GoAwayMessage>();
-        break;
-      default:
-        message = nullptr;
-        break;
-    }
+    std::unique_ptr<TestMessageBase> message =
+        CreateTestMessage(type, kRawQuic);
     memcpy(buffer + write, message->PacketSample().data(),
            message->total_message_size());
     size_t new_read = write + message->total_message_size() / 2;
@@ -832,6 +849,31 @@ TEST_F(MoqtMessageSpecificTest, AllMessagesTogether) {
   EXPECT_EQ(visitor_.messages_received_, fully_received);
   EXPECT_TRUE(prev_message->EqualFieldValues(*visitor_.last_message_));
   EXPECT_FALSE(visitor_.parsing_error_.has_value());
+}
+
+TEST_F(MoqtMessageSpecificTest, RelativeLocation) {
+  MoqtParser parser(kRawQuic, visitor_);
+  char subscribe[] = {
+      0x03, 0x01, 0x02,              // id and alias
+      0x03, 0x66, 0x6f, 0x6f,        // track_namespace = "foo"
+      0x04, 0x61, 0x62, 0x63, 0x64,  // track_name = "abcd"
+      0x02, 0x00,                    // start_group = 0 (relative previous)
+      0x03, 0x00,                    // start_object = 1 (relative next)
+      0x00,                          // end_group = none
+      0x00,                          // end_object = none
+      0x01,                          // 1 parameter
+      0x02, 0x03, 0x62, 0x61, 0x72,  // authorization_info = "bar"
+  };
+  parser.ProcessData(absl::string_view(subscribe, sizeof(subscribe)), false);
+  EXPECT_EQ(visitor_.messages_received_, 1);
+  MoqtSubscribe message = std::get<MoqtSubscribe>(*visitor_.last_message_);
+  EXPECT_FALSE(visitor_.parsing_error_.has_value());
+  ASSERT_TRUE(message.start_group.has_value());
+  ASSERT_FALSE(message.start_group->absolute);
+  EXPECT_EQ(message.start_group->relative_value, 0);
+  ASSERT_TRUE(message.start_object.has_value());
+  ASSERT_FALSE(message.start_object->absolute);
+  EXPECT_EQ(message.start_object->relative_value, 1);
 }
 
 }  // namespace moqt::test

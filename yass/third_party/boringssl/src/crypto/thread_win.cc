@@ -36,7 +36,7 @@ OPENSSL_MSVC_PRAGMA(warning(pop))
 
 #ifdef HAVE_LIBCXX
 
-#include <__threading_support>
+#include <__thread/support.h>
 
 #ifndef _LIBCPP_HAS_THREAD_API_WIN32
 #error "libc++'s Win32 API must be defined"

@@ -48,7 +48,7 @@
 ^third_party/googletest/BUILD.gn
 ^third_party/googletest/src/googletest/include/gtest/gtest_prod.h
 ^third_party/icu/config.gni
-^third_party/jni_zero/jni_zero.gni
+^third_party/jni_zero
 ^third_party/libc++
 ^third_party/libc++abi
 ^third_party/libevent

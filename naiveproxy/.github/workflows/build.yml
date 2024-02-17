@@ -20,7 +20,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Cache toolchains (Linux, OpenWrt, Android)
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: |
             src/third_party/llvm-build/Release+Asserts/
@@ -28,17 +28,17 @@ jobs:
             src/qemu-user-static*.deb
           key: toolchains-posix-${{ hashFiles('CHROMIUM_VERSION') }}-v${{ env.CACHE_EPOCH }}
       - name: Cache PGO (Linux, OpenWrt)
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: src/chrome/build/pgo_profiles/
           key: pgo-linux-openwrt-${{ hashFiles('CHROMIUM_VERSION') }}-v${{ env.CACHE_EPOCH }}
       - name: Cache AFDO (Android)
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: src/chrome/android/profiles/
           key: afdo-${{ hashFiles('CHROMIUM_VERSION') }}-v${{ env.CACHE_EPOCH }}
       - name: Cache Android NDK (Android)
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: src/third_party/android_toolchain/ndk/
           key: android-ndk-${{ hashFiles('CHROMIUM_VERSION') }}-v${{ env.CACHE_EPOCH }}
@@ -53,7 +53,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Cache toolchains
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: |
             src/third_party/llvm-build/Release+Asserts/
@@ -62,12 +62,12 @@ jobs:
             ~/bin/ninja.exe
           key: toolchains-win-${{ hashFiles('CHROMIUM_VERSION') }}-v${{ env.CACHE_EPOCH }}
       - name: Cache PGO (win64)
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: src/chrome/build/pgo_profiles/chrome-win64-*
           key: pgo-win64-${{ hashFiles('CHROMIUM_VERSION') }}-v${{ env.CACHE_EPOCH }}
       - name: Cache PGO (win32)
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: src/chrome/build/pgo_profiles/chrome-win32-*
           key: pgo-win32-arm64-${{ hashFiles('CHROMIUM_VERSION') }}-v${{ env.CACHE_EPOCH }}
@@ -82,7 +82,7 @@ jobs:
     runs-on: macos-11
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/cache@v3
+      - uses: actions/cache@v4
         with:
           path: |
             src/third_party/llvm-build/Release+Asserts/
@@ -104,7 +104,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Cache toolchains (Linux, OpenWrt, Android)
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: |
             src/third_party/llvm-build/Release+Asserts/
@@ -112,7 +112,7 @@ jobs:
             src/qemu-user-static*.deb
           key: toolchains-posix-${{ hashFiles('CHROMIUM_VERSION') }}-v${{ env.CACHE_EPOCH }}
       - name: Cache PGO (Linux, OpenWrt)
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: src/chrome/build/pgo_profiles/
           key: pgo-linux-openwrt-${{ hashFiles('CHROMIUM_VERSION') }}-v${{ env.CACHE_EPOCH }}
@@ -121,14 +121,14 @@ jobs:
           rm -f ./build/linux/sysroot_scripts/keyring.gpg
           GPG_TTY=/dev/null ./build/linux/sysroot_scripts/generate_keyring.sh
       - name: Cache sysroot
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: src/out/sysroot-build/bullseye/bullseye_*
           key: sysroot-linux-${{ matrix.arch }}-${{ hashFiles('CHROMIUM_VERSION') }}-v${{ env.CACHE_EPOCH }}
       - id: ccache-timestamp
         run: echo "CCACHE_TIMESTAMP=$(date +%s)" >>$GITHUB_OUTPUT
       - name: Cache ccache files
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: ~/.ccache
           key: ccache-linux-${{ matrix.arch }}-${{ hashFiles('CHROMIUM_VERSION') }}-${{ steps.ccache-timestamp.outputs.CCACHE_TIMESTAMP }}
@@ -153,7 +153,7 @@ jobs:
           tar cJf ${{ env.BUNDLE }}.tar.xz ${{ env.BUNDLE }}
           openssl sha256 out/Release/naive >sha256sum.txt
           echo "SHA256SUM=$(cut -d' ' -f2 sha256sum.txt)" >>$GITHUB_ENV
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
           name: ${{ env.BUNDLE }}.tar.xz naive executable sha256 ${{ env.SHA256SUM }}
           path: src/sha256sum.txt
@@ -183,7 +183,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Cache toolchains (Linux, OpenWrt, Android)
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: |
             src/third_party/llvm-build/Release+Asserts/
@@ -191,24 +191,24 @@ jobs:
             src/qemu-user-static*.deb
           key: toolchains-posix-${{ hashFiles('CHROMIUM_VERSION') }}-v${{ env.CACHE_EPOCH }}
       - name: Cache AFDO (Android)
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: src/chrome/android/profiles/
           key: afdo-${{ hashFiles('CHROMIUM_VERSION') }}-v${{ env.CACHE_EPOCH }}
       - name: Cache Android NDK (Android)
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: src/third_party/android_toolchain/ndk/
           key: android-ndk-${{ hashFiles('CHROMIUM_VERSION') }}-v${{ env.CACHE_EPOCH }}
       - name: Cache sysroot
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: src/out/sysroot-build/android/
           key: sysroot-android-${{ matrix.arch }}-${{ hashFiles('CHROMIUM_VERSION') }}-v${{ env.CACHE_EPOCH }}
       - id: ccache-timestamp
         run: echo "CCACHE_TIMESTAMP=$(date +%s)" >>$GITHUB_OUTPUT
       - name: Cache ccache files
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: ~/.ccache
           key: ccache-android-${{ matrix.arch }}-${{ hashFiles('CHROMIUM_VERSION') }}-${{ steps.ccache-timestamp.outputs.CCACHE_TIMESTAMP }}
@@ -228,7 +228,7 @@ jobs:
       - run: ./get-android-sys.sh
       - run: ../tests/basic.sh out/Release/naive
       - name: Gradle cache
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: ~/.gradle
           key: gradle-${{ hashFiles('**/*.gradle.kts') }}
@@ -244,7 +244,7 @@ jobs:
           ./gradlew :app:assembleRelease
           openssl sha256 app/build/outputs/apk/release/${{ env.BUNDLE }} >sha256sum.txt
           echo "SHA256SUM=$(cut -d' ' -f2 sha256sum.txt)" >>$GITHUB_ENV
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
           name: ${{ env.BUNDLE }} sha256 ${{ env.SHA256SUM }}
           path: apk/sha256sum.txt
@@ -267,7 +267,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Cache toolchains
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: |
             src/third_party/llvm-build/Release+Asserts/
@@ -277,20 +277,20 @@ jobs:
           key: toolchains-win-${{ hashFiles('CHROMIUM_VERSION') }}-v${{ env.CACHE_EPOCH }}
       - name: Cache PGO (win64)
         if: ${{ matrix.arch == 'x64' }}
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: src/chrome/build/pgo_profiles/chrome-win64-*
           key: pgo-win64-${{ hashFiles('CHROMIUM_VERSION') }}-v${{ env.CACHE_EPOCH }}
       - name: Cache PGO (win32)
         if: ${{ matrix.arch != 'x64' }}
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: src/chrome/build/pgo_profiles/chrome-win32-*
           key: pgo-win32-arm64-${{ hashFiles('CHROMIUM_VERSION') }}-v${{ env.CACHE_EPOCH }}
       - id: ccache-timestamp
         run: echo "CCACHE_TIMESTAMP=$(date +%s)" >>$GITHUB_OUTPUT
       - name: Cache ccache files
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: ~/AppData/Local/Mozilla/sccache
           key: ccache-win-${{ matrix.arch }}-${{ hashFiles('CHROMIUM_VERSION') }}-${{ steps.ccache-timestamp.outputs.CCACHE_TIMESTAMP }}
@@ -309,7 +309,7 @@ jobs:
           7z a ${{ env.BUNDLE }}.zip ${{ env.BUNDLE }}
           openssl sha256 out/Release/naive.exe >sha256sum.txt
           echo "SHA256SUM=$(cut -d' ' -f2 sha256sum.txt)" >>$GITHUB_ENV
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
           name: ${{ env.BUNDLE }}.zip naive executable sha256 ${{ env.SHA256SUM }}
           path: src/sha256sum.txt
@@ -331,7 +331,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Cache toolchains and PGO
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: |
             src/third_party/llvm-build/Release+Asserts/
@@ -341,7 +341,7 @@ jobs:
       - id: ccache-timestamp
         run: echo "CCACHE_TIMESTAMP=$(date +%s)" >>$GITHUB_OUTPUT
       - name: Cache ccache files
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: ~/Library/Caches/ccache
           key: ccache-mac-${{ matrix.arch }}-${{ hashFiles('CHROMIUM_VERSION') }}-${{ steps.ccache-timestamp.outputs.CCACHE_TIMESTAMP }}
@@ -362,7 +362,7 @@ jobs:
           tar cJf ${{ env.BUNDLE }}.tar.xz ${{ env.BUNDLE }}
           openssl sha256 out/Release/naive >sha256sum.txt
           echo "SHA256SUM=$(cut -d' ' -f2 sha256sum.txt)" >>$GITHUB_ENV
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
           name: ${{ env.BUNDLE }}.tar.xz naive executable sha256 ${{ env.SHA256SUM }}
           path: src/sha256sum.txt
@@ -384,7 +384,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Cache toolchains and PGO
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: |
             src/third_party/llvm-build/Release+Asserts/
@@ -394,7 +394,7 @@ jobs:
       - id: ccache-timestamp
         run: echo "CCACHE_TIMESTAMP=$(date +%s)" >>$GITHUB_OUTPUT
       - name: Cache ccache files
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: ~/Library/Caches/ccache
           key: ccache-ios-${{ matrix.arch }}-${{ hashFiles('CHROMIUM_VERSION') }}-${{ steps.ccache-timestamp.outputs.CCACHE_TIMESTAMP }}
@@ -523,7 +523,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Cache toolchains (Linux, OpenWrt, Android)
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: |
             src/third_party/llvm-build/Release+Asserts/
@@ -531,19 +531,19 @@ jobs:
             src/qemu-user-static*.deb
           key: toolchains-posix-${{ hashFiles('CHROMIUM_VERSION') }}-v${{ env.CACHE_EPOCH }}
       - name: Cache PGO (Linux, OpenWrt)
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: src/chrome/build/pgo_profiles/
           key: pgo-linux-openwrt-${{ hashFiles('CHROMIUM_VERSION') }}-v${{ env.CACHE_EPOCH }}
       - name: Cache sysroot
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: src/out/sysroot-build/openwrt
           key: sysroot-openwrt-23.05.0-${{ matrix.arch }}-v${{ env.CACHE_EPOCH }}
       - id: ccache-timestamp
         run: echo "CCACHE_TIMESTAMP=$(date +%s)" >>$GITHUB_OUTPUT
       - name: Cache ccache files
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: ~/.ccache
           key: ccache-openwrt-${{ matrix.arch }}-${{ hashFiles('CHROMIUM_VERSION') }}-${{ steps.ccache-timestamp.outputs.CCACHE_TIMESTAMP }}
@@ -568,7 +568,7 @@ jobs:
           tar cJf ${{ env.BUNDLE }}.tar.xz ${{ env.BUNDLE }}
           openssl sha256 out/Release/naive >sha256sum.txt
           echo "SHA256SUM=$(cut -d' ' -f2 sha256sum.txt)" >>$GITHUB_ENV
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
           name: ${{ env.BUNDLE }}.tar.xz naive executable sha256 ${{ env.SHA256SUM }}
           path: src/sha256sum.txt
