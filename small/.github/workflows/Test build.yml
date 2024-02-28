@@ -25,11 +25,11 @@ jobs:
           fetch-depth: 0
 
       - name: Build
-        uses: openwrt/gh-action-sdk@main
+        uses: kenzok8/gh-action-sdk@main
         env:
           ARCH: ${{ matrix.arch }}-${{ matrix.sdk }}
           FEEDNAME: packages_ci
-          PACKAGES: luci-app-passwall luci-app-passwall2 luci-app-ssr-plus naiveproxy tuic-client
+          PACKAGES: luci-app-passwall luci-app-ssr-plus
           NO_REFRESH_CHECK: true
 
       - name: Store packages
