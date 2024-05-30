@@ -5,9 +5,9 @@
   "module": "index.ts",
   "dependencies": {
     "@material/material-color-utilities": "0.2.7",
-    "@mui/icons-material": "5.15.18",
+    "@mui/icons-material": "5.15.19",
     "@mui/lab": "5.0.0-alpha.170",
-    "@mui/material": "5.15.18",
+    "@mui/material": "5.15.19",
     "@types/react": "18.3.3",
     "ahooks": "3.8.0",
     "framer-motion": "11.2.9",
@@ -16,7 +16,7 @@
     "react-i18next": "14.1.2"
   },
   "devDependencies": {
-    "sass": "1.77.2",
+    "sass": "1.77.3",
     "typescript-plugin-css-modules": "5.1.0"
   }
 }
