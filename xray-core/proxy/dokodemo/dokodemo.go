@@ -181,7 +181,7 @@ func (d *DokodemoDoor) Process(ctx context.Context, network net.Network, conn st
 				runtime.Gosched()
 				common.Interrupt(link.Reader) // maybe duplicated
 				runtime.Gosched()
-				writer.(*PacketWriter).Close()
+				writer.(*PacketWriter).Close() // close fake UDP conns
 			}()
 			/*
 				sockopt := &internet.SocketConfig{
@@ -222,7 +222,7 @@ func (d *DokodemoDoor) Process(ctx context.Context, network net.Network, conn st
 		defer timer.SetTimeout(plcy.Timeouts.UplinkOnly)
 
 		if network == net.Network_UDP && destinationOverridden {
-			buf.Copy(link.Reader, writer)
+			buf.Copy(link.Reader, writer) // respect upload's timeout
 			return nil
 		}
 
