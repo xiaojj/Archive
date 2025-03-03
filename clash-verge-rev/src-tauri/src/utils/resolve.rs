@@ -1,7 +1,9 @@
 use crate::config::IVerge;
 use crate::utils::error;
 use crate::{config::Config, config::PrfItem, core::*, utils::init, utils::server};
-use crate::{log_err, wrap_err, AppHandleManager};
+use crate::{log_err, wrap_err};
+#[cfg(target_os = "macos")]
+use crate::AppHandleManager;
 use anyhow::{bail, Result};
 use once_cell::sync::OnceCell;
 use percent_encoding::percent_decode_str;
@@ -75,14 +77,12 @@ pub async fn resolve_setup(app: &mut App) {
                         }
                     }
                     if !service_runing {
-                        log::error!(target: "app", "service not runing. exit");
-                        app.app_handle().exit(-2);
+                        log::warn!(target: "app", "service not running, will fallback to user mode");
                     }
                 }
             }
             Err(e) => {
-                log::error!(target: "app", "{e:?}");
-                app.app_handle().exit(-1);
+                log::warn!(target: "app", "failed to install service: {e:?}, will fallback to user mode");
             }
         }
     }
@@ -133,6 +133,7 @@ pub fn create_window() {
     log::info!(target: "app", "Starting to create window");
 
     let app_handle = handle::Handle::global().app_handle().unwrap();
+    #[cfg(target_os = "macos")]
     AppHandleManager::global().set_activation_policy_regular();
 
     if let Some(window) = handle::Handle::global().get_window() {

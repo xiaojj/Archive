@@ -4,13 +4,17 @@ mod core;
 mod enhance;
 mod feat;
 mod utils;
+mod model;
+mod module;
 use crate::core::hotkey;
 use crate::utils::{resolve, resolve::resolve_scheme, server};
 use config::Config;
 use tauri_plugin_autostart::MacosLauncher;
 use tauri_plugin_deep_link::DeepLinkExt;
 use std::sync::{Mutex, Once};
-use tauri::{AppHandle, Manager};
+use tauri::AppHandle;
+#[cfg(target_os = "macos")]
+use tauri::Manager;
 
 /// A global singleton handle to the application.
 pub struct AppHandleManager {
@@ -144,6 +148,9 @@ pub fn run() {
             cmd::get_network_interfaces,
             cmd::restart_core,
             cmd::restart_app,
+            // 添加新的命令
+            cmd::get_running_mode,
+            cmd::install_service,
             // clash
             cmd::get_clash_info,
             cmd::patch_clash_config,
@@ -155,6 +162,8 @@ pub fn run() {
             cmd::get_runtime_logs,
             cmd::invoke_uwp_tool,
             cmd::copy_clash_env,
+            cmd::get_proxies,
+            cmd::get_providers_proxies,
             // verge
             cmd::get_verge_config,
             cmd::patch_verge_config,
@@ -189,6 +198,8 @@ pub fn run() {
             cmd::list_webdav_backup,
             cmd::delete_webdav_backup,
             cmd::restore_webdav_backup,
+            // export diagnostic info for issue reporting
+            cmd::export_diagnostic_info,
         ]);
 
     #[cfg(debug_assertions)]
@@ -203,8 +214,11 @@ pub fn run() {
     app.run(|app_handle, e| match e {
         tauri::RunEvent::Ready | tauri::RunEvent::Resumed => {
             AppHandleManager::global().init(app_handle.clone());
-            let main_window = AppHandleManager::global().get_handle().get_webview_window("main").unwrap();
-            let _ = main_window.set_title("Clash Verge");
+            #[cfg(target_os = "macos")]
+            {
+                let main_window = AppHandleManager::global().get_handle().get_webview_window("main").unwrap();
+                let _ = main_window.set_title("Clash Verge");
+            }
         }
         #[cfg(target_os = "macos")]
         tauri::RunEvent::Reopen { has_visible_windows, .. } => {
@@ -222,6 +236,7 @@ pub fn run() {
             if label == "main" {
                 match event {
                     tauri::WindowEvent::CloseRequested { api, .. } => {
+                        #[cfg(target_os = "macos")]
                         AppHandleManager::global().set_activation_policy_accessory();
                         if core::handle::Handle::global().is_exiting() {
                             return;
