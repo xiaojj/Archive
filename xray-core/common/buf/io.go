@@ -27,6 +27,48 @@ type TimeoutReader interface {
 	ReadMultiBufferTimeout(time.Duration) (MultiBuffer, error)
 }
 
+type OnceTimeoutReader struct {
+	reader Reader
+	called bool
+	mb     MultiBuffer
+	err    error
+	done   chan struct{}
+}
+
+func NewOnceTimeoutReader(reader Reader) *OnceTimeoutReader {
+	return &OnceTimeoutReader{
+		reader: reader,
+		done:   make(chan struct{}),
+	}
+}
+
+func (r *OnceTimeoutReader) ReadMultiBuffer() (MultiBuffer, error) {
+	if r.called {
+		<-r.done
+		r.called = false
+		return r.mb, r.err
+	}
+	r.mb = nil
+	r.err = nil
+	return r.reader.ReadMultiBuffer()
+}
+
+func (r *OnceTimeoutReader) ReadMultiBufferTimeout(duration time.Duration) (MultiBuffer, error) {
+	r.called = true
+	go func() {
+		r.mb, r.err = r.reader.ReadMultiBuffer()
+		close(r.done) // panic if more than once
+	}()
+	time.Sleep(duration)
+	select {
+	case <-r.done:
+		r.called = false
+		return r.mb, r.err
+	default:
+		return nil, nil
+	}
+}
+
 // Writer extends io.Writer with MultiBuffer.
 type Writer interface {
 	// WriteMultiBuffer writes a MultiBuffer into underlying writer.

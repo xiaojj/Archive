@@ -19,6 +19,7 @@ import (
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/routing"
+	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/tls"
 )
@@ -144,39 +145,11 @@ func (d *DokodemoDoor) Process(ctx context.Context, network net.Network, conn st
 	})
 	errors.LogInfo(ctx, "received request for ", conn.RemoteAddr())
 
-	plcy := d.policy()
-	ctx, cancel := context.WithCancel(ctx)
-	timer := signal.CancelAfterInactivity(ctx, cancel, plcy.Timeouts.ConnectionIdle)
-
-	if inbound != nil {
-		inbound.Timer = timer
-	}
-
-	ctx = policy.ContextWithBufferPolicy(ctx, plcy.Buffer)
-	link, err := dispatcher.Dispatch(ctx, dest)
-	if err != nil {
-		return errors.New("failed to dispatch request").Base(err)
-	}
-
-	requestCount := int32(1)
-	requestDone := func() error {
-		defer func() {
-			if atomic.AddInt32(&requestCount, -1) == 0 {
-				timer.SetTimeout(plcy.Timeouts.DownlinkOnly)
-			}
-		}()
-
-		var reader buf.Reader
-		if dest.Network == net.Network_UDP {
-			reader = buf.NewPacketReader(conn)
-		} else {
-			reader = buf.NewReader(conn)
-		}
-		if err := buf.Copy(reader, link.Writer, buf.UpdateActivity(timer)); err != nil {
-			return errors.New("failed to transport request").Base(err)
-		}
-
-		return nil
+	var reader buf.Reader
+	if dest.Network == net.Network_TCP {
+		reader = buf.NewReader(conn)
+	} else {
+		reader = buf.NewPacketReader(conn)
 	}
 
 	var writer buf.Writer
@@ -209,8 +182,8 @@ func (d *DokodemoDoor) Process(ctx context.Context, network net.Network, conn st
 			}
 			writer = NewPacketWriter(pConn, &dest, mark, back)
 			defer func() {
-				runtime.Gosched()
-				common.Interrupt(link.Reader) // maybe duplicated
+				// runtime.Gosched()
+				// common.Interrupt(link.Reader) // maybe duplicated
 				runtime.Gosched()
 				writer.(*PacketWriter).Close() // close fake UDP conns
 			}()
@@ -247,6 +220,40 @@ func (d *DokodemoDoor) Process(ctx context.Context, network net.Network, conn st
 				}
 			*/
 		}
+	}
+
+	if err := dispatcher.DispatchLink(ctx, dest, &transport.Link{Reader: buf.NewOnceTimeoutReader(reader), Writer: writer}); err != nil {
+		return errors.New("failed to dispatch request").Base(err)
+	}
+	return nil // Unlike Dispatch(), DispatchLink() will not return until the outbound finishes Process()
+
+	plcy := d.policy()
+	ctx, cancel := context.WithCancel(ctx)
+	timer := signal.CancelAfterInactivity(ctx, cancel, plcy.Timeouts.ConnectionIdle)
+
+	if inbound != nil {
+		inbound.Timer = timer
+	}
+
+	ctx = policy.ContextWithBufferPolicy(ctx, plcy.Buffer)
+	link, err := dispatcher.Dispatch(ctx, dest)
+	if err != nil {
+		return errors.New("failed to dispatch request").Base(err)
+	}
+
+	requestCount := int32(1)
+	requestDone := func() error {
+		defer func() {
+			if atomic.AddInt32(&requestCount, -1) == 0 {
+				timer.SetTimeout(plcy.Timeouts.DownlinkOnly)
+			}
+		}()
+
+		if err := buf.Copy(reader, link.Writer, buf.UpdateActivity(timer)); err != nil {
+			return errors.New("failed to transport request").Base(err)
+		}
+
+		return nil
 	}
 
 	responseDone := func() error {
