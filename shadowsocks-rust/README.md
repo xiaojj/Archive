@@ -11,7 +11,7 @@
 [![Release](https://img.shields.io/github/release/shadowsocks/shadowsocks-rust.svg)](https://github.com/shadowsocks/shadowsocks-rust/releases)
 [![shadowsocks-rust](https://img.shields.io/archlinux/v/extra/x86_64/shadowsocks-rust)](https://archlinux.org/packages/extra/x86_64/shadowsocks-rust/)
 [![aur shadowsocks-rust-git](https://img.shields.io/aur/version/shadowsocks-rust-git)](https://aur.archlinux.org/packages/shadowsocks-rust-git)
-[![NixOS](https://img.shields.io/badge/NixOS-shadowsocks--rust-blue?logo=nixos)](https://github.com/NixOS/nixpkgs/tree/master/pkgs/tools/networking/shadowsocks-rust)
+[![NixOS](https://img.shields.io/badge/NixOS-shadowsocks--rust-blue?logo=nixos)](https://github.com/NixOS/nixpkgs/blob/master/pkgs/by-name/sh/shadowsocks-rust/package.nix)
 [![snap shadowsocks-rust](https://snapcraft.io/shadowsocks-rust/badge.svg)](https://snapcraft.io/shadowsocks-rust)
 [![homebrew shadowsocks-rust](https://img.shields.io/homebrew/v/shadowsocks-rust)](https://formulae.brew.sh/formula/shadowsocks-rust#default)
 [![MacPorts shadowsocks-rust](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fports.macports.org%2Fapi%2Fv1%2Fports%2Fshadowsocks-rust%2F&query=%24.version&label=macports)](https://ports.macports.org/port/shadowsocks-rust/)
@@ -614,7 +614,10 @@ Example configuration:
             "local_address": "127.0.0.1",
             "local_port": 3128,
             // OPTIONAL. macOS launchd activate socket
-            "launchd_tcp_socket_name": "TCPListener"
+            "launchd_tcp_socket_name": "TCPListener",
+            // OPTIONAL. Authentication configuration file
+            // Configuration file document could be found in the next section.
+            "http_auth_config_path": "/path/to/auth.json",
         },
         {
             // DNS local server (feature = "local-dns")
@@ -945,6 +948,24 @@ The configuration file is set by `socks5_auth_config_path` in `locals`.
 {
     // Password/Username Authentication (RFC1929)
     "password": {
+        "users": [
+            {
+                "user_name": "USERNAME in UTF-8",
+                "password": "PASSWORD in UTF-8"
+            }
+        ]
+    }
+}
+```
+
+### HTTP Authentication Configuration
+
+The configuration file is set by `http_auth_config_path` in `locals`.
+
+```jsonc
+{
+    // Basic Authentication (RFC9110)
+    "basic": {
         "users": [
             {
                 "user_name": "USERNAME in UTF-8",
