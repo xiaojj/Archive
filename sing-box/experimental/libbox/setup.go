@@ -1,7 +1,10 @@
 package libbox
 
 import (
+	"math"
 	"os"
+	"path/filepath"
+	"runtime"
 	"runtime/debug"
 	"time"
 
@@ -22,6 +25,10 @@ var (
 	sCommandServerSecret     string
 	sLogMaxLines             int
 	sDebug                   bool
+	sCrashReportSource       string
+	sOOMKillerEnabled        bool
+	sOOMKillerDisabled       bool
+	sOOMMemoryLimit          int64
 )
 
 func init() {
@@ -38,6 +45,10 @@ type SetupOptions struct {
 	CommandServerSecret     string
 	LogMaxLines             int
 	Debug                   bool
+	CrashReportSource       string
+	OOMKillerEnabled        bool
+	OOMKillerDisabled       bool
+	OOMMemoryLimit          int64
 }
 
 func Setup(options *SetupOptions) error {
@@ -56,10 +67,19 @@ func Setup(options *SetupOptions) error {
 	sCommandServerSecret = options.CommandServerSecret
 	sLogMaxLines = options.LogMaxLines
 	sDebug = options.Debug
+	sCrashReportSource = options.CrashReportSource
+	sOOMKillerEnabled = options.OOMKillerEnabled
+	sOOMKillerDisabled = options.OOMKillerDisabled
+	sOOMMemoryLimit = options.OOMMemoryLimit
+	if sOOMKillerEnabled && sOOMMemoryLimit > 0 {
+		debug.SetMemoryLimit(sOOMMemoryLimit)
+	} else {
+		debug.SetMemoryLimit(math.MaxInt64)
+	}
 
 	os.MkdirAll(sWorkingPath, 0o777)
 	os.MkdirAll(sTempPath, 0o777)
-	return nil
+	return redirectStderr(filepath.Join(sTempPath, "CrashReport-"+sCrashReportSource+".log"))
 }
 
 func SetLocale(localeId string) {
@@ -68,6 +88,10 @@ func SetLocale(localeId string) {
 
 func Version() string {
 	return C.Version
+}
+
+func GoVersion() string {
+	return runtime.Version() + ", " + runtime.GOOS + "/" + runtime.GOARCH
 }
 
 func FormatBytes(length int64) string {
