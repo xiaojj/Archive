@@ -167,6 +167,44 @@ function accordionizeSections(mapNode, openTitles) {
 	}
 }
 
+function organizeDaeSections(mapNode, openTitles) {
+	accordionizeSections(mapNode, openTitles);
+
+	const advTitles = [ _('Groups'), _('Routing'), _('DNS'), _('Logging') ];
+	const advWraps = [];
+	mapNode.querySelectorAll('.dd-adv').forEach(function(w) {
+		const t = w.querySelector('.dd-adv-bar span');
+		if (t && advTitles.indexOf(t.textContent.trim()) >= 0) advWraps.push(w);
+	});
+	if (!advWraps.length) return;
+
+	const outerOpen = (openTitles || []).indexOf(_('Advanced settings')) >= 0;
+	const outerBody = E('div', { 'class': 'dd-adv-body' });
+	const outer = E('div', { 'class': 'dd-adv' + (outerOpen ? '' : ' dd-closed') }, [
+		E('div', { 'class': 'dd-adv-bar' }, [
+			E('span', {}, _('Advanced settings')),
+			E('span', { 'class': 'dd-adv-chevron' }, '›')
+		]),
+		outerBody
+	]);
+	outer.firstChild.addEventListener('click', function() { outer.classList.toggle('dd-closed'); });
+	advWraps[0].parentNode.insertBefore(outer, advWraps[0]);
+	advWraps.forEach(function(w) { outerBody.appendChild(w); });
+}
+
+function captureAccordionState(mapNode) {
+	if (!mapNode) return [];
+	return Array.prototype.map.call(
+		mapNode.querySelectorAll('.dd-adv:not(.dd-closed) > .dd-adv-bar span:first-child'),
+		function(node) { return node.textContent.trim(); }
+	);
+}
+
+function restoreAccordionState(mapNode, openTitles) {
+	if (!mapNode || mapNode.querySelector('.dd-adv')) return;
+	organizeDaeSections(mapNode, openTitles || []);
+}
+
 /* Friendly form UI for the dae backend. Form is the source of truth: on save we
    commit the `dae` UCI package, then gen-dae-config.sh renders config.dae,
    validates it and hot-reloads. */
@@ -175,8 +213,7 @@ function renderDaeForms(ctx) {
 	m = new form.Map('dae', null, null);
 
 	/* Subscriptions */
-	s = m.section(form.GridSection, 'subscription', _('Subscriptions'),
-		_('Airport / subscription links. dae resolves them into the node pool.'));
+	s = m.section(form.GridSection, 'subscription', _('Subscriptions'), null);
 	s.addremove = true;
 	s.anonymous = true;
 	s.sortable = false;
@@ -290,6 +327,23 @@ function renderDaeForms(ctx) {
 
 	/* Logging — folded into the main form so the single Save button covers it
 	   too (no separate native save bar) */
+		/* Network interfaces — override dae auto WAN detect, fails on legacy swconfig (#15).
+		   Combobox: dropdown of real devices but still free-text for undetectable WANs */
+		const netDevs = (ctx && ctx.netDevs) || [];
+		s = m.section(form.NamedSection, 'config', 'dae', _('Network interfaces'));
+		s.addremove = false;
+		o = s.option(form.Value, 'lan_interface', _('LAN interface'),
+			_('Interface to proxy the LAN from. Usually br-lan.'));
+		o.default = 'br-lan';
+		o.placeholder = 'br-lan';
+		netDevs.forEach(function(d) { o.value(d); });
+		o = s.option(form.Value, 'wan_interface', _('WAN interface'),
+			_('Uplink. auto = detect by default route; on legacy swconfig or multi-WAN set it, e.g. eth0.2.'));
+		o.default = 'auto';
+		o.placeholder = 'auto';
+		o.value('auto', 'auto');
+		netDevs.forEach(function(d) { o.value(d); });
+
 	s = m.section(form.NamedSection, 'config', 'dae', _('Logging'));
 	s.addremove = false;
 	o = s.option(form.Value, 'log_maxsize', _('Max Log Size (MB)'),
@@ -302,6 +356,7 @@ function renderDaeForms(ctx) {
 	o.default = '1';
 
 	const status = E('span', { 'class': 'dd-editor-status' }, '');
+	let renderSaveActions = function() {};
 	let statusTimer = null;
 	function flash(text, kind, hold) {
 		status.textContent = text;
@@ -316,6 +371,12 @@ function renderDaeForms(ctx) {
 	   - opts.start: after generate, enable + start dae (stopped → "Save and Start")
 	   - otherwise just save + generate; generate hot-reloads itself when dae runs */
 	function doSave(opts, btns) {
+		const settingsCard = status.closest('.dd-settings-card');
+		const openTitles = captureAccordionState(settingsCard && settingsCard.querySelector('.cbi-map'));
+		const restoreLiveAccordions = function() {
+			const liveCard = status.closest('.dd-settings-card');
+			restoreAccordionState(liveCard && liveCard.querySelector('.cbi-map'), openTitles);
+		};
 		btns.forEach(function(b) { b.disabled = true; });
 		flash(_('Saving…'));
 		/* ensure the singleton sections exist before parsing the form —
@@ -326,6 +387,7 @@ function renderDaeForms(ctx) {
 		if (!uci.get('dae', 'config'))  uci.add('dae', 'dae', 'config');
 		return m.save(null, true)
 			.then(function() {
+				restoreLiveAccordions();
 				/* assign unique tags to any rows the user left blank */
 				autofillTags('subscription', 'subscription');
 				autofillTags('node', 'node');
@@ -350,7 +412,6 @@ function renderDaeForms(ctx) {
 				if (!opts.start) {
 					/* generate already hot-reloaded if dae was running */
 					flash(opts.okMsg || _('Saved'), 'ok');
-					setTimeout(function() { window.location.reload(); }, 900);
 					return;
 				}
 				flash(_('Starting…'));
@@ -363,7 +424,7 @@ function renderDaeForms(ctx) {
 							flash(_('Start failed: %s').format(r2.stderr || r2.stdout || ('exit ' + r2.code)), 'err', 9000);
 						else {
 							flash(_('Saved · started'), 'ok');
-							setTimeout(function() { window.location.reload(); }, 900);
+							renderSaveActions(true);
 						}
 					});
 			})
@@ -375,41 +436,18 @@ function renderDaeForms(ctx) {
 				}
 				flash(_('Save failed: %s').format(e.message || e), 'err', 9000);
 			})
-			.finally(function() { btns.forEach(function(b) { b.disabled = false; }); });
+			.finally(function() {
+				restoreLiveAccordions();
+				btns.forEach(function(b) { b.disabled = false; });
+			});
 	}
 
 	return m.render().then(function(mapNode) {
 
 		/* beginner default: only Subscriptions starts open; nodes/groups/routing/dns/logging collapse */
-		accordionizeSections(mapNode, [ _('Subscriptions') ]);
+		organizeDaeSections(mapNode, [ _('Subscriptions') ]);
 
-		/* fold groups / routing / dns / logging under one "Advanced settings"
-		   collapsible so the everyday view is just subscriptions + nodes */
-		const advTitles = [ _('Groups'), _('Routing'), _('DNS'), _('Logging') ];
-		const advWraps = [];
-		mapNode.querySelectorAll('.dd-adv').forEach(function(w) {
-			const t = w.querySelector('.dd-adv-bar span');
-			if (t && advTitles.indexOf(t.textContent.trim()) >= 0) advWraps.push(w);
-		});
-		if (advWraps.length) {
-			const outerBody = E('div', { 'class': 'dd-adv-body' });
-			const outer = E('div', { 'class': 'dd-adv dd-closed' }, [
-				E('div', { 'class': 'dd-adv-bar' }, [
-					E('span', {}, _('Advanced settings')),
-					E('span', { 'class': 'dd-adv-chevron' }, '›')
-				]),
-				outerBody
-			]);
-			outer.firstChild.addEventListener('click', function() { outer.classList.toggle('dd-closed'); });
-			advWraps[0].parentNode.insertBefore(outer, advWraps[0]);
-			advWraps.forEach(function(w) { outerBody.appendChild(w); });
-		}
-
-		const cardChildren = [
-			E('h4', { 'class': 'dd-card-title' }, _('dae Configuration')),
-			E('div', { 'class': 'dd-settings-descr' },
-				_('Add a subscription or node, then save — it takes effect automatically.'))
-		];
+		const cardChildren = [ E('h4', { 'class': 'dd-card-title' }, _('dae Configuration')) ];
 		cardChildren.push(mapNode);
 
 		/* state-aware primary action: running → one "Save and Apply"; stopped →
@@ -458,23 +496,28 @@ function renderDaeForms(ctx) {
 				}
 			}
 
-			const actions = [];
-			let btns;
-			if (running) {
-				const apply = E('button', { 'class': 'cbi-button cbi-button-positive' }, _('Save and Apply'));
-				btns = [ apply ];
-				apply.addEventListener('click', function(ev) { ev.preventDefault(); doSave({ okMsg: _('Saved · applied') }, btns); });
-				actions.push(apply);
-			} else {
-				const saveOnly = E('button', { 'class': 'cbi-button' }, _('Save config'));
-				const saveStart = E('button', { 'class': 'cbi-button cbi-button-positive' }, _('Save and Start'));
-				btns = [ saveOnly, saveStart ];
-				saveOnly.addEventListener('click', function(ev) { ev.preventDefault(); doSave({ okMsg: _('Saved') }, btns); });
-				saveStart.addEventListener('click', function(ev) { ev.preventDefault(); doSave({ start: true }, btns); });
-				actions.push(saveOnly, saveStart);
-			}
-			actions.push(status);
-			cardChildren.push(E('div', { 'class': 'dd-editor-actions' }, actions));
+			const actionsWrap = E('div', { 'class': 'dd-editor-actions' });
+			renderSaveActions = function(isRunning) {
+				while (actionsWrap.firstChild) actionsWrap.removeChild(actionsWrap.firstChild);
+				let btns;
+				if (isRunning) {
+					const apply = E('button', { 'class': 'cbi-button cbi-button-positive' }, _('Save and Apply'));
+					btns = [ apply ];
+					apply.addEventListener('click', function(ev) { ev.preventDefault(); doSave({ okMsg: _('Saved · applied') }, btns); });
+					actionsWrap.appendChild(apply);
+				} else {
+					const saveOnly = E('button', { 'class': 'cbi-button' }, _('Save config'));
+					const saveStart = E('button', { 'class': 'cbi-button cbi-button-positive' }, _('Save and Start'));
+					btns = [ saveOnly, saveStart ];
+					saveOnly.addEventListener('click', function(ev) { ev.preventDefault(); doSave({ okMsg: _('Saved') }, btns); });
+					saveStart.addEventListener('click', function(ev) { ev.preventDefault(); doSave({ start: true }, btns); });
+					actionsWrap.appendChild(saveOnly);
+					actionsWrap.appendChild(saveStart);
+				}
+				actionsWrap.appendChild(status);
+			};
+			renderSaveActions(running);
+			cardChildren.push(actionsWrap);
 			return E('div', { 'class': 'dd-card dd-settings-card' }, cardChildren);
 		});
 	});
@@ -744,8 +787,6 @@ function renderDaeEditor() {
 
 	return E('div', { 'class': 'dd-card' }, [
 		E('h4', { 'class': 'dd-card-title' }, _('Advanced / Manual Mode')),
-		E('div', { 'class': 'dd-settings-descr' },
-			_('Edit config.dae directly. Saving the form above regenerates the file and overwrites changes made here.')),
 		(function() {
 			var adv = E('div', { 'class': 'dd-adv dd-closed', style: 'margin-top:8px' }, [
 				E('div', { 'class': 'dd-adv-bar' }, [
@@ -756,7 +797,7 @@ function renderDaeEditor() {
 					E('div', { 'class': 'dd-editor-hint', style: 'margin:0 0 10px' }, [
 						E('b', {}, _('Text-only mode.')),
 						' ',
-						_('Edit config DSL — subscriptions, nodes, routing, DNS. Load template via Initialize. Replace placeholder URL before saving. Switch to daed for GUI.')
+						_('Edit the dae DSL directly. Initialize loads a template. Use daed for a GUI.')
 					]),
 					phWarn,
 					editWrap,
