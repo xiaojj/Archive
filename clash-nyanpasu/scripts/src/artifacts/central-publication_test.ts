@@ -3,9 +3,144 @@ import {
   classifyPublicationArtifactDirectory,
   prepareCentralPublication,
 } from "./central-publication.ts";
+import { recoverCentralPublication } from "./recover-central-publication.ts";
 
 const commit = "a".repeat(40);
 const publishedAt = "2026-10-04T12:34:56.789Z";
+
+Deno.test("recovery preserves identities and timestamp across runners and refuses altered bytes", async () => {
+  const root = await Deno.makeTempDir();
+  const repository = "libnyanpasu/clash-nyanpasu";
+  const sourceRun = {
+    id: 123,
+    run_attempt: 2,
+    head_sha: commit,
+    status: "completed",
+    event: "workflow_dispatch",
+    path: ".github/workflows/target-dev-build.yaml",
+    repository: { full_name: repository },
+    head_repository: { full_name: repository },
+  };
+  try {
+    await fixture(`${root}/downloaded`);
+    const original = await prepareCentralPublication(
+      `${root}/downloaded`,
+      `${root}/original`,
+      {
+        channel: "nightly",
+        tag: null,
+        commit,
+        runId: "123",
+        attempt: "1",
+        itemPrefix: "nyanpasu",
+        publishedAt,
+      },
+    );
+    const recovered = await recoverCentralPublication(
+      sourceRun,
+      repository,
+      `${root}/downloaded`,
+      `${root}/original`,
+      `${root}/restored`,
+      "nyanpasu",
+    );
+    assertEquals(recovered.buildId, original.buildId);
+    assertEquals(recovered.publishedAt, publishedAt);
+    assertEquals(recovered.inventories, original.inventories);
+    const manifest = JSON.parse(
+      await Deno.readTextFile(recovered.manifests["windows-x86_64"] as string),
+    );
+    assertEquals(
+      manifest.artifacts.every((artifact: { path: string }) =>
+        artifact.path.startsWith(`${root}/restored/`)
+      ),
+      true,
+    );
+    await writeArtifact(
+      `${root}/downloaded`,
+      "Clash.Nyanpasu-windows-x86_64-portable",
+      "Clash.Nyanpasu_x64_portable.zip",
+      "different bytes",
+    );
+    await assertRejects(
+      () =>
+        recoverCentralPublication(
+          sourceRun,
+          repository,
+          `${root}/downloaded`,
+          `${root}/original`,
+          `${root}/altered`,
+          "nyanpasu",
+        ),
+      Error,
+      "differs from the original publication",
+    );
+    await assertRejects(
+      () =>
+        recoverCentralPublication(
+          sourceRun,
+          repository,
+          `${root}/downloaded`,
+          `${root}/original`,
+          `${root}/wrong-prefix`,
+          "other",
+        ),
+      Error,
+      "differs from the original publication",
+    );
+    await assertRejects(
+      () =>
+        recoverCentralPublication(
+          { ...sourceRun, head_sha: "b".repeat(40) },
+          repository,
+          `${root}/downloaded`,
+          `${root}/original`,
+          `${root}/wrong-sha`,
+          "nyanpasu",
+        ),
+      Error,
+      "does not match the source run",
+    );
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("recovery rejects fork and non-publication runs before reading any files", async () => {
+  const repository = "libnyanpasu/clash-nyanpasu";
+  const sourceRun = {
+    id: 123,
+    run_attempt: 1,
+    head_sha: commit,
+    status: "completed",
+    event: "workflow_dispatch",
+    path: ".github/workflows/target-dev-build.yaml",
+    repository: { full_name: repository },
+    head_repository: { full_name: repository },
+  };
+  for (
+    const run of [
+      { ...sourceRun, head_repository: { full_name: "fork/clash-nyanpasu" } },
+      { ...sourceRun, path: ".github/workflows/ci.yml" },
+      { ...sourceRun, status: "in_progress" },
+      { ...sourceRun, event: "pull_request" },
+    ]
+  ) {
+    await assertRejects(
+      () =>
+        recoverCentralPublication(
+          run,
+          repository,
+          "missing",
+          "missing",
+          "missing",
+          "nyanpasu",
+        ),
+      Error,
+      "completed package publication in this repository",
+    );
+  }
+});
 
 async function writeArtifact(
   root: string,
@@ -18,7 +153,10 @@ async function writeArtifact(
   await Deno.writeTextFile(file, value);
 }
 
-async function fixture(root: string): Promise<void> {
+async function fixture(
+  root: string,
+  nsisDirectory = "bundle/nsis-updater",
+): Promise<void> {
   const directories = [
     "Clash.Nyanpasu-windows-x86_64-nsis-installer",
     "Clash.Nyanpasu-windows-x86_64-portable",
@@ -52,17 +190,17 @@ async function fixture(root: string): Promise<void> {
       const prefix = directory.includes("fixed-webview")
         ? `Clash.Nyanpasu_fixed-webview_${targetName}`
         : `Clash.Nyanpasu_${targetName}`;
-      const updaterPath = `bundle/nsis-updater/${prefix}-setup.exe`;
+      const updaterPath = `${nsisDirectory}/${prefix}-setup.exe`;
       await writeArtifact(root, directory, updaterPath);
       await writeArtifact(
         root,
         directory,
-        `bundle/nsis-updater/${prefix}.nsis.zip`,
+        `${nsisDirectory}/${prefix}.nsis.zip`,
       );
       await writeArtifact(
         root,
         directory,
-        `bundle/nsis-updater/${prefix}.nsis.zip.sig`,
+        `${nsisDirectory}/${prefix}.nsis.zip.sig`,
       );
     } else if (directory.includes("windows")) {
       await writeArtifact(
@@ -156,6 +294,42 @@ Deno.test("central preparation validates all targets, normalizes Windows names a
       ].sort(),
     );
     assertEquals(windows.folderPath, `nightly/77-2-${commit}`);
+  } finally {
+    await Deno.remove(temp, { recursive: true });
+  }
+});
+
+Deno.test("central preparation accepts NSIS setup installers without an updater executable", async () => {
+  const temp = await Deno.makeTempDir();
+  try {
+    const downloaded = `${temp}/downloaded`;
+    const output = `${temp}/central`;
+    await fixture(downloaded, "bundle/nsis");
+    await prepareCentralPublication(downloaded, output, {
+      channel: "nightly",
+      tag: null,
+      commit,
+      runId: "77",
+      attempt: "2",
+      itemPrefix: "mirror-test",
+      publishedAt,
+    });
+    for (const target of ["windows-x86_64", "windows-aarch64"]) {
+      const manifest = JSON.parse(
+        await Deno.readTextFile(`${output}/manifests/${target}.json`),
+      );
+      const names = manifest.artifacts.map((artifact: { fileName: string }) =>
+        artifact.fileName
+      );
+      assertEquals(
+        names.filter((name: string) => name.endsWith("-setup.exe")).length,
+        2,
+      );
+      assertEquals(
+        names.some((name: string) => name.endsWith("-updater.exe")),
+        false,
+      );
+    }
   } finally {
     await Deno.remove(temp, { recursive: true });
   }
@@ -289,7 +463,7 @@ Deno.test("central preparation requires the package file from every artifact cat
   const missingPackages = [
     [
       "Clash.Nyanpasu-windows-x86_64-nsis-installer",
-      "bundle/nsis-updater/Clash.Nyanpasu_x64-setup.exe",
+      "bundle/nsis/Clash.Nyanpasu_x64-setup.exe",
     ],
     [
       "Clash.Nyanpasu-windows-aarch64-portable",
@@ -308,7 +482,7 @@ Deno.test("central preparation requires the package file from every artifact cat
     const temp = await Deno.makeTempDir();
     try {
       const downloaded = `${temp}/downloaded`;
-      await fixture(downloaded);
+      await fixture(downloaded, "bundle/nsis");
       await Deno.remove(`${downloaded}/${directory}/${packageFile}`);
       await assertRejects(
         () =>
